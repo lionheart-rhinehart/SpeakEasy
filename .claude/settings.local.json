@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(rustc:*)",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(cargo --version:*)",
+      "Bash(cmd /c \"rustc --version && cargo --version\")",
+      "Bash(powershell -Command \"rustc --version; cargo --version\")",
+      "Bash(rm:*)",
+      "Bash(mkdir:*)",
+      "Bash(powershell -Command \"$env:Path = [System.Environment]::GetEnvironmentVariable(''Path'',''Machine'') + '';'' + [System.Environment]::GetEnvironmentVariable(''Path'',''User''); rustc --version; cargo --version\")",
+      "Bash(/c/Users/lionh/.cargo/bin/rustc.exe --version)",
+      "Bash(/c/Users/lionh/.cargo/bin/cargo.exe --version)",
+      "Bash(cat:*)",
+      "Bash(export PATH=\"/c/Users/lionh/.cargo/bin:$PATH\")",
+      "Bash(cargo check:*)",
+      "Bash(/c/Users/lionh/.cargo/bin/cargo.exe check)",
+      "Bash(node scripts/generate-icons.js:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(start \"\" \"F:\\Claude CODE\\SpeakEasy\\src-tauri\\target\\release\\bundle\\nsis\\SpeakEasy_1.0.0_x64-setup.exe\")",
+      "Bash(cargo build:*)",
+      "Bash(find:*)",
+      "Bash(cmd /c \"cargo check\")",
+      "Bash(cmd /c \"cd /d D:\\Claude CODE\\SpeakEasy\\src-tauri && cargo check\")",
+      "Bash(powershell -Command:*)",
+      "Bash(cmd /c \"where cargo\")",
+      "Bash(export PATH=\"$PATH:/c/Users/lionh/.cargo/bin:/d/Users/lionh/.cargo/bin:$HOME/.cargo/bin\")",
+      "Bash(echo:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,51 @@
+You are completing a development session. Your job is to wrap up by:
+
+1. Summarize what was done in this chat session
+2. Run the wrapup command with appropriate arguments
+3. Report the result to the user
+
+## Review the Chat
+
+Analyze what was accomplished:
+- What was the user's goal or problem?
+- What changes were made to the codebase?
+- Were there any problems encountered? How were they solved?
+- What area of the codebase was affected?
+
+## Run the Wrapup Command
+
+Execute this command using the Shell tool:
+
+npm run wrapup -- --area "<AREA>" --title "<SHORT-TITLE>" --summary "<SUMMARY>" [--problem "<PROBLEM>"] [--fix "<FIX>"]
+
+**Required Arguments:**
+- --area: frontend, backend, tauri, devops, bugfix, feature, refactor, or docs
+- --title: Short kebab-case title (e.g., fix-settings-lint-error)
+- --summary: One sentence describing what was done
+
+**Optional Arguments:**
+- --problem: What went wrong
+- --fix: How it was solved
+
+**Flags:**
+- --skip-gates: Skip lint/typecheck/build
+- --skip-secrets: Skip secret scan (rarely needed)
+- --no-git: Don't commit
+- --github-private: Create private GitHub repo on first run
+
+## Examples
+
+Bug fix:
+npm run wrapup -- --area "bugfix" --title "fix-settings-lint-error" --summary "Fixed ESLint warning in SettingsPanel useEffect hook" --problem "ESLint warning about missing dependency" --fix "Added fetchModelsForProvider to dependency array"
+
+Feature:
+npm run wrapup -- --area "frontend" --title "add-dark-mode" --summary "Added dark mode toggle to settings panel with theme persistence"
+
+## Report Results
+
+After running, tell the user:
+- If wrapup succeeded
+- The lessons-learned file created
+- Any warnings or issues
+
+The secret scanner runs by default to catch accidental commits of real API keys.

@@ -1,0 +1,11 @@
+{
+  "ignorePatterns": [
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    "src-tauri/target",
+    "target",
+    "*.log"
+  ]
+}

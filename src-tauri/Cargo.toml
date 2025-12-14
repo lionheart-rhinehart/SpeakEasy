@@ -1,0 +1,79 @@
+[package]
+name = "speakeasy"
+version = "1.0.0"
+description = "Enterprise voice-to-text application"
+authors = ["SpeakEasy Team"]
+license = "MIT"
+repository = ""
+edition = "2021"
+
+[lib]
+name = "speakeasy_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Audio capture
+cpal = "0.15"
+
+# Global hotkeys
+rdev = "0.5"
+
+# Clipboard management
+arboard = "3"
+clipboard-win = "5"
+
+# Audio playback for feedback sounds
+rodio = "0.19"
+
+# HTTP client for API calls
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Local database for history
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Encoding audio
+hound = "3.5"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Config directory
+dirs = "5"
+
+# Date/time
+chrono = "0.4"
+
+# URL encoding for webhooks
+urlencoding = "2"
+
+# Secure credential storage (OS keychain/credential manager)
+# windows-native required for Windows Credential Manager to work correctly
+keyring = { version = "3", features = ["windows-native"] }
+
+# Windows API for reliable input simulation (paste into terminals)
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
