@@ -95,7 +95,7 @@ npm run lessons:search "api key"
 ## Example Usage After Changes
 
 ```bash
-# Normal wrapup (auto-restarts dev server)
+i'm# Normal wrapup (auto-restarts dev server)
 npm run wrapup -- --area "frontend" --title "add-feature" --summary "Added new feature"
 
 # Wrapup without dev server restart
