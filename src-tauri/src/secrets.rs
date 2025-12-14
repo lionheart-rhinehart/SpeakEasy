@@ -129,11 +129,6 @@ pub fn clear_api_key(provider: TransformProvider) -> Result<()> {
     }
 }
 
-/// Check if an API key is set for a provider (without retrieving the full key)
-pub fn has_api_key(provider: TransformProvider) -> bool {
-    get_api_key(provider).map(|k| k.is_some()).unwrap_or(false)
-}
-
 /// Get the status of an API key for a provider
 pub fn get_api_key_status(provider: TransformProvider) -> ApiKeyStatus {
     match get_api_key(provider) {

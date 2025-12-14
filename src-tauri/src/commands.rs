@@ -236,13 +236,6 @@ pub async fn hide_recording_overlay(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OverlayStatePayload {
-    pub state: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub recording_duration_ms: Option<u64>,
-}
-
 #[tauri::command]
 pub async fn set_overlay_state(app: AppHandle, state: String, recording_duration_ms: Option<u64>) -> Result<(), String> {
     use tauri::Emitter;
@@ -891,10 +884,10 @@ async fn fetch_openai_models(api_key: &str) -> Result<Vec<ProviderModel>, String
 /// Fetch models from Anthropic API
 /// Note: Anthropic doesn't have a public models endpoint, so we return a known list
 /// but only if the API key is valid (we verify by making a minimal request)
-async fn fetch_anthropic_models(api_key: &str) -> Result<Vec<ProviderModel>, String> {
+async fn fetch_anthropic_models(_api_key: &str) -> Result<Vec<ProviderModel>, String> {
     // Anthropic doesn't have a models endpoint, but we can verify the key works
     // by checking account status or making a minimal request
-    let client = reqwest::Client::new();
+    let _client = reqwest::Client::new();
     
     // Try to verify the API key is valid by checking a simple endpoint
     // Anthropic doesn't have a models list API, so we'll do a minimal messages call

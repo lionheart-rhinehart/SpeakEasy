@@ -12,7 +12,8 @@
     "tauri:build": "tauri build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "wrapup": "node scripts/wrapup.mjs"
+    "wrapup": "node scripts/wrapup.mjs",
+    "lessons:search": "node scripts/lessons-search.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",

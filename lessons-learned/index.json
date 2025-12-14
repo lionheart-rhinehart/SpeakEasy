@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-12-14T20:46:37.787Z",
+  "count": 7,
+  "entries": [
+    {
+      "id": "2025-12-14__devops__create-wrapup-sop-system",
+      "file": "2025-12-14__devops__create-wrapup-sop-system.md",
+      "title": "create-wrapup-sop-system",
+      "date": "2025-12-14",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Created automated end-of-task workflow with quality gates, secret scanning, lessons-learned docs, and slash command integration",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-14__devops__add-wrapup-sop",
+      "file": "2025-12-14__devops__add-wrapup-sop.md",
+      "title": "add-wrapup-sop",
+      "date": "2025-12-14",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Added automated end-of-task workflow with quality gates, secret scanning, and lessons-learned generation",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-14__devops__add-strict-rust-checking",
+      "file": "2025-12-14__devops__add-strict-rust-checking.md",
+      "title": "add-strict-rust-checking",
+      "date": "2025-12-14",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Enhanced wrapup script with smart Rust checking (auto-detects Cargo.toml, treats warnings as errors). Cleaned up 8 dead code items from Rust codebase. Wrapup now enforces quality across frontend AND backend.",
+      "problem": "Wrapup script only checked frontend; Rust warnings were accumulating (11 warnings)",
+      "fix": "Added conditional cargo check with RUSTFLAGS=-D warnings, auto-detects src-tauri/Cargo.toml, added --skip-rust flag. Removed unused code: OverlayStatePayload, GptUsage::calculate_cost, HotkeyListener, has_api_key, and unused fields"
+    },
+    {
+      "id": "2025-12-14__devops__add-dev-restart-and-json-index",
+      "file": "2025-12-14__devops__add-dev-restart-and-json-index.md",
+      "title": "add-dev-restart-and-json-index",
+      "date": "2025-12-14",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Added dev server auto-restart and searchable JSON index for lessons learned",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-14__backend-keyring__fixed-model-selector-api-key-storage",
+      "file": "2025-12-14__backend-keyring__fixed-model-selector-api-key-storage.md",
+      "title": "Fixed Model Selector API Key Storage",
+      "date": "2025-12-14",
+      "area": "backend-keyring",
+      "tags": [
+        "backend-keyring"
+      ],
+      "summary": "Model selector wasn't working because API keys weren't persisting. Root cause: keyring crate missing windows-native feature flag in Cargo.toml. Also fixed silent error swallowing in get_api_key_status and added comprehensive logging. Added UI improvements: clear labels separating Whisper vs Transform keys, auto-refresh on dropdown focus with 30s cache, and better error messages.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-14__backend-keyring__fixed-model-selector-api-key-storage-and-git-setup",
+      "file": "2025-12-14__backend-keyring__fixed-model-selector-api-key-storage-and-git-setup.md",
+      "title": "Fixed Model Selector API Key Storage and Git Setup",
+      "date": "2025-12-14",
+      "area": "backend-keyring",
+      "tags": [
+        "backend-keyring"
+      ],
+      "summary": "Model selector wasn't working because: 1) keyring crate missing windows-native feature in Cargo.toml, 2) silent error swallowing in get_api_key_status, 3) no git identity configured preventing commits. Fixed all issues, added comprehensive logging, improved UI labels separating Whisper vs Transform keys, added auto-refresh with caching, and completed initial git commit.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-14-build-and-autostart-lessons",
+      "file": "2025-12-14-build-and-autostart-lessons.md",
+      "title": "Lessons Learned",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "",
+      "problem": "",
+      "fix": ""
+    }
+  ]
+}

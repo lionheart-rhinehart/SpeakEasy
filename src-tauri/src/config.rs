@@ -40,14 +40,6 @@ pub struct GptUsage {
     pub cost_usd: f64,
 }
 
-impl GptUsage {
-    pub fn calculate_cost(&self) -> f64 {
-        let input_cost = (self.prompt_tokens as f64 / 1000.0) * GPT4O_MINI_INPUT_PRICE_PER_1K;
-        let output_cost = (self.completion_tokens as f64 / 1000.0) * GPT4O_MINI_OUTPUT_PRICE_PER_1K;
-        input_cost + output_cost
-    }
-}
-
 /// Webhook usage stats
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct WebhookUsage {
@@ -172,11 +164,6 @@ impl UsageStats {
     pub fn month_cost_usd(&self) -> f64 {
         self.current_month.total_cost_usd()
     }
-
-    // Legacy compatibility methods
-    pub fn estimated_cost_usd(&self) -> f64 {
-        self.total_cost_usd()
-    }
 }
 
 /// Usage event types for recording
@@ -185,8 +172,6 @@ pub enum UsageEvent {
     Transcription {
         duration_ms: u64,
         audio_bytes: u64,
-        language: Option<String>,
-        model: String,
     },
     GptTransform {
         prompt_tokens: u64,
@@ -255,8 +240,6 @@ pub fn record_usage(duration_ms: u64, audio_bytes: u64) -> Result<()> {
     record_usage_event(UsageEvent::Transcription {
         duration_ms,
         audio_bytes,
-        language: None,
-        model: "whisper-1".to_string(),
     })
 }
 
@@ -448,32 +431,6 @@ mod tests {
         
         let cost = usage.calculate_cost();
         assert!((cost - 0.009).abs() < 0.0001, "1.5 minutes should cost $0.009");
-    }
-
-    #[test]
-    fn test_gpt_cost_calculation() {
-        let mut usage = GptUsage::default();
-        usage.prompt_tokens = 1000;
-        usage.completion_tokens = 500;
-        
-        let cost = usage.calculate_cost();
-        // Input: 1000 tokens * $0.00015/1K = $0.00015
-        // Output: 500 tokens * $0.0006/1K = $0.0003
-        // Total: $0.00045
-        assert!((cost - 0.00045).abs() < 0.000001, "GPT cost calculation incorrect");
-    }
-
-    #[test]
-    fn test_gpt_cost_large_tokens() {
-        let mut usage = GptUsage::default();
-        usage.prompt_tokens = 10_000;
-        usage.completion_tokens = 2_000;
-        
-        let cost = usage.calculate_cost();
-        // Input: 10000 tokens * $0.00015/1K = $0.0015
-        // Output: 2000 tokens * $0.0006/1K = $0.0012
-        // Total: $0.0027
-        assert!((cost - 0.0027).abs() < 0.00001, "GPT cost calculation incorrect for large tokens");
     }
 
     #[test]

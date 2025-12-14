@@ -15,8 +15,10 @@
  * Control flags:
  *   --release        Run full Tauri build (heavy)
  *   --skip-gates     Skip quality gates (lint/typecheck/build)
+ *   --skip-rust      Skip Rust checking (cargo check)
  *   --skip-secrets   Skip secret scanning (use if another agent handles secrets)
  *   --no-git         Skip git operations
+ *   --no-restart     Skip dev server auto-restart
  *   --github         Create public GitHub repo (automated, no prompt)
  *   --github-private Create private GitHub repo (automated, no prompt)
  * 
@@ -24,7 +26,7 @@
  *   npm run wrapup -- --skip-secrets --github-private --area "devops" --title "add-wrapup-sop" --summary "Added automated end-of-task workflow"
  */
 
-import { execSync, spawnSync } from 'child_process';
+import { execSync, spawnSync, spawn } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -68,6 +70,7 @@ const ROOT = join(__dirname, '..');
 const CONFIG_FILE = join(ROOT, '.wrapup.json');
 const LESSONS_DIR = join(ROOT, 'lessons-learned');
 const LESSONS_INDEX = join(LESSONS_DIR, 'README.md');
+const LESSONS_JSON_INDEX = join(LESSONS_DIR, 'index.json');
 const LESSONS_TEMPLATE = join(LESSONS_DIR, '_template.md');
 
 // Secret patterns to scan for (safety net)
@@ -204,6 +207,87 @@ function slugify(text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Dev Server Management
+// ─────────────────────────────────────────────────────────────────────────────
+let devServerInfo = null;
+
+function detectRunningDevServer() {
+  // Check if dev server (npm run tauri:dev or similar) is running
+  try {
+    if (process.platform === 'win32') {
+      // Windows: Check for npm/node processes running tauri dev
+      const tasks = execSync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV /NH', { 
+        encoding: 'utf-8', 
+        stdio: 'pipe' 
+      });
+      
+      // Also check for npm/tauri processes
+      const npmTasks = execSync('tasklist /FI "IMAGENAME eq npm.cmd" /FO CSV /NH', { 
+        encoding: 'utf-8', 
+        stdio: 'pipe' 
+      }).trim();
+      
+      if (tasks.includes('node.exe') || npmTasks.includes('npm.cmd')) {
+        // We have a dev server candidate, but can't reliably get command line on Windows without admin
+        // So we'll just note that something was running and offer to restart tauri:dev
+        devServerInfo = {
+          wasRunning: true,
+          command: 'npm run tauri:dev' // Default assumption
+        };
+        return true;
+      }
+    } else {
+      // Unix-like: Use ps to check for running processes
+      const processes = execSync('ps aux | grep -E "(npm.*tauri:dev|vite|tauri dev)" | grep -v grep', {
+        encoding: 'utf-8',
+        stdio: 'pipe'
+      }).trim();
+      
+      if (processes) {
+        devServerInfo = {
+          wasRunning: true,
+          command: 'npm run tauri:dev'
+        };
+        return true;
+      }
+    }
+  } catch {
+    // No dev server running or error detecting
+  }
+  return false;
+}
+
+function restartDevServer() {
+  if (!devServerInfo || !devServerInfo.wasRunning) {
+    return;
+  }
+  
+  if (parsedArgs.flags.includes('no-restart')) {
+    logInfo('Dev server restart skipped (--no-restart flag)');
+    return;
+  }
+  
+  logInfo('Restarting dev server...');
+  
+  try {
+    // Start dev server in detached mode so it runs in background
+    const child = spawn('npm', ['run', 'tauri:dev'], {
+      cwd: ROOT,
+      detached: true,
+      stdio: 'ignore',
+      shell: true
+    });
+    
+    child.unref(); // Allow parent to exit independently
+    
+    logSuccess('Dev server restarted in background (npm run tauri:dev)');
+  } catch (e) {
+    logWarn(`Failed to restart dev server: ${e.message}`);
+    logInfo('You can manually restart with: npm run tauri:dev');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step 1: Preflight
 // ─────────────────────────────────────────────────────────────────────────────
 function preflight() {
@@ -286,6 +370,37 @@ function runQualityGates() {
   } catch (e) {
     logError('Build failed');
     throw new Error('Quality gate failed: build');
+  }
+  
+  // Rust check (conditional on Cargo.toml existence)
+  const cargoTomlPath = existsSync(join(ROOT, 'Cargo.toml')) 
+    ? ROOT 
+    : existsSync(join(ROOT, 'src-tauri', 'Cargo.toml')) 
+      ? join(ROOT, 'src-tauri')
+      : null;
+      
+  if (cargoTomlPath && !parsedArgs.flags.includes('skip-rust')) {
+    logInfo('Running Rust check (strict: warnings = errors)...');
+    try {
+      // Use RUSTFLAGS to treat warnings as errors (strict mode)
+      const originalRustflags = process.env.RUSTFLAGS || '';
+      process.env.RUSTFLAGS = originalRustflags + ' -D warnings';
+      
+      run('cargo check --all-targets', { cwd: cargoTomlPath });
+      
+      // Restore original RUSTFLAGS
+      if (originalRustflags) {
+        process.env.RUSTFLAGS = originalRustflags;
+      } else {
+        delete process.env.RUSTFLAGS;
+      }
+      
+      logSuccess('Rust check passed (no warnings or errors)');
+    } catch (e) {
+      logError('Rust check failed (warnings or errors found)');
+      logInfo('Tip: Run "cargo fix --lib -p speakeasy" to auto-fix some issues');
+      throw new Error('Quality gate failed: cargo check');
+    }
   }
   
   // Optional: Full Tauri build
@@ -549,12 +664,42 @@ ${changeSummary || 'No automatic summary available'}
   return { filename, title, area, tags };
 }
 
+function parseMarkdownLesson(filepath, filename) {
+  try {
+    const content = readFileSync(filepath, 'utf-8');
+    
+    // Extract metadata from markdown
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    const dateMatch = content.match(/\*\*Date\*\*:\s*(.+)$/m);
+    const areaMatch = content.match(/\*\*Area\*\*:\s*(.+)$/m);
+    const tagsMatch = content.match(/\*\*Tags\*\*:\s*(.+)$/m);
+    const summaryMatch = content.match(/##\s+Summary\s*\n([\s\S]*?)(?=\n##|$)/);
+    const problemMatch = content.match(/##\s+Problem\s*\n([\s\S]*?)(?=\n##|$)/);
+    const fixMatch = content.match(/##\s+Fix\s*\n([\s\S]*?)(?=\n##|$)/);
+    
+    return {
+      id: filename.replace('.md', ''),
+      file: filename,
+      title: titleMatch ? titleMatch[1].trim() : 'Untitled',
+      date: dateMatch ? dateMatch[1].trim() : 'Unknown',
+      area: areaMatch ? areaMatch[1].trim() : 'general',
+      tags: tagsMatch ? tagsMatch[1].trim().split(',').map(t => t.trim()) : [],
+      summary: summaryMatch ? summaryMatch[1].trim() : '',
+      problem: problemMatch ? problemMatch[1].trim() : '',
+      fix: fixMatch ? fixMatch[1].trim() : ''
+    };
+  } catch {
+    return null;
+  }
+}
+
 function updateLessonsIndex() {
   const files = readdirSync(LESSONS_DIR)
     .filter(f => f.endsWith('.md') && f !== 'README.md' && f !== '_template.md')
     .sort()
     .reverse(); // Most recent first
   
+  // Build markdown index
   let index = `# Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
@@ -566,6 +711,9 @@ Updated: ${new Date().toISOString()}
 |------|------|-------|
 `;
 
+  // Build JSON index
+  const jsonEntries = [];
+
   for (const file of files) {
     // Parse filename: YYYY-MM-DD__area__title.md
     const match = file.match(/^(\d{4}-\d{2}-\d{2})__([^_]+)__(.+)\.md$/);
@@ -573,9 +721,23 @@ Updated: ${new Date().toISOString()}
       const [, date, area, titleSlug] = match;
       const title = titleSlug.replace(/-/g, ' ');
       index += `| ${date} | ${area} | [${title}](${file}) |\n`;
+      
+      // Parse the markdown file for JSON index
+      const filepath = join(LESSONS_DIR, file);
+      const parsed = parseMarkdownLesson(filepath, file);
+      if (parsed) {
+        jsonEntries.push(parsed);
+      }
     } else {
       // Fallback for non-standard names
       index += `| - | - | [${file}](${file}) |\n`;
+      
+      // Try to parse anyway for JSON
+      const filepath = join(LESSONS_DIR, file);
+      const parsed = parseMarkdownLesson(filepath, file);
+      if (parsed) {
+        jsonEntries.push(parsed);
+      }
     }
   }
   
@@ -586,9 +748,26 @@ Run \`npm run wrapup\` at the end of each task to automatically generate entries
 
 Or manually create files following the naming convention:
 \`YYYY-MM-DD__area__short-title.md\`
+
+## Search
+
+To search lessons learned programmatically, use the [\`index.json\`](index.json) file or run:
+\`\`\`
+npm run lessons:search "<query>"
+\`\`\`
 `;
 
+  // Write markdown index
   writeFileSync(LESSONS_INDEX, index);
+  
+  // Write JSON index
+  const jsonIndex = {
+    version: '1.0',
+    last_updated: new Date().toISOString(),
+    count: jsonEntries.length,
+    entries: jsonEntries
+  };
+  writeFileSync(LESSONS_JSON_INDEX, JSON.stringify(jsonIndex, null, 2));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -738,7 +917,7 @@ async function handleGitHub(config) {
     
     logInfo(`Creating GitHub repo: ${repoName} (${isPrivate ? 'private' : 'public'})...`);
     try {
-      run(`gh repo create ${repoName} --${isPrivate ? 'private' : 'public'} --source=. --remote=origin --push`, { silent: true });
+      run(`gh repo create "${repoName}" --${isPrivate ? 'private' : 'public'} --source=. --remote=origin --push`, { silent: true });
       logSuccess('GitHub repo created and pushed!');
       
       // Get and display the URL
@@ -770,7 +949,7 @@ async function handleGitHub(config) {
       
       logInfo(`Creating GitHub repo: ${repoName}...`);
       try {
-        run(`gh repo create ${repoName} --${repoIsPrivate ? 'private' : 'public'} --source=. --remote=origin --push`, { silent: true });
+        run(`gh repo create "${repoName}" --${repoIsPrivate ? 'private' : 'public'} --source=. --remote=origin --push`, { silent: true });
         logSuccess('GitHub repo created and pushed!');
         
         // Get and display the URL
@@ -796,6 +975,9 @@ async function handleGitHub(config) {
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
 async function main() {
+  // Detect running dev server before we start
+  detectRunningDevServer();
+  
   log('\n' + '═'.repeat(60), colors.cyan);
   log('  WRAP-UP: End-of-Task Workflow', colors.cyan + colors.bold);
   log('═'.repeat(60), colors.cyan);
@@ -824,6 +1006,9 @@ async function main() {
     log('  WRAP-UP COMPLETE', colors.green + colors.bold);
     log('═'.repeat(60), colors.green);
     log('\n');
+    
+    // Step 8: Restart dev server if it was running
+    restartDevServer();
     
   } catch (e) {
     log('\n' + '═'.repeat(60), colors.red);
