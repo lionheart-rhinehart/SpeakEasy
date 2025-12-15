@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-15T00:17:52.065Z
+Updated: 2025-12-15T22:21:32.623Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-15 | devops | [fix wrapup slash command](2025-12-15__devops__fix-wrapup-slash-command.md) |
 | 2025-12-15 | devops | [enhance wrapup auto restart search](2025-12-15__devops__enhance-wrapup-auto-restart-search.md) |
 | 2025-12-14 | devops | [create wrapup sop system](2025-12-14__devops__create-wrapup-sop-system.md) |
 | 2025-12-14 | devops | [add wrapup sop](2025-12-14__devops__add-wrapup-sop.md) |

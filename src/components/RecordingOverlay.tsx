@@ -1,9 +1,36 @@
 import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type OverlayState = "recording" | "processing";
 
 export default function RecordingOverlay() {
+  // Listen for overlay-state-change events from backend
+  useEffect(() => {
+    const unlistenPromise = listen<any>("overlay-state-change", (event) => {
+      console.log("[Overlay] Received overlay-state-change event:", event.payload);
+      if (!event.payload || typeof event.payload !== "object") return;
+      const { state, recordingDurationMs } = event.payload as any;
+      if (state === "recording") {
+        setOverlayState("recording");
+        setProcessingStartTime(null);
+        setElapsedSeconds(0);
+        setWaveformHistory(Array(12).fill(0.2));
+        hasSeenRecording.current = true;
+        console.log("[Overlay] Set state: recording");
+      } else if (state === "processing") {
+        setOverlayState("processing");
+        setProcessingStartTime(Date.now() - (typeof recordingDurationMs === "number" ? recordingDurationMs : 0));
+        setElapsedSeconds(0);
+        hasSeenRecording.current = false;
+        console.log("[Overlay] Set state: processing");
+      }
+    });
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
   const [waveformHistory, setWaveformHistory] = useState<number[]>(Array(12).fill(0.2));
   const [overlayState, setOverlayState] = useState<OverlayState>("recording");
   const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);

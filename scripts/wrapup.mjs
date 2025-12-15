@@ -271,12 +271,19 @@ function restartDevServer() {
   
   try {
     // Start dev server in detached mode so it runs in background
-    const child = spawn('npm', ['run', 'tauri:dev'], {
-      cwd: ROOT,
-      detached: true,
-      stdio: 'ignore',
-      shell: true
-    });
+    // Use platform-specific command to avoid deprecation warning DEP0190
+    const isWindows = process.platform === 'win32';
+    const child = isWindows
+      ? spawn('cmd', ['/c', 'npm', 'run', 'tauri:dev'], {
+          cwd: ROOT,
+          detached: true,
+          stdio: 'ignore'
+        })
+      : spawn('npm', ['run', 'tauri:dev'], {
+          cwd: ROOT,
+          detached: true,
+          stdio: 'ignore'
+        });
     
     child.unref(); // Allow parent to exit independently
     

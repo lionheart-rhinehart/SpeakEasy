@@ -35,4 +35,23 @@ git push -u origin plan-edit
 
 ---
 
+# Overlay Recording Status Bar Architecture & Troubleshooting
+
+## Overlay Window Lifecycle
+- The global "Recording Overlay" (status bar for recording/processing) is implemented as a separate Tauri window (`recording-overlay`).
+- The overlay is always created at app startup, even if it is invisible or not currently shown.
+- Aggressive window re-creation logic ensures that any lost/closed overlay window (by crash, OS, or dev reload) is automatically restored on next show attempt.
+- All overlay logic, including show/hide/state/set position, logs key lifecycle and error events.
+
+## Edge Cases / QA Checklist
+- Multi-monitor and DPI: Overlay always positioned bottom-right of the primary monitor; logs geometry every show.
+- Minimize/tray: Overlay hides if app is minimized, restores as needed.
+- Window loss/restart: Overlay will be auto-recreated as needed.
+- All events and errors (creation, emission, geometry) are clearly logged for QA/developer review.
+- See inline code comments in `src-tauri/src/lib.rs`, `src-tauri/src/commands.rs`, `src/components/RecordingOverlay.tsx` for technical detail.
+
+## Troubleshooting
+- If the overlay is ever not shown: Check logs for overlay creation, show, geometry, and state change details.
+- Development hot reload and release/installer: Aggressive creation logic applies everywhere. Overlay cannot "vanish" unless self-terminated by OS or system resource exhaustion (in which case, recovery is automatic on next use).
+
 For further setup or troubleshooting, see the repository [issues](https://github.com/lionheart-rhinehart/SpeakEasy/issues) or consult a team administrator.

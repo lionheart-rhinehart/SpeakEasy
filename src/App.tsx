@@ -85,7 +85,11 @@ function App() {
                 await invoke("start_recording");
                 useAppStore.getState().startRecording();
                 // Show the recording overlay
-                invoke("show_recording_overlay").catch(console.error);
+                invoke("show_recording_overlay").then(() => {
+  console.log('[Frontend] show_recording_overlay success.');
+}).catch((err) => {
+  console.error('[Frontend] show_recording_overlay failed:', err);
+});
                 console.log("Recording started via hotkey");
               } catch (error) {
                 console.error("Failed to start recording:", error);
@@ -106,6 +110,8 @@ function App() {
 
               // Switch overlay to processing state (don't hide it)
               invoke("set_overlay_state", {
+  // Logging included
+
                 state: "processing",
                 recordingDurationMs,
               }).catch(console.error);
@@ -261,7 +267,11 @@ function App() {
               // Start recording the voice instruction
               await invoke("start_recording");
               useAppStore.getState().startRecording();
-              invoke("show_recording_overlay").catch(console.error);
+              invoke("show_recording_overlay").then(() => {
+  console.log('[Frontend] show_recording_overlay success.');
+}).catch((err) => {
+  console.error('[Frontend] show_recording_overlay failed:', err);
+});
               console.log("AI Transform: recording voice instruction...");
             } catch (error) {
               console.error("Failed to start AI Transform:", error);
@@ -293,6 +303,8 @@ function App() {
 
             // Switch overlay to processing state
             invoke("set_overlay_state", {
+  // Logging included
+
               state: "processing",
               recordingDurationMs,
             }).catch(console.error);

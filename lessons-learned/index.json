@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-15T00:17:52.068Z",
-  "count": 8,
+  "last_updated": "2025-12-15T22:21:32.626Z",
+  "count": 9,
   "entries": [
+    {
+      "id": "2025-12-15__devops__fix-wrapup-slash-command",
+      "file": "2025-12-15__devops__fix-wrapup-slash-command.md",
+      "title": "fix-wrapup-slash-command",
+      "date": "2025-12-15",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Fixed wrapup slash command by moving it from .cursor/prompts to .cursor/commands",
+      "problem": "Slash command /wrapup was not recognized by Cursor",
+      "fix": "Moved wrapup.md to correct directory .cursor/commands/ where Cursor reads slash commands"
+    },
     {
       "id": "2025-12-15__devops__enhance-wrapup-auto-restart-search",
       "file": "2025-12-15__devops__enhance-wrapup-auto-restart-search.md",

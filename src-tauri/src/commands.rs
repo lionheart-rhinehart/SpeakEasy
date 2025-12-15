@@ -190,9 +190,39 @@ pub async fn get_api_key(state: State<'_, Mutex<AppState>>) -> Result<Option<Str
 #[tauri::command]
 pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
     use tauri::Emitter;
-
-    // Get the overlay window
-    if let Some(overlay) = app.get_webview_window("recording-overlay") {
+    // Aggressively attempt to acquire or create the overlay window
+    // (See inline doc comments and README for QA rationale.)
+    let mut overlay_opt = app.get_webview_window("recording-overlay");
+    if overlay_opt.is_none() {
+        log::warn!("[show_recording_overlay] Overlay window not found. Attempting to restore it programmatically. This ensures robust QA/dev/prod overlay status bar lifecycle.");
+        let create_res = app.create_webview_window(
+            "recording-overlay",
+            tauri::WebviewWindowUrl::App("overlay.html".into()),
+            |builder, _| {
+                builder
+                    .title("Recording")
+                    .inner_size(300.0, 80.0)
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .focus(false)
+                    .skip_taskbar(true)
+                    .build()
+            },
+        );
+        match create_res {
+            Ok(_) => {
+                log::info!("[show_recording_overlay] Overlay window (auto)created at event time (recoverable).");
+                overlay_opt = app.get_webview_window("recording-overlay");
+            },
+            Err(e) => {
+                log::error!("[show_recording_overlay] Failed overlay window create: {} See README/inline doc for recovery steps.", e);
+                return Err(format!("Could not create overlay window: {}", e));
+            }
+        }
+    }
+    if let Some(overlay) = overlay_opt {
         // Get primary monitor to position in bottom-right
         if let Some(monitor) = app.primary_monitor().map_err(|e| e.to_string())?.as_ref() {
             let monitor_size = monitor.size();
@@ -229,9 +259,12 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn hide_recording_overlay(app: AppHandle) -> Result<(), String> {
-    if let Some(overlay) = app.get_webview_window("recording-overlay") {
+    let overlay_opt = app.get_webview_window("recording-overlay");
+    if let Some(overlay) = overlay_opt {
         overlay.hide().map_err(|e| e.to_string())?;
-        log::info!("Recording overlay hidden");
+        log::info!("[hide_recording_overlay] Recording overlay hidden");
+    } else {
+        log::warn!("[hide_recording_overlay] Overlay window was not present to hide.");
     }
     Ok(())
 }
@@ -246,11 +279,12 @@ pub async fn set_overlay_state(app: AppHandle, state: String, recording_duration
     });
 
     // Emit directly to the overlay window
-    if let Some(overlay) = app.get_webview_window("recording-overlay") {
+    let overlay_opt = app.get_webview_window("recording-overlay");
+    if let Some(overlay) = overlay_opt {
         overlay.emit("overlay-state-change", payload.clone()).map_err(|e| e.to_string())?;
-        log::info!("Overlay state changed to: {} (emitted to overlay window)", state);
+        log::info!("[set_overlay_state] Overlay state changed to: {} (emitted to overlay window)", state);
     } else {
-        log::warn!("Overlay window not found, emitting globally");
+        log::warn!("[set_overlay_state] Overlay window not found, attempting to emit globally");
         app.emit("overlay-state-change", payload).map_err(|e| e.to_string())?;
     }
 

@@ -35,6 +35,44 @@ pub fn run() {
             let state = AppState::new();
             app.manage(Mutex::new(state));
 
+            // Aggressive overlay status bar restoration -- always ensure overlay window exists
+            // See README.md, 'Overlay Recording Status Bar Architecture & Troubleshooting', for context.
+            // This forces the recording-overlay to exist even if Tauri fails to spawn it on startup or after reload/crash.
+            {
+                use tauri::Manager;
+                let recording_overlay = app.get_webview_window("recording-overlay");
+                log::info!("[aggressive-setup] Checking for pre-existing overlay window: {:#?}", recording_overlay.is_some());
+                if recording_overlay.is_none() {
+                    // Overlay window missing, forcibly create it
+                    let overlay_window_result = app.create_webview_window(
+                        "recording-overlay",
+                        tauri::WebviewWindowUrl::App("overlay.html".into()),
+                        |builder, _webview| {
+                            builder
+                                .title("Recording")
+                                .inner_size(300.0, 80.0)
+                                .decorations(false)
+                                .transparent(true)
+                                .always_on_top(true)
+                                .visible(false)
+                                .focus(false)
+                                .skip_taskbar(true)
+                                .build()
+                        },
+                    );
+                    match overlay_window_result {
+                        Ok(_) => log::info!("[aggressive-setup] Overlay window created at startup (QA/robustness)."),
+                        Err(e) => log::error!("[aggressive-setup] Failed to create overlay window: {}", e),
+                    }
+                } else {
+                    // Window exists (likely dev reload); ensure it's clean and hidden
+                    if let Some(overlay) = app.get_webview_window("recording-overlay") {
+                        let _ = overlay.hide();
+                        log::info!("[aggressive-setup] Overlay window exists and has been hidden for clean state.");
+                    }
+                }
+            }
+
             // Set up system tray
             let show_item = MenuItem::with_id(app, "show", "Show SpeakEasy", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
