@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-14T20:46:37.787Z",
-  "count": 7,
+  "last_updated": "2025-12-15T00:17:52.068Z",
+  "count": 8,
   "entries": [
+    {
+      "id": "2025-12-15__devops__enhance-wrapup-auto-restart-search",
+      "file": "2025-12-15__devops__enhance-wrapup-auto-restart-search.md",
+      "title": "enhance-wrapup-auto-restart-search",
+      "date": "2025-12-15",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Enhanced wrapup system with automatic dev server restart detection and JSON-based searchable lessons learned index",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-14__devops__create-wrapup-sop-system",
       "file": "2025-12-14__devops__create-wrapup-sop-system.md",

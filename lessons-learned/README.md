@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-14T20:46:37.784Z
+Updated: 2025-12-15T00:17:52.065Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-15 | devops | [enhance wrapup auto restart search](2025-12-15__devops__enhance-wrapup-auto-restart-search.md) |
 | 2025-12-14 | devops | [create wrapup sop system](2025-12-14__devops__create-wrapup-sop-system.md) |
 | 2025-12-14 | devops | [add wrapup sop](2025-12-14__devops__add-wrapup-sop.md) |
 | 2025-12-14 | devops | [add strict rust checking](2025-12-14__devops__add-strict-rust-checking.md) |
