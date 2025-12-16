@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-15T22:21:32.626Z",
-  "count": 9,
+  "last_updated": "2025-12-16T21:00:07.816Z",
+  "count": 10,
   "entries": [
+    {
+      "id": "2025-12-16__feature__implement-always-on-top-status-bar",
+      "file": "2025-12-16__feature__implement-always-on-top-status-bar.md",
+      "title": "implement-always-on-top-status-bar",
+      "date": "2025-12-16",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Implemented floating always-on-top status bar in bottom-right corner with click-through, auto-repositioning, and cross-platform support",
+      "problem": "Status bar was only visible when all windows minimized, not appearing above other apps",
+      "fix": "Created dedicated transparent window with alwaysOnTop, visibleOnAllWorkspaces, tauri-plugin-positioner for positioning, click-through support, and display-change event listeners"
+    },
     {
       "id": "2025-12-15__devops__fix-wrapup-slash-command",
       "file": "2025-12-15__devops__fix-wrapup-slash-command.md",

@@ -4,6 +4,7 @@ use crate::config;
 use crate::state::AppState;
 use crate::transcription;
 use serde::{Deserialize, Serialize};
+use tauri_plugin_positioner::{Position, WindowExt};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
@@ -195,22 +196,20 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
     let mut overlay_opt = app.get_webview_window("recording-overlay");
     if overlay_opt.is_none() {
         log::warn!("[show_recording_overlay] Overlay window not found. Attempting to restore it programmatically. This ensures robust QA/dev/prod overlay status bar lifecycle.");
-        let create_res = app.create_webview_window(
+        let create_res = tauri::WebviewWindowBuilder::new(
+            &app,
             "recording-overlay",
-            tauri::WebviewWindowUrl::App("overlay.html".into()),
-            |builder, _| {
-                builder
-                    .title("Recording")
-                    .inner_size(300.0, 80.0)
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .visible(false)
-                    .focus(false)
-                    .skip_taskbar(true)
-                    .build()
-            },
-        );
+            tauri::WebviewUrl::App("overlay.html".into())
+        )
+        .title("Recording")
+        .inner_size(300.0, 80.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible(false)
+        .focused(false)
+        .skip_taskbar(true)
+        .build();
         match create_res {
             Ok(_) => {
                 log::info!("[show_recording_overlay] Overlay window (auto)created at event time (recoverable).");
@@ -1077,4 +1076,63 @@ pub async fn transform_with_llm(
             })
         }
     }
+}
+
+// ============================================================================
+// STATUS BAR WINDOW
+// ============================================================================
+
+#[tauri::command]
+pub async fn show_status_bar(app: AppHandle) -> Result<(), String> {
+    use tauri::WebviewUrl;
+    
+    // create or get window
+    let win = app.get_webview_window("status-bar");
+    if win.is_none() {
+        log::info!("[show_status_bar] Creating status-bar window");
+        let _window = tauri::WebviewWindowBuilder::new(
+            &app,
+            "status-bar",
+            WebviewUrl::App("statusbar.html".into())
+        )
+        .title("Status")
+        .inner_size(220.0, 80.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .focused(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    let window = app.get_webview_window("status-bar").ok_or("Cannot get status-bar window")?;
+
+    // position bottom-right using plugin
+    window.move_window(Position::BottomRight).map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    log::info!("[show_status_bar] Status bar positioned and shown");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_status_bar_visibility(app: AppHandle, show: bool) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("status-bar") {
+        if show {
+            win.show().ok();
+        } else {
+            win.hide().ok();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn enable_status_bar_click_through(app: AppHandle) -> Result<(), String> {
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    if let Some(win) = app.get_webview_window("status-bar") {
+        win.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+        log::info!("[enable_status_bar_click_through] Click-through enabled");
+    }
+    Ok(())
 }

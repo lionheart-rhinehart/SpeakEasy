@@ -68,6 +68,7 @@ const defaultSettings: UserSettings = {
   translateToEnglish: false,
   audioEnabled: true,
   floatingIndicator: false,
+  showStatusBar: true,
   historyLimitMb: 10,
   startOnBoot: false,
   startMinimized: true,

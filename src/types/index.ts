@@ -48,6 +48,7 @@ export interface UserSettings {
   translateToEnglish: boolean;
   audioEnabled: boolean;
   floatingIndicator: boolean;
+  showStatusBar?: boolean;
   historyLimitMb: number;
   startOnBoot: boolean;
   startMinimized: boolean;

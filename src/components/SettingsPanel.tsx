@@ -586,6 +586,27 @@ export default function SettingsPanel() {
             </label>
           </section>
 
+          {/* Status Bar */}
+          <section>
+            <h3 className="text-sm font-medium text-text-primary mb-3">Status Bar</h3>
+            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Always-on-top status bar</p>
+                <p className="text-xs text-text-secondary">Show floating status indicator (bottom-right)</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.showStatusBar ?? true}
+                onChange={(e) => {
+                  const show = e.target.checked;
+                  updateSettings({ showStatusBar: show });
+                  invoke(show ? "show_status_bar" : "set_status_bar_visibility", show ? {} : { show: false });
+                }}
+                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
+              />
+            </label>
+          </section>
+
           {/* Startup */}
           <section>
             <h3 className="text-sm font-medium text-text-primary mb-3">Startup</h3>

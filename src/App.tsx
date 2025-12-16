@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { useAppStore } from "./stores/appStore";
 import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
@@ -30,7 +30,12 @@ function App() {
 
   useEffect(() => {
     initialize();
-  }, [initialize]);
+    // Show status bar on startup if enabled
+    const showBar = settings.showStatusBar ?? true;
+    if (showBar) {
+      invoke("show_status_bar").catch(console.error);
+    }
+  }, [initialize, settings.showStatusBar]);
 
   // Listen for tray menu events
   useEffect(() => {
@@ -432,6 +437,17 @@ function App() {
       }
     };
   }, [hotkeyAiTransform]);
+
+  // Emit status updates to status-bar window
+  useEffect(() => {
+    const unsubscribe = useAppStore.subscribe((state) => {
+      emit("status_update", {
+        recordingState: state.recordingState,
+        recordingStartTime: state.recordingStartTime,
+      });
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Handle webhook action execution
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {

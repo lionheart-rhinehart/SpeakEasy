@@ -4,13 +4,18 @@ import { listen } from "@tauri-apps/api/event";
 
 type OverlayState = "recording" | "processing";
 
+interface OverlayStatePayload {
+  state: string;
+  recordingDurationMs?: number | null;
+}
+
 export default function RecordingOverlay() {
   // Listen for overlay-state-change events from backend
   useEffect(() => {
-    const unlistenPromise = listen<any>("overlay-state-change", (event) => {
+    const unlistenPromise = listen<OverlayStatePayload>("overlay-state-change", (event) => {
       console.log("[Overlay] Received overlay-state-change event:", event.payload);
       if (!event.payload || typeof event.payload !== "object") return;
-      const { state, recordingDurationMs } = event.payload as any;
+      const { state, recordingDurationMs } = event.payload;
       if (state === "recording") {
         setOverlayState("recording");
         setProcessingStartTime(null);

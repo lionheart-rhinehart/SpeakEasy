@@ -14,7 +14,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Emitter, Listener, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -26,6 +26,7 @@ pub fn run() {
         // Autostart plugin: MacosLauncher is only used on macOS.
         // On Windows, this automatically uses the Registry (HKCU\Software\Microsoft\Windows\CurrentVersion\Run)
         // On Linux, this uses XDG autostart (~/.config/autostart/)
+        .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
@@ -44,22 +45,20 @@ pub fn run() {
                 log::info!("[aggressive-setup] Checking for pre-existing overlay window: {:#?}", recording_overlay.is_some());
                 if recording_overlay.is_none() {
                     // Overlay window missing, forcibly create it
-                    let overlay_window_result = app.create_webview_window(
+                    let overlay_window_result = tauri::WebviewWindowBuilder::new(
+                        app,
                         "recording-overlay",
-                        tauri::WebviewWindowUrl::App("overlay.html".into()),
-                        |builder, _webview| {
-                            builder
-                                .title("Recording")
-                                .inner_size(300.0, 80.0)
-                                .decorations(false)
-                                .transparent(true)
-                                .always_on_top(true)
-                                .visible(false)
-                                .focus(false)
-                                .skip_taskbar(true)
-                                .build()
-                        },
-                    );
+                        tauri::WebviewUrl::App("overlay.html".into())
+                    )
+                    .title("Recording")
+                    .inner_size(300.0, 80.0)
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .focused(false)
+                    .skip_taskbar(true)
+                    .build();
                     match overlay_window_result {
                         Ok(_) => log::info!("[aggressive-setup] Overlay window created at startup (QA/robustness)."),
                         Err(e) => log::error!("[aggressive-setup] Failed to create overlay window: {}", e),
@@ -125,6 +124,23 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Setup global event listeners for display changes to reposition status bar
+            let app_handle = app.handle().clone();
+            app.handle().listen("tauri://scale-change", move |_event| {
+                let app_clone = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = commands::show_status_bar(app_clone).await;
+                });
+            });
+
+            let app_handle2 = app.handle().clone();
+            app.handle().listen("tauri://resize", move |_event| {
+                let app_clone = app_handle2.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = commands::show_status_bar(app_clone).await;
+                });
+            });
+
             log::info!("SpeakEasy initialized successfully with system tray");
             Ok(())
         })
@@ -172,6 +188,10 @@ pub fn run() {
             // Multi-provider LLM transform
             commands::transform_with_llm,
             commands::fetch_provider_models,
+            // Status bar window
+            commands::show_status_bar,
+            commands::set_status_bar_visibility,
+            commands::enable_status_bar_click_through,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
