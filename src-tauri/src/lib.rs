@@ -21,6 +21,23 @@ use tauri_plugin_autostart::MacosLauncher;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            // When a second instance tries to start, focus the existing instance
+            log::info!("Second instance attempted with args: {:?}, cwd: {}", args, cwd);
+            
+            // If the second instance was NOT started with --minimized, show the main window
+            let should_show = !args.iter().any(|arg| arg == "--minimized");
+            
+            if should_show {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    log::info!("Focused existing instance's main window");
+                }
+            } else {
+                log::info!("Second instance with --minimized flag; keeping window hidden");
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Autostart plugin: MacosLauncher is only used on macOS.
@@ -35,6 +52,17 @@ pub fn run() {
             // Initialize application state
             let state = AppState::new();
             app.manage(Mutex::new(state));
+            
+            // Handle --minimized flag: if present, hide the main window
+            let args: Vec<String> = std::env::args().collect();
+            let is_minimized = args.iter().any(|arg| arg == "--minimized");
+            
+            if is_minimized {
+                log::info!("Started with --minimized flag, hiding main window");
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
 
             // Aggressive overlay status bar restoration -- always ensure overlay window exists
             // See README.md, 'Overlay Recording Status Bar Architecture & Troubleshooting', for context.

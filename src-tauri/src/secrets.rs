@@ -70,26 +70,43 @@ pub struct ApiKeyStatus {
 /// Create a keyring entry for the given provider
 fn get_entry(provider: TransformProvider) -> Result<Entry> {
     let credential_key = provider.credential_key();
-    log::debug!("Creating keyring entry: service='{}', user='{}'", SERVICE_NAME, credential_key);
-    Entry::new(SERVICE_NAME, credential_key)
-        .context(format!("Failed to create keyring entry for service='{}', user='{}'", SERVICE_NAME, credential_key))
+    log::debug!(
+        "Creating keyring entry: service='{}', user='{}'",
+        SERVICE_NAME,
+        credential_key
+    );
+    Entry::new(SERVICE_NAME, credential_key).context(format!(
+        "Failed to create keyring entry for service='{}', user='{}'",
+        SERVICE_NAME, credential_key
+    ))
 }
 
 /// Store an API key securely for a provider
 pub fn set_api_key(provider: TransformProvider, api_key: &str) -> Result<()> {
-    log::info!("Attempting to store API key for provider: {} (key length: {})", provider, api_key.len());
+    log::info!(
+        "Attempting to store API key for provider: {} (key length: {})",
+        provider,
+        api_key.len()
+    );
     let entry = get_entry(provider)?;
     entry
         .set_password(api_key)
         .context(format!("Failed to store API key for {}", provider))?;
     log::info!("Successfully stored API key for provider: {}", provider);
-    
+
     // Verify the key was actually stored by reading it back
     match entry.get_password() {
-        Ok(_) => log::info!("Verified: API key is readable after storing for {}", provider),
-        Err(e) => log::error!("Warning: Could not verify stored API key for {}: {}", provider, e),
+        Ok(_) => log::info!(
+            "Verified: API key is readable after storing for {}",
+            provider
+        ),
+        Err(e) => log::error!(
+            "Warning: Could not verify stored API key for {}: {}",
+            provider,
+            e
+        ),
     }
-    
+
     Ok(())
 }
 
@@ -99,7 +116,11 @@ pub fn get_api_key(provider: TransformProvider) -> Result<Option<String>> {
     let entry = get_entry(provider)?;
     match entry.get_password() {
         Ok(key) => {
-            log::debug!("Successfully retrieved API key for {} (length: {})", provider, key.len());
+            log::debug!(
+                "Successfully retrieved API key for {} (length: {})",
+                provider,
+                key.len()
+            );
             Ok(Some(key))
         }
         Err(keyring::Error::NoEntry) => {
@@ -108,7 +129,11 @@ pub fn get_api_key(provider: TransformProvider) -> Result<Option<String>> {
         }
         Err(e) => {
             log::error!("Keyring error retrieving API key for {}: {:?}", provider, e);
-            Err(anyhow::anyhow!("Failed to retrieve API key for {}: {}", provider, e))
+            Err(anyhow::anyhow!(
+                "Failed to retrieve API key for {}: {}",
+                provider,
+                e
+            ))
         }
     }
 }
@@ -125,7 +150,11 @@ pub fn clear_api_key(provider: TransformProvider) -> Result<()> {
             // Already not set, that's fine
             Ok(())
         }
-        Err(e) => Err(anyhow::anyhow!("Failed to clear API key for {}: {}", provider, e)),
+        Err(e) => Err(anyhow::anyhow!(
+            "Failed to clear API key for {}: {}",
+            provider,
+            e
+        )),
     }
 }
 
@@ -174,14 +203,14 @@ fn mask_api_key(key: &str) -> String {
     if key.len() <= 8 {
         return "••••••••".to_string();
     }
-    
+
     let prefix_len = key.find('-').map(|i| i + 1).unwrap_or(3).min(8);
     let suffix_len = 4;
-    
+
     if key.len() <= prefix_len + suffix_len {
         return format!("{}••••", &key[..prefix_len.min(key.len())]);
     }
-    
+
     let prefix = &key[..prefix_len];
     let suffix = &key[key.len() - suffix_len..];
     format!("{}••••{}", prefix, suffix)
@@ -209,9 +238,18 @@ mod tests {
 
     #[test]
     fn test_provider_from_str() {
-        assert_eq!(TransformProvider::from_str("openrouter"), Some(TransformProvider::OpenRouter));
-        assert_eq!(TransformProvider::from_str("OPENAI"), Some(TransformProvider::OpenAI));
-        assert_eq!(TransformProvider::from_str("Anthropic"), Some(TransformProvider::Anthropic));
+        assert_eq!(
+            TransformProvider::from_str("openrouter"),
+            Some(TransformProvider::OpenRouter)
+        );
+        assert_eq!(
+            TransformProvider::from_str("OPENAI"),
+            Some(TransformProvider::OpenAI)
+        );
+        assert_eq!(
+            TransformProvider::from_str("Anthropic"),
+            Some(TransformProvider::Anthropic)
+        );
         assert_eq!(TransformProvider::from_str("unknown"), None);
     }
 

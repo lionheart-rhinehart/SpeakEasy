@@ -1,8 +1,8 @@
 use anyhow::Result;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TranscriptionResponse {
@@ -21,7 +21,7 @@ struct WhisperResponse {
 const MAX_WHISPER_FILE_SIZE: usize = 25 * 1024 * 1024;
 // Chunk size for splitting long audio (10 minutes at 16kHz mono 16-bit = ~19MB)
 const CHUNK_DURATION_SECONDS: u32 = 600; // 10 minutes per chunk
-// Retry configuration
+                                         // Retry configuration
 const MAX_RETRIES: u32 = 5;
 const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 const MAX_RETRY_DELAY_MS: u64 = 30000;
@@ -63,7 +63,11 @@ fn save_audio_backup(audio_data: &[u8]) -> Option<PathBuf> {
 
     match std::fs::write(&path, audio_data) {
         Ok(_) => {
-            log::info!("Audio backup saved: {:?} ({} bytes)", path, audio_data.len());
+            log::info!(
+                "Audio backup saved: {:?} ({} bytes)",
+                path,
+                audio_data.len()
+            );
             Some(path)
         }
         Err(e) => {
@@ -85,7 +89,9 @@ fn delete_audio_backup(path: &PathBuf) {
 /// Clean up old backup files (older than 24 hours)
 fn cleanup_old_backups() {
     let backup_dir = get_backup_dir();
-    let Ok(entries) = std::fs::read_dir(&backup_dir) else { return };
+    let Ok(entries) = std::fs::read_dir(&backup_dir) else {
+        return;
+    };
 
     let cutoff = std::time::SystemTime::now() - Duration::from_secs(24 * 60 * 60);
 
@@ -108,7 +114,7 @@ fn cleanup_old_backups() {
 async fn backoff_delay(attempt: u32) {
     let delay = std::cmp::min(
         INITIAL_RETRY_DELAY_MS * 2u64.pow(attempt),
-        MAX_RETRY_DELAY_MS
+        MAX_RETRY_DELAY_MS,
     );
     log::info!("Retry attempt {}, waiting {}ms...", attempt + 1, delay);
     tokio::time::sleep(Duration::from_millis(delay)).await;
@@ -148,7 +154,11 @@ fn split_audio_into_chunks(audio_data: &[u8], chunk_duration_seconds: u32) -> Ve
         offset = end;
     }
 
-    log::info!("Split {} byte audio into {} chunks", audio_data.len(), chunks.len());
+    log::info!(
+        "Split {} byte audio into {} chunks",
+        audio_data.len(),
+        chunks.len()
+    );
     chunks
 }
 
@@ -165,11 +175,11 @@ fn create_wav_header(data_size: u32) -> Vec<u8> {
     // fmt chunk
     header.extend_from_slice(b"fmt ");
     header.extend_from_slice(&16u32.to_le_bytes()); // chunk size
-    header.extend_from_slice(&1u16.to_le_bytes());  // PCM format
-    header.extend_from_slice(&1u16.to_le_bytes());  // mono
+    header.extend_from_slice(&1u16.to_le_bytes()); // PCM format
+    header.extend_from_slice(&1u16.to_le_bytes()); // mono
     header.extend_from_slice(&16000u32.to_le_bytes()); // sample rate
     header.extend_from_slice(&32000u32.to_le_bytes()); // byte rate (16000 * 2)
-    header.extend_from_slice(&2u16.to_le_bytes());  // block align
+    header.extend_from_slice(&2u16.to_le_bytes()); // block align
     header.extend_from_slice(&16u16.to_le_bytes()); // bits per sample
 
     // data chunk
@@ -205,7 +215,12 @@ async fn transcribe_chunk(
     chunk_index: usize,
     total_chunks: usize,
 ) -> Result<String> {
-    log::info!("Transcribing chunk {}/{} ({} bytes)", chunk_index + 1, total_chunks, audio_data.len());
+    log::info!(
+        "Transcribing chunk {}/{} ({} bytes)",
+        chunk_index + 1,
+        total_chunks,
+        audio_data.len()
+    );
 
     let prompt = match language {
         Some("en") => "Clear English speech. Transcribe exactly what is said.",
@@ -260,14 +275,25 @@ async fn transcribe_chunk(
                 if status.is_success() {
                     match response.json::<WhisperResponse>().await {
                         Ok(whisper_response) => {
-                            log::info!("Chunk {}/{} transcribed: {} chars (attempt {})",
-                                chunk_index + 1, total_chunks, whisper_response.text.len(), attempt + 1);
+                            log::info!(
+                                "Chunk {}/{} transcribed: {} chars (attempt {})",
+                                chunk_index + 1,
+                                total_chunks,
+                                whisper_response.text.len(),
+                                attempt + 1
+                            );
                             return Ok(whisper_response.text);
                         }
                         Err(e) => {
                             let err = anyhow::anyhow!("Failed to parse response: {}", e);
                             if is_retryable_error(&err) && attempt < MAX_RETRIES - 1 {
-                                log::warn!("Chunk {}/{} parse error (attempt {}): {}", chunk_index + 1, total_chunks, attempt + 1, e);
+                                log::warn!(
+                                    "Chunk {}/{} parse error (attempt {}): {}",
+                                    chunk_index + 1,
+                                    total_chunks,
+                                    attempt + 1,
+                                    e
+                                );
                                 last_error = Some(err);
                                 continue;
                             }
@@ -279,8 +305,17 @@ async fn transcribe_chunk(
                     let err = anyhow::anyhow!("Whisper API error ({}): {}", status, error_text);
 
                     // Retry on 429 (rate limit), 5xx errors
-                    if (status.as_u16() == 429 || status.is_server_error()) && attempt < MAX_RETRIES - 1 {
-                        log::warn!("Chunk {}/{} API error (attempt {}): {} - {}", chunk_index + 1, total_chunks, attempt + 1, status, error_text);
+                    if (status.as_u16() == 429 || status.is_server_error())
+                        && attempt < MAX_RETRIES - 1
+                    {
+                        log::warn!(
+                            "Chunk {}/{} API error (attempt {}): {} - {}",
+                            chunk_index + 1,
+                            total_chunks,
+                            attempt + 1,
+                            status,
+                            error_text
+                        );
                         last_error = Some(err);
                         continue;
                     }
@@ -290,7 +325,13 @@ async fn transcribe_chunk(
             Err(e) => {
                 let err = anyhow::anyhow!("Request failed: {}", e);
                 if is_retryable_error(&err) && attempt < MAX_RETRIES - 1 {
-                    log::warn!("Chunk {}/{} request error (attempt {}): {}", chunk_index + 1, total_chunks, attempt + 1, e);
+                    log::warn!(
+                        "Chunk {}/{} request error (attempt {}): {}",
+                        chunk_index + 1,
+                        total_chunks,
+                        attempt + 1,
+                        e
+                    );
                     last_error = Some(err);
                     continue;
                 }
@@ -316,8 +357,12 @@ pub async fn transcribe_with_whisper(
     let client = create_client();
     let total_duration_ms = calculate_duration_ms(&audio_data);
 
-    log::info!("Starting transcription: {} bytes, {} ms duration ({:.1} minutes)",
-        audio_data.len(), total_duration_ms, total_duration_ms as f64 / 60000.0);
+    log::info!(
+        "Starting transcription: {} bytes, {} ms duration ({:.1} minutes)",
+        audio_data.len(),
+        total_duration_ms,
+        total_duration_ms as f64 / 60000.0
+    );
 
     // Save backup for long recordings (over 1 minute)
     let backup_path = if total_duration_ms > 60000 {
@@ -326,7 +371,9 @@ pub async fn transcribe_with_whisper(
         None
     };
 
-    let result = transcribe_with_whisper_internal(&client, api_key, audio_data, language, total_duration_ms).await;
+    let result =
+        transcribe_with_whisper_internal(&client, api_key, audio_data, language, total_duration_ms)
+            .await;
 
     // Delete backup on success
     if result.is_ok() {
@@ -362,7 +409,10 @@ async fn transcribe_with_whisper_internal(
         }
 
         let combined_text = all_text.join(" ");
-        log::info!("All chunks transcribed, combined length: {} chars", combined_text.len());
+        log::info!(
+            "All chunks transcribed, combined length: {} chars",
+            combined_text.len()
+        );
 
         return Ok(TranscriptionResponse {
             text: combined_text,
@@ -399,7 +449,12 @@ async fn translate_chunk(
     chunk_index: usize,
     total_chunks: usize,
 ) -> Result<String> {
-    log::info!("Translating chunk {}/{} ({} bytes)", chunk_index + 1, total_chunks, audio_data.len());
+    log::info!(
+        "Translating chunk {}/{} ({} bytes)",
+        chunk_index + 1,
+        total_chunks,
+        audio_data.len()
+    );
 
     let mut last_error: Option<anyhow::Error> = None;
 
@@ -431,14 +486,25 @@ async fn translate_chunk(
                 if status.is_success() {
                     match response.json::<WhisperResponse>().await {
                         Ok(whisper_response) => {
-                            log::info!("Chunk {}/{} translated: {} chars (attempt {})",
-                                chunk_index + 1, total_chunks, whisper_response.text.len(), attempt + 1);
+                            log::info!(
+                                "Chunk {}/{} translated: {} chars (attempt {})",
+                                chunk_index + 1,
+                                total_chunks,
+                                whisper_response.text.len(),
+                                attempt + 1
+                            );
                             return Ok(whisper_response.text);
                         }
                         Err(e) => {
                             let err = anyhow::anyhow!("Failed to parse response: {}", e);
                             if is_retryable_error(&err) && attempt < MAX_RETRIES - 1 {
-                                log::warn!("Chunk {}/{} parse error (attempt {}): {}", chunk_index + 1, total_chunks, attempt + 1, e);
+                                log::warn!(
+                                    "Chunk {}/{} parse error (attempt {}): {}",
+                                    chunk_index + 1,
+                                    total_chunks,
+                                    attempt + 1,
+                                    e
+                                );
                                 last_error = Some(err);
                                 continue;
                             }
@@ -449,8 +515,17 @@ async fn translate_chunk(
                     let error_text = response.text().await.unwrap_or_default();
                     let err = anyhow::anyhow!("Whisper API error ({}): {}", status, error_text);
 
-                    if (status.as_u16() == 429 || status.is_server_error()) && attempt < MAX_RETRIES - 1 {
-                        log::warn!("Chunk {}/{} API error (attempt {}): {} - {}", chunk_index + 1, total_chunks, attempt + 1, status, error_text);
+                    if (status.as_u16() == 429 || status.is_server_error())
+                        && attempt < MAX_RETRIES - 1
+                    {
+                        log::warn!(
+                            "Chunk {}/{} API error (attempt {}): {} - {}",
+                            chunk_index + 1,
+                            total_chunks,
+                            attempt + 1,
+                            status,
+                            error_text
+                        );
                         last_error = Some(err);
                         continue;
                     }
@@ -460,7 +535,13 @@ async fn translate_chunk(
             Err(e) => {
                 let err = anyhow::anyhow!("Request failed: {}", e);
                 if is_retryable_error(&err) && attempt < MAX_RETRIES - 1 {
-                    log::warn!("Chunk {}/{} request error (attempt {}): {}", chunk_index + 1, total_chunks, attempt + 1, e);
+                    log::warn!(
+                        "Chunk {}/{} request error (attempt {}): {}",
+                        chunk_index + 1,
+                        total_chunks,
+                        attempt + 1,
+                        e
+                    );
                     last_error = Some(err);
                     continue;
                 }
@@ -485,8 +566,12 @@ pub async fn translate_to_english(
     let client = create_client();
     let total_duration_ms = calculate_duration_ms(&audio_data);
 
-    log::info!("Starting translation: {} bytes, {} ms duration ({:.1} minutes)",
-        audio_data.len(), total_duration_ms, total_duration_ms as f64 / 60000.0);
+    log::info!(
+        "Starting translation: {} bytes, {} ms duration ({:.1} minutes)",
+        audio_data.len(),
+        total_duration_ms,
+        total_duration_ms as f64 / 60000.0
+    );
 
     // Save backup for long recordings (over 1 minute)
     let backup_path = if total_duration_ms > 60000 {
@@ -495,7 +580,8 @@ pub async fn translate_to_english(
         None
     };
 
-    let result = translate_to_english_internal(&client, api_key, audio_data, total_duration_ms).await;
+    let result =
+        translate_to_english_internal(&client, api_key, audio_data, total_duration_ms).await;
 
     // Delete backup on success
     if result.is_ok() {
@@ -529,7 +615,10 @@ async fn translate_to_english_internal(
         }
 
         let combined_text = all_text.join(" ");
-        log::info!("All chunks translated, combined length: {} chars", combined_text.len());
+        log::info!(
+            "All chunks translated, combined length: {} chars",
+            combined_text.len()
+        );
 
         return Ok(TranscriptionResponse {
             text: combined_text,
@@ -584,7 +673,11 @@ pub async fn transcribe_with_backend(
     let status = response.status();
     if !status.is_success() {
         let error_text = response.text().await.unwrap_or_default();
-        return Err(anyhow::anyhow!("Backend API error ({}): {}", status, error_text));
+        return Err(anyhow::anyhow!(
+            "Backend API error ({}): {}",
+            status,
+            error_text
+        ));
     }
 
     #[derive(Deserialize)]
@@ -617,7 +710,9 @@ pub async fn transcribe_with_backend(
         return Err(anyhow::anyhow!("{}: {}", error.code, error.message));
     }
 
-    let data = body.data.ok_or_else(|| anyhow::anyhow!("No data in response"))?;
+    let data = body
+        .data
+        .ok_or_else(|| anyhow::anyhow!("No data in response"))?;
 
     Ok(TranscriptionResponse {
         text: data.text,

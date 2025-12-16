@@ -4,9 +4,9 @@ use crate::config;
 use crate::state::AppState;
 use crate::transcription;
 use serde::{Deserialize, Serialize};
-use tauri_plugin_positioner::{Position, WindowExt};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_positioner::{Position, WindowExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioDevice {
@@ -37,7 +37,9 @@ pub async fn stop_recording(state: State<'_, Mutex<AppState>>) -> Result<Vec<u8>
 }
 
 #[tauri::command]
-pub fn get_recording_state(state: State<'_, Mutex<AppState>>) -> Result<RecordingStateResponse, String> {
+pub fn get_recording_state(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<RecordingStateResponse, String> {
     let state = state.lock().map_err(|e| e.to_string())?;
     let recording_state = state.get_state();
 
@@ -127,7 +129,11 @@ pub async fn transcribe_audio(
     };
 
     let audio_bytes = wav_data.len() as u64;
-    log::info!("Transcribing {} bytes of audio (translate: {:?})", audio_bytes, translate_to_english);
+    log::info!(
+        "Transcribing {} bytes of audio (translate: {:?})",
+        audio_bytes,
+        translate_to_english
+    );
 
     // Call appropriate Whisper API endpoint
     let result = if translate_to_english.unwrap_or(false) {
@@ -161,10 +167,7 @@ pub async fn transcribe_audio(
 }
 
 #[tauri::command]
-pub async fn set_api_key(
-    state: State<'_, Mutex<AppState>>,
-    api_key: String,
-) -> Result<(), String> {
+pub async fn set_api_key(state: State<'_, Mutex<AppState>>, api_key: String) -> Result<(), String> {
     // Save to persistent storage
     config::save_api_key(&api_key).map_err(|e| e.to_string())?;
 
@@ -199,7 +202,7 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
         let create_res = tauri::WebviewWindowBuilder::new(
             &app,
             "recording-overlay",
-            tauri::WebviewUrl::App("overlay.html".into())
+            tauri::WebviewUrl::App("overlay.html".into()),
         )
         .title("Recording")
         .inner_size(300.0, 80.0)
@@ -214,7 +217,7 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
             Ok(_) => {
                 log::info!("[show_recording_overlay] Overlay window (auto)created at event time (recoverable).");
                 overlay_opt = app.get_webview_window("recording-overlay");
-            },
+            }
             Err(e) => {
                 log::error!("[show_recording_overlay] Failed overlay window create: {} See README/inline doc for recovery steps.", e);
                 return Err(format!("Could not create overlay window: {}", e));
@@ -237,7 +240,8 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
             let x = (monitor_size.width as f64 / scale_factor) - window_width - margin_x;
             let y = (monitor_size.height as f64 / scale_factor) - window_height - margin_y;
 
-            overlay.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)))
+            overlay
+                .set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)))
                 .map_err(|e| e.to_string())?;
         }
 
@@ -269,7 +273,11 @@ pub async fn hide_recording_overlay(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn set_overlay_state(app: AppHandle, state: String, recording_duration_ms: Option<u64>) -> Result<(), String> {
+pub async fn set_overlay_state(
+    app: AppHandle,
+    state: String,
+    recording_duration_ms: Option<u64>,
+) -> Result<(), String> {
     use tauri::Emitter;
 
     let payload = serde_json::json!({
@@ -280,11 +288,17 @@ pub async fn set_overlay_state(app: AppHandle, state: String, recording_duration
     // Emit directly to the overlay window
     let overlay_opt = app.get_webview_window("recording-overlay");
     if let Some(overlay) = overlay_opt {
-        overlay.emit("overlay-state-change", payload.clone()).map_err(|e| e.to_string())?;
-        log::info!("[set_overlay_state] Overlay state changed to: {} (emitted to overlay window)", state);
+        overlay
+            .emit("overlay-state-change", payload.clone())
+            .map_err(|e| e.to_string())?;
+        log::info!(
+            "[set_overlay_state] Overlay state changed to: {} (emitted to overlay window)",
+            state
+        );
     } else {
         log::warn!("[set_overlay_state] Overlay window not found, attempting to emit globally");
-        app.emit("overlay-state-change", payload).map_err(|e| e.to_string())?;
+        app.emit("overlay-state-change", payload)
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -433,7 +447,8 @@ pub async fn transform_with_webhook(
         }
         _ => {
             // For POST (default), send JSON body
-            client.post(&webhook_url)
+            client
+                .post(&webhook_url)
                 .header("Content-Type", "application/json")
                 .json(&serde_json::json!({
                     "text": input_text,
@@ -453,7 +468,9 @@ pub async fn transform_with_webhook(
     // Send the request
     let response = request.send().await.map_err(|e| {
         // Record webhook failure
-        if let Err(log_err) = config::record_usage_event(config::UsageEvent::Webhook { success: false }) {
+        if let Err(log_err) =
+            config::record_usage_event(config::UsageEvent::Webhook { success: false })
+        {
             log::warn!("Failed to record webhook usage: {}", log_err);
         }
         e.to_string()
@@ -462,7 +479,11 @@ pub async fn transform_with_webhook(
     let status = response.status();
     let response_text = response.text().await.map_err(|e| e.to_string())?;
 
-    log::info!("Webhook response status: {}, body length: {}", status, response_text.len());
+    log::info!(
+        "Webhook response status: {}, body length: {}",
+        status,
+        response_text.len()
+    );
 
     if !status.is_success() {
         // Record webhook failure
@@ -483,7 +504,8 @@ pub async fn transform_with_webhook(
 
     // Try to parse as JSON first, looking for "text" or "output" field
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-        let output = json.get("text")
+        let output = json
+            .get("text")
             .or_else(|| json.get("output"))
             .or_else(|| json.get("result"))
             .or_else(|| json.get("content"))
@@ -525,7 +547,11 @@ pub async fn transform_with_gpt(
     input_text: String,
     instruction: String,
 ) -> Result<GptTransformResult, String> {
-    log::info!("GPT Transform: '{}' on {} chars", instruction, input_text.len());
+    log::info!(
+        "GPT Transform: '{}' on {} chars",
+        instruction,
+        input_text.len()
+    );
 
     let client = reqwest::Client::new();
     let model = "gpt-4o-mini";
@@ -566,18 +592,21 @@ pub async fn transform_with_gpt(
     }
 
     // Parse the response
-    let json: serde_json::Value = serde_json::from_str(&response_text)
-        .map_err(|e| e.to_string())?;
+    let json: serde_json::Value =
+        serde_json::from_str(&response_text).map_err(|e| e.to_string())?;
 
     // Extract and record usage tokens
     if let Some(usage) = json.get("usage") {
-        let prompt_tokens = usage.get("prompt_tokens")
+        let prompt_tokens = usage
+            .get("prompt_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        let completion_tokens = usage.get("completion_tokens")
+        let completion_tokens = usage
+            .get("completion_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        let total_tokens = usage.get("total_tokens")
+        let total_tokens = usage
+            .get("total_tokens")
             .and_then(|v| v.as_u64())
             .unwrap_or(prompt_tokens + completion_tokens);
 
@@ -607,13 +636,11 @@ pub async fn transform_with_gpt(
                 error: None,
             })
         }
-        None => {
-            Ok(GptTransformResult {
-                success: false,
-                output_text: None,
-                error: Some("No response from GPT".to_string()),
-            })
-        }
+        None => Ok(GptTransformResult {
+            success: false,
+            output_text: None,
+            error: Some("No response from GPT".to_string()),
+        }),
     }
 }
 
@@ -673,7 +700,7 @@ use crate::secrets::{self, ApiKeyStatus, TransformProvider};
 pub async fn set_transform_api_key(provider: String, api_key: String) -> Result<(), String> {
     let provider = TransformProvider::from_str(&provider)
         .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    
+
     secrets::set_api_key(provider, &api_key).map_err(|e| e.to_string())
 }
 
@@ -682,7 +709,7 @@ pub async fn set_transform_api_key(provider: String, api_key: String) -> Result<
 pub async fn get_transform_api_key_status(provider: String) -> Result<ApiKeyStatus, String> {
     let provider = TransformProvider::from_str(&provider)
         .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    
+
     Ok(secrets::get_api_key_status(provider))
 }
 
@@ -697,7 +724,7 @@ pub async fn get_all_transform_api_key_statuses() -> Result<Vec<ApiKeyStatus>, S
 pub async fn clear_transform_api_key(provider: String) -> Result<(), String> {
     let provider = TransformProvider::from_str(&provider)
         .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    
+
     secrets::clear_api_key(provider).map_err(|e| e.to_string())
 }
 
@@ -735,12 +762,15 @@ pub struct ProviderModel {
 pub async fn fetch_provider_models(provider: String) -> Result<Vec<ProviderModel>, String> {
     let provider_enum = TransformProvider::from_str(&provider)
         .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    
+
     // Get the API key from secure storage
     let api_key = match secrets::get_api_key(provider_enum) {
         Ok(Some(key)) => key,
         Ok(None) => {
-            return Err(format!("No API key set for {}. Please add your API key first.", provider));
+            return Err(format!(
+                "No API key set for {}. Please add your API key first.",
+                provider
+            ));
         }
         Err(e) => {
             return Err(format!("Failed to access secure storage: {}", e));
@@ -763,7 +793,7 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    
+
     let response = client
         .get("https://openrouter.ai/api/v1/models")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -773,7 +803,8 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
             if e.is_timeout() {
                 "Request timed out. Please check your internet connection.".to_string()
             } else if e.is_connect() {
-                "Failed to connect to OpenRouter. Please check your internet connection.".to_string()
+                "Failed to connect to OpenRouter. Please check your internet connection."
+                    .to_string()
             } else {
                 format!("Failed to fetch models: {}", e)
             }
@@ -785,10 +816,13 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
         return Err(format!("OpenRouter API error ({}): {}", status, body));
     }
 
-    let json: serde_json::Value = response.json().await
+    let json: serde_json::Value = response
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-    let models = json.get("data")
+    let models = json
+        .get("data")
         .and_then(|d| d.as_array())
         .ok_or("Invalid response format")?;
 
@@ -796,17 +830,20 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
         .iter()
         .filter_map(|m| {
             let id = m.get("id")?.as_str()?.to_string();
-            let name = m.get("name")
+            let name = m
+                .get("name")
                 .and_then(|n| n.as_str())
                 .unwrap_or(&id)
                 .to_string();
-            let description = m.get("description")
+            let description = m
+                .get("description")
                 .and_then(|d| d.as_str())
                 .map(|s| s.to_string());
-            let context_length = m.get("context_length")
+            let context_length = m
+                .get("context_length")
                 .and_then(|c| c.as_u64())
                 .map(|c| c as u32);
-            
+
             Some(ProviderModel {
                 id,
                 name,
@@ -818,7 +855,7 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
 
     // Sort by name for easier browsing
     result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    
+
     log::info!("Fetched {} models from OpenRouter", result.len());
     Ok(result)
 }
@@ -830,7 +867,7 @@ async fn fetch_openai_models(api_key: &str) -> Result<Vec<ProviderModel>, String
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-    
+
     let response = client
         .get("https://api.openai.com/v1/models")
         .header("Authorization", format!("Bearer {}", api_key))
@@ -852,10 +889,13 @@ async fn fetch_openai_models(api_key: &str) -> Result<Vec<ProviderModel>, String
         return Err(format!("OpenAI API error ({}): {}", status, body));
     }
 
-    let json: serde_json::Value = response.json().await
+    let json: serde_json::Value = response
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-    let models = json.get("data")
+    let models = json
+        .get("data")
         .and_then(|d| d.as_array())
         .ok_or("Invalid response format")?;
 
@@ -864,28 +904,33 @@ async fn fetch_openai_models(api_key: &str) -> Result<Vec<ProviderModel>, String
         .iter()
         .filter_map(|m| {
             let id = m.get("id")?.as_str()?.to_string();
-            
+
             // Only include models that support chat completions
             // Covers: gpt-*, o1*, o3*, chatgpt-*
-            let is_chat_model = id.starts_with("gpt-") 
-                || id.starts_with("o1") 
+            let is_chat_model = id.starts_with("gpt-")
+                || id.starts_with("o1")
                 || id.starts_with("o3")
                 || id.starts_with("chatgpt-");
-            
+
             if !is_chat_model {
                 return None;
             }
-            
+
             // Skip embedding, audio, image, and legacy models
-            if id.contains("embedding") || id.contains("whisper") || 
-               id.contains("tts") || id.contains("dall-e") ||
-               id.contains("davinci") || id.contains("babbage") ||
-               id.contains("realtime") || id.contains("audio") {
+            if id.contains("embedding")
+                || id.contains("whisper")
+                || id.contains("tts")
+                || id.contains("dall-e")
+                || id.contains("davinci")
+                || id.contains("babbage")
+                || id.contains("realtime")
+                || id.contains("audio")
+            {
                 return None;
             }
 
             let name = id.clone();
-            
+
             Some(ProviderModel {
                 id,
                 name,
@@ -899,17 +944,25 @@ async fn fetch_openai_models(api_key: &str) -> Result<Vec<ProviderModel>, String
     result.sort_by(|a, b| {
         // Prioritize: chatgpt-* (latest), o3, o1, gpt-4o, gpt-4, gpt-3.5
         let priority = |id: &str| -> i32 {
-            if id.starts_with("chatgpt-") { 0 }
-            else if id.starts_with("o3") { 1 }
-            else if id.starts_with("o1") { 2 }
-            else if id.starts_with("gpt-4o") { 3 }
-            else if id.starts_with("gpt-4") { 4 }
-            else { 5 }
+            if id.starts_with("chatgpt-") {
+                0
+            } else if id.starts_with("o3") {
+                1
+            } else if id.starts_with("o1") {
+                2
+            } else if id.starts_with("gpt-4o") {
+                3
+            } else if id.starts_with("gpt-4") {
+                4
+            } else {
+                5
+            }
         };
-        priority(&a.id).cmp(&priority(&b.id))
+        priority(&a.id)
+            .cmp(&priority(&b.id))
             .then_with(|| a.id.cmp(&b.id))
     });
-    
+
     log::info!("Fetched {} chat models from OpenAI", result.len());
     Ok(result)
 }
@@ -921,17 +974,19 @@ async fn fetch_anthropic_models(_api_key: &str) -> Result<Vec<ProviderModel>, St
     // Anthropic doesn't have a models endpoint, but we can verify the key works
     // by checking account status or making a minimal request
     let _client = reqwest::Client::new();
-    
+
     // Try to verify the API key is valid by checking a simple endpoint
     // Anthropic doesn't have a models list API, so we'll do a minimal messages call
     // Actually, let's just return the known models - if the key is bad, they'll get an error when they try to use it
-    
+
     // Return known Claude models (these are stable and well-documented)
     let models = vec![
         ProviderModel {
             id: "claude-sonnet-4-20250514".to_string(),
             name: "Claude Sonnet 4".to_string(),
-            description: Some("Latest Sonnet model, great balance of speed and capability".to_string()),
+            description: Some(
+                "Latest Sonnet model, great balance of speed and capability".to_string(),
+            ),
             context_length: Some(200000),
         },
         ProviderModel {
@@ -959,7 +1014,7 @@ async fn fetch_anthropic_models(_api_key: &str) -> Result<Vec<ProviderModel>, St
 }
 
 /// Transform text using the specified LLM provider
-/// 
+///
 /// The API key is retrieved from secure OS credential storage based on the provider.
 #[tauri::command]
 pub async fn transform_with_llm(
@@ -972,17 +1027,22 @@ pub async fn transform_with_llm(
 ) -> Result<LlmTransformResponse, String> {
     let provider_enum = TransformProvider::from_str(&provider)
         .ok_or_else(|| format!("Unknown provider: {}", provider))?;
-    
+
     log::info!(
         "LLM Transform: provider={}, model={}, instruction='{}', text_len={}",
-        provider, model, instruction, input_text.len()
+        provider,
+        model,
+        instruction,
+        input_text.len()
     );
 
     // Get the API key from secure storage
     let api_key = match secrets::get_api_key(provider_enum) {
         Ok(Some(key)) => key,
         Ok(None) => {
-            let error = llm::TransformError::NoApiKey { provider: provider.clone() };
+            let error = llm::TransformError::NoApiKey {
+                provider: provider.clone(),
+            };
             return Ok(LlmTransformResponse {
                 success: false,
                 output_text: None,
@@ -1022,7 +1082,9 @@ pub async fn transform_with_llm(
         Ok(result) => {
             log::info!(
                 "LLM Transform complete: provider={}, model={}, output_len={}",
-                result.provider, result.model, result.output_text.len()
+                result.provider,
+                result.model,
+                result.output_text.len()
             );
 
             // Record usage if available
@@ -1050,7 +1112,7 @@ pub async fn transform_with_llm(
         }
         Err(transform_error) => {
             log::warn!("LLM Transform failed: {:?}", transform_error);
-            
+
             let error_type = match &transform_error {
                 llm::TransformError::NoApiKey { .. } => "NoApiKey",
                 llm::TransformError::InvalidApiKey { .. } => "InvalidApiKey",
@@ -1085,7 +1147,7 @@ pub async fn transform_with_llm(
 #[tauri::command]
 pub async fn show_status_bar(app: AppHandle) -> Result<(), String> {
     use tauri::WebviewUrl;
-    
+
     // create or get window
     let win = app.get_webview_window("status-bar");
     if win.is_none() {
@@ -1093,7 +1155,7 @@ pub async fn show_status_bar(app: AppHandle) -> Result<(), String> {
         let _window = tauri::WebviewWindowBuilder::new(
             &app,
             "status-bar",
-            WebviewUrl::App("statusbar.html".into())
+            WebviewUrl::App("statusbar.html".into()),
         )
         .title("Status")
         .inner_size(220.0, 80.0)
@@ -1106,10 +1168,14 @@ pub async fn show_status_bar(app: AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     }
-    let window = app.get_webview_window("status-bar").ok_or("Cannot get status-bar window")?;
+    let window = app
+        .get_webview_window("status-bar")
+        .ok_or("Cannot get status-bar window")?;
 
     // position bottom-right using plugin
-    window.move_window(Position::BottomRight).map_err(|e| e.to_string())?;
+    window
+        .move_window(Position::BottomRight)
+        .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     log::info!("[show_status_bar] Status bar positioned and shown");
     Ok(())
@@ -1131,7 +1197,8 @@ pub async fn set_status_bar_visibility(app: AppHandle, show: bool) -> Result<(),
 pub async fn enable_status_bar_click_through(app: AppHandle) -> Result<(), String> {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     if let Some(win) = app.get_webview_window("status-bar") {
-        win.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+        win.set_ignore_cursor_events(true)
+            .map_err(|e| e.to_string())?;
         log::info!("[enable_status_bar_click_through] Click-through enabled");
     }
     Ok(())

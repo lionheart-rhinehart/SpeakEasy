@@ -1,8 +1,19 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-16T21:00:07.816Z",
-  "count": 10,
+  "last_updated": "2025-12-16T22:19:53.621Z",
+  "count": 12,
   "entries": [
+    {
+      "id": "2025-12-16__fix__duplicate-process-single-instance",
+      "file": "2025-12-16__fix__duplicate-process-single-instance.md",
+      "title": "2025-12-16: Fixed Duplicate Process Issue with Single-Instance Plugin",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "",
+      "problem": "Two separate `SpeakEasy.exe` processes appeared in Windows Task Manager, causing resource waste and user confusion.",
+      "fix": ""
+    },
     {
       "id": "2025-12-16__feature__implement-always-on-top-status-bar",
       "file": "2025-12-16__feature__implement-always-on-top-status-bar.md",
@@ -15,6 +26,19 @@
       "summary": "Implemented floating always-on-top status bar in bottom-right corner with click-through, auto-repositioning, and cross-platform support",
       "problem": "Status bar was only visible when all windows minimized, not appearing above other apps",
       "fix": "Created dedicated transparent window with alwaysOnTop, visibleOnAllWorkspaces, tauri-plugin-positioner for positioning, click-through support, and display-change event listeners"
+    },
+    {
+      "id": "2025-12-16__bugfix__fix-duplicate-process-single-instance",
+      "file": "2025-12-16__bugfix__fix-duplicate-process-single-instance.md",
+      "title": "fix-duplicate-process-single-instance",
+      "date": "2025-12-16",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Implemented single-instance enforcement for SpeakEasy using Tauri's single-instance plugin, preventing duplicate app launches from autostart or manual launches.",
+      "problem": "Two SpeakEasy.exe processes appeared due to autostart and manual launch, causing duplicate app instances and resource waste.",
+      "fix": "Integrated tauri-plugin-single-instance, handled --minimized flag for system tray autostart, and tested all launch scenarios to verify only one process remains at any time."
     },
     {
       "id": "2025-12-15__devops__fix-wrapup-slash-command",

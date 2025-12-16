@@ -57,7 +57,9 @@ impl AudioRecorderHandle {
         // Spawn a dedicated thread for audio capture
         // NOTE: is_recording is set to true INSIDE the thread, right before stream.play()
         thread::spawn(move || {
-            if let Err(e) = run_audio_capture(device_name, samples, is_recording, current_level, stop_rx) {
+            if let Err(e) =
+                run_audio_capture(device_name, samples, is_recording, current_level, stop_rx)
+            {
                 log::error!("Audio capture error: {}", e);
             }
         });
@@ -91,7 +93,11 @@ impl AudioRecorderHandle {
         };
 
         let duration_secs = samples.len() as f32 / 16000.0;
-        log::info!("Recording stopped, {} samples captured ({:.2}s)", samples.len(), duration_secs);
+        log::info!(
+            "Recording stopped, {} samples captured ({:.2}s)",
+            samples.len(),
+            duration_secs
+        );
 
         if samples.is_empty() {
             return Err(anyhow!("No audio recorded"));
@@ -99,7 +105,10 @@ impl AudioRecorderHandle {
 
         // Sanity check: if recording is way too long, something went wrong
         if duration_secs > 300.0 {
-            log::warn!("Recording suspiciously long ({:.0}s), possible buffer issue", duration_secs);
+            log::warn!(
+                "Recording suspiciously long ({:.0}s), possible buffer issue",
+                duration_secs
+            );
         }
 
         // Apply audio processing for better Whisper recognition
@@ -187,7 +196,8 @@ fn run_audio_capture(
 
         // Calculate RMS level for visualization (smoothed)
         if !mono_data.is_empty() {
-            let rms = (mono_data.iter().map(|s| s * s).sum::<f32>() / mono_data.len() as f32).sqrt();
+            let rms =
+                (mono_data.iter().map(|s| s * s).sum::<f32>() / mono_data.len() as f32).sqrt();
             // Clamp to 0-1 range and apply some smoothing
             let level = (rms * 3.0).min(1.0); // Amplify for visibility
             let mut current = current_level.lock().unwrap();
@@ -208,8 +218,8 @@ fn run_audio_capture(
                 let frac = *state - idx as f64;
 
                 // Linear interpolation between samples
-                let sample = mono_data[idx] * (1.0 - frac as f32)
-                           + mono_data[idx + 1] * frac as f32;
+                let sample =
+                    mono_data[idx] * (1.0 - frac as f32) + mono_data[idx + 1] * frac as f32;
                 samples.push(sample);
                 *state += ratio;
             }
@@ -260,9 +270,8 @@ fn run_audio_capture(
                 &config.into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     // Convert i16 to f32
-                    let float_data: Vec<f32> = data.iter()
-                        .map(|&s| s as f32 / i16::MAX as f32)
-                        .collect();
+                    let float_data: Vec<f32> =
+                        data.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
                     process_samples(
                         &float_data,
                         &samples,
@@ -287,7 +296,8 @@ fn run_audio_capture(
                 &config.into(),
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     // Convert u16 to f32
-                    let float_data: Vec<f32> = data.iter()
+                    let float_data: Vec<f32> = data
+                        .iter()
                         .map(|&s| (s as f32 / u16::MAX as f32) * 2.0 - 1.0)
                         .collect();
                     process_samples(
@@ -328,9 +338,7 @@ fn run_audio_capture(
 pub fn get_input_devices() -> Result<Vec<AudioDevice>> {
     let host = cpal::default_host();
     let default_device = host.default_input_device();
-    let default_name = default_device
-        .as_ref()
-        .and_then(|d| d.name().ok());
+    let default_name = default_device.as_ref().and_then(|d| d.name().ok());
 
     let devices = host
         .input_devices()?
@@ -416,12 +424,15 @@ fn process_audio_for_whisper(samples: &mut Vec<f32>) {
     }
 
     // Only trim if we found valid boundaries and have reasonable content
-    if start_idx < end_idx && end_idx - start_idx > 1600 { // At least 100ms of content
+    if start_idx < end_idx && end_idx - start_idx > 1600 {
+        // At least 100ms of content
         let trimmed: Vec<f32> = samples[start_idx..end_idx].to_vec();
         *samples = trimmed;
-        log::info!("Trimmed audio: removed {}ms from start, {}ms from end",
-                   start_idx * 1000 / 16000,
-                   (samples.len() - end_idx) * 1000 / 16000);
+        log::info!(
+            "Trimmed audio: removed {}ms from start, {}ms from end",
+            start_idx * 1000 / 16000,
+            (samples.len() - end_idx) * 1000 / 16000
+        );
     }
 }
 
@@ -468,8 +479,8 @@ pub fn play_stop_sound() -> Result<()> {
 fn play_beep(frequency: f32, duration: f32) -> Result<()> {
     use rodio::{OutputStream, Source};
 
-    let (_stream, stream_handle) = OutputStream::try_default()
-        .map_err(|e| anyhow!("Failed to get audio output: {}", e))?;
+    let (_stream, stream_handle) =
+        OutputStream::try_default().map_err(|e| anyhow!("Failed to get audio output: {}", e))?;
 
     let source = rodio::source::SineWave::new(frequency)
         .take_duration(std::time::Duration::from_secs_f32(duration))
@@ -491,9 +502,7 @@ mod tests {
 
     #[test]
     fn test_samples_to_wav() {
-        let samples: Vec<f32> = (0..1000)
-            .map(|i| (i as f32 / 100.0).sin())
-            .collect();
+        let samples: Vec<f32> = (0..1000).map(|i| (i as f32 / 100.0).sin()).collect();
 
         let wav_data = samples_to_wav(&samples, 16000).unwrap();
 

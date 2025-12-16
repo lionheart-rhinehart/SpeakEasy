@@ -1,0 +1,36 @@
+﻿name: Single Instance Process Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-single-instance:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install dependencies
+      run: npm ci
+    - name: Build release
+      run: cargo build --release --manifest-path src-tauri/Cargo.toml
+    - name: Test Single Instance
+      shell: powershell
+      run: |
+        Start-Process -FilePath "src-tauri\target\release\speakeasy.exe" -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        $count1 = (Get-Process -Name "speakeasy" -ErrorAction SilentlyContinue | Measure-Object).Count
+        if ($count1 -ne 1) { exit 1 }
+        Start-Process -FilePath "src-tauri\target\release\speakeasy.exe" -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        $count2 = (Get-Process -Name "speakeasy" -ErrorAction SilentlyContinue | Measure-Object).Count
+        Stop-Process -Name "speakeasy" -Force -ErrorAction SilentlyContinue
+        if ($count2 -ne 1) { exit 1 }
+        Write-Host "âœ… Single instance test passed!"

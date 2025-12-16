@@ -78,8 +78,8 @@ fn simulate_paste_windows_api() -> Result<()> {
     use std::thread;
     use std::time::Duration;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, VK_CONTROL, VK_V,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VK_CONTROL, VK_V,
     };
 
     unsafe {
@@ -164,8 +164,8 @@ fn simulate_shift_insert() -> Result<()> {
     use std::thread;
     use std::time::Duration;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, VK_SHIFT, VK_INSERT,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VK_INSERT, VK_SHIFT,
     };
 
     unsafe {
@@ -299,8 +299,8 @@ fn simulate_copy_windows_api() -> Result<()> {
     use std::thread;
     use std::time::Duration;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, VK_C, VK_CONTROL,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VK_C, VK_CONTROL,
     };
 
     unsafe {
@@ -422,7 +422,10 @@ pub fn get_selected_text() -> Result<String> {
 
     // Read the clipboard before we simulate copy
     let before = get_text().unwrap_or_default();
-    log::info!("get_selected_text: clipboard before copy = {} chars", before.len());
+    log::info!(
+        "get_selected_text: clipboard before copy = {} chars",
+        before.len()
+    );
 
     // Simulate copy
     simulate_copy()?;
@@ -446,8 +449,13 @@ pub fn get_selected_text() -> Result<String> {
 
         // Timeout reached
         if start.elapsed() >= timeout {
-            log::warn!("get_selected_text: clipboard did not change within {}ms", timeout.as_millis());
-            return Err(anyhow::anyhow!("NoSelectionDetected: No text was selected or copy failed"));
+            log::warn!(
+                "get_selected_text: clipboard did not change within {}ms",
+                timeout.as_millis()
+            );
+            return Err(anyhow::anyhow!(
+                "NoSelectionDetected: No text was selected or copy failed"
+            ));
         }
     }
 }

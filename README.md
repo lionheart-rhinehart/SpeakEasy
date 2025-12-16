@@ -35,6 +35,43 @@ git push -u origin plan-edit
 
 ---
 
+# Process Model & Task Manager Behavior
+
+## Single Instance Enforcement
+SpeakEasy uses `tauri-plugin-single-instance` to ensure only one application instance runs at a time:
+
+- **First Launch:** Application starts normally
+- **Duplicate Launch:** Focuses existing window instead of creating new process
+- **Autostart with `--minimized`:** First instance starts hidden in system tray
+- **Manual Launch After Autostart:** Shows and focuses the existing hidden instance
+
+### Expected Task Manager Behavior
+- **Windows Task Manager:** Shows **one** `SpeakEasy.exe` process
+- **Multiple Entries?** If you see 2+ entries, this indicates:
+  - Old version without single-instance plugin (update to latest release)
+  - Process left running from previous session (restart application)
+
+### Autostart Behavior
+When enabled in Settings, SpeakEasy launches on Windows startup with the `--minimized` flag:
+- Application runs in system tray (no main window)
+- Clicking the desktop shortcut or Start Menu entry will show the existing instance
+- **No duplicate processes are created**
+
+### Developer Notes
+The single-instance plugin is registered as the **first** plugin in `src-tauri/src/lib.rs` to ensure the lock is acquired before any other initialization. When a second instance is attempted:
+
+```rust
+.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+    // Focus existing window unless second attempt was also --minimized
+    if !args.iter().any(|arg| arg == "--minimized") {
+        app.get_webview_window("main")?.show();
+        app.get_webview_window("main")?.set_focus();
+    }
+}))
+```
+
+---
+
 # Overlay Recording Status Bar Architecture & Troubleshooting
 
 ## Overlay Window Lifecycle

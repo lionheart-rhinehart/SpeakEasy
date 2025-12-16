@@ -71,13 +71,20 @@ pub enum TransformError {
     /// API key is invalid (401/403)
     InvalidApiKey { provider: String, message: String },
     /// Rate limit exceeded (429)
-    RateLimited { provider: String, retry_after: Option<u64> },
+    RateLimited {
+        provider: String,
+        retry_after: Option<u64>,
+    },
     /// Model not found or not available
     ModelNotFound { provider: String, model: String },
     /// Request timed out
     Timeout { provider: String, timeout_secs: u64 },
     /// Server error (5xx)
-    ServerError { provider: String, status: u16, message: String },
+    ServerError {
+        provider: String,
+        status: u16,
+        message: String,
+    },
     /// Network/connection error
     NetworkError { provider: String, message: String },
     /// Invalid request (400)
@@ -95,37 +102,70 @@ impl TransformError {
     pub fn user_message(&self) -> String {
         match self {
             TransformError::NoApiKey { provider } => {
-                format!("No API key set for {}. Please add your API key in Settings.", provider)
+                format!(
+                    "No API key set for {}. Please add your API key in Settings.",
+                    provider
+                )
             }
             TransformError::InvalidApiKey { provider, .. } => {
-                format!("Invalid API key for {}. Please check your API key in Settings.", provider)
+                format!(
+                    "Invalid API key for {}. Please check your API key in Settings.",
+                    provider
+                )
             }
-            TransformError::RateLimited { provider, retry_after } => {
-                match retry_after {
-                    Some(secs) => format!("{} rate limit reached. Please wait {} seconds.", provider, secs),
-                    None => format!("{} rate limit reached. Please try again later.", provider),
-                }
-            }
+            TransformError::RateLimited {
+                provider,
+                retry_after,
+            } => match retry_after {
+                Some(secs) => format!(
+                    "{} rate limit reached. Please wait {} seconds.",
+                    provider, secs
+                ),
+                None => format!("{} rate limit reached. Please try again later.", provider),
+            },
             TransformError::ModelNotFound { provider, model } => {
-                format!("Model '{}' not found on {}. Please select a different model.", model, provider)
+                format!(
+                    "Model '{}' not found on {}. Please select a different model.",
+                    model, provider
+                )
             }
-            TransformError::Timeout { provider, timeout_secs } => {
-                format!("{} request timed out after {} seconds. Please try again.", provider, timeout_secs)
+            TransformError::Timeout {
+                provider,
+                timeout_secs,
+            } => {
+                format!(
+                    "{} request timed out after {} seconds. Please try again.",
+                    provider, timeout_secs
+                )
             }
-            TransformError::ServerError { provider, status, .. } => {
-                format!("{} server error ({}). Please try again later.", provider, status)
+            TransformError::ServerError {
+                provider, status, ..
+            } => {
+                format!(
+                    "{} server error ({}). Please try again later.",
+                    provider, status
+                )
             }
             TransformError::NetworkError { provider, .. } => {
-                format!("Network error connecting to {}. Please check your connection.", provider)
+                format!(
+                    "Network error connecting to {}. Please check your connection.",
+                    provider
+                )
             }
             TransformError::BadRequest { provider, message } => {
                 format!("{} rejected the request: {}", provider, message)
             }
             TransformError::QuotaExceeded { provider, .. } => {
-                format!("{} quota exceeded. Please check your billing/usage limits.", provider)
+                format!(
+                    "{} quota exceeded. Please check your billing/usage limits.",
+                    provider
+                )
             }
             TransformError::ContentFiltered { provider, .. } => {
-                format!("{} filtered the content. The text may violate usage policies.", provider)
+                format!(
+                    "{} filtered the content. The text may violate usage policies.",
+                    provider
+                )
             }
             TransformError::Unknown { provider, message } => {
                 format!("{} error: {}", provider, message)
@@ -143,7 +183,10 @@ impl std::fmt::Display for TransformError {
 impl std::error::Error for TransformError {}
 
 /// Execute a transform request using the appropriate provider
-pub async fn transform(request: TransformRequest, api_key: &str) -> Result<TransformResult, TransformError> {
+pub async fn transform(
+    request: TransformRequest,
+    api_key: &str,
+) -> Result<TransformResult, TransformError> {
     match request.provider {
         TransformProvider::OpenRouter => transform_openrouter(request, api_key).await,
         TransformProvider::OpenAI => transform_openai(request, api_key).await,
@@ -152,7 +195,10 @@ pub async fn transform(request: TransformRequest, api_key: &str) -> Result<Trans
 }
 
 /// OpenRouter provider (OpenAI-compatible API)
-async fn transform_openrouter(request: TransformRequest, api_key: &str) -> Result<TransformResult, TransformError> {
+async fn transform_openrouter(
+    request: TransformRequest,
+    api_key: &str,
+) -> Result<TransformResult, TransformError> {
     let provider = "OpenRouter";
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
@@ -209,7 +255,10 @@ async fn transform_openrouter(request: TransformRequest, api_key: &str) -> Resul
 }
 
 /// OpenAI provider (direct API)
-async fn transform_openai(request: TransformRequest, api_key: &str) -> Result<TransformResult, TransformError> {
+async fn transform_openai(
+    request: TransformRequest,
+    api_key: &str,
+) -> Result<TransformResult, TransformError> {
     let provider = "OpenAI";
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
@@ -270,24 +319,36 @@ async fn parse_openai_response(
     model: &str,
 ) -> Result<TransformResult, TransformError> {
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| TransformError::NetworkError {
-        provider: provider.to_string(),
-        message: format!("Failed to read response: {}", e),
-    })?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| TransformError::NetworkError {
+            provider: provider.to_string(),
+            message: format!("Failed to read response: {}", e),
+        })?;
 
     // Log response for debugging (without sensitive data)
-    log::debug!("{} response status: {}, body length: {}", provider, status, response_text.len());
+    log::debug!(
+        "{} response status: {}, body length: {}",
+        provider,
+        status,
+        response_text.len()
+    );
 
     if !status.is_success() {
-        return Err(parse_openai_error(status.as_u16(), &response_text, provider, model));
+        return Err(parse_openai_error(
+            status.as_u16(),
+            &response_text,
+            provider,
+            model,
+        ));
     }
 
-    let json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-        TransformError::Unknown {
+    let json: serde_json::Value =
+        serde_json::from_str(&response_text).map_err(|e| TransformError::Unknown {
             provider: provider.to_string(),
             message: format!("Invalid JSON response: {}", e),
-        }
-    })?;
+        })?;
 
     // Extract output text
     let output_text = json["choices"][0]["message"]["content"]
@@ -328,8 +389,9 @@ fn parse_openai_error(status: u16, body: &str, provider: &str, model: &str) -> T
             message: error_message,
         },
         403 => {
-            if error_message.to_lowercase().contains("quota") 
-               || error_message.to_lowercase().contains("billing") {
+            if error_message.to_lowercase().contains("quota")
+                || error_message.to_lowercase().contains("billing")
+            {
                 TransformError::QuotaExceeded {
                     provider: provider.to_string(),
                     message: error_message,
@@ -350,9 +412,10 @@ fn parse_openai_error(status: u16, body: &str, provider: &str, model: &str) -> T
             retry_after: None,
         },
         400 => {
-            if error_message.to_lowercase().contains("content") 
-               || error_message.to_lowercase().contains("safety")
-               || error_message.to_lowercase().contains("filter") {
+            if error_message.to_lowercase().contains("content")
+                || error_message.to_lowercase().contains("safety")
+                || error_message.to_lowercase().contains("filter")
+            {
                 TransformError::ContentFiltered {
                     provider: provider.to_string(),
                     message: error_message,
@@ -377,7 +440,10 @@ fn parse_openai_error(status: u16, body: &str, provider: &str, model: &str) -> T
 }
 
 /// Anthropic provider (Messages API)
-async fn transform_anthropic(request: TransformRequest, api_key: &str) -> Result<TransformResult, TransformError> {
+async fn transform_anthropic(
+    request: TransformRequest,
+    api_key: &str,
+) -> Result<TransformResult, TransformError> {
     let provider = "Anthropic";
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
@@ -438,23 +504,35 @@ async fn parse_anthropic_response(
     model: &str,
 ) -> Result<TransformResult, TransformError> {
     let status = response.status();
-    let response_text = response.text().await.map_err(|e| TransformError::NetworkError {
-        provider: provider.to_string(),
-        message: format!("Failed to read response: {}", e),
-    })?;
+    let response_text = response
+        .text()
+        .await
+        .map_err(|e| TransformError::NetworkError {
+            provider: provider.to_string(),
+            message: format!("Failed to read response: {}", e),
+        })?;
 
-    log::debug!("{} response status: {}, body length: {}", provider, status, response_text.len());
+    log::debug!(
+        "{} response status: {}, body length: {}",
+        provider,
+        status,
+        response_text.len()
+    );
 
     if !status.is_success() {
-        return Err(parse_anthropic_error(status.as_u16(), &response_text, provider, model));
+        return Err(parse_anthropic_error(
+            status.as_u16(),
+            &response_text,
+            provider,
+            model,
+        ));
     }
 
-    let json: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
-        TransformError::Unknown {
+    let json: serde_json::Value =
+        serde_json::from_str(&response_text).map_err(|e| TransformError::Unknown {
             provider: provider.to_string(),
             message: format!("Invalid JSON response: {}", e),
-        }
-    })?;
+        })?;
 
     // Anthropic response format: content[0].text
     let output_text = json["content"][0]["text"]
@@ -507,8 +585,9 @@ fn parse_anthropic_error(status: u16, body: &str, provider: &str, model: &str) -
             retry_after: None,
         },
         400 => {
-            if error_message.to_lowercase().contains("content") 
-               || error_message.to_lowercase().contains("safety") {
+            if error_message.to_lowercase().contains("content")
+                || error_message.to_lowercase().contains("safety")
+            {
                 TransformError::ContentFiltered {
                     provider: provider.to_string(),
                     message: error_message,
@@ -538,18 +617,20 @@ mod tests {
 
     #[test]
     fn test_transform_error_messages() {
-        let err = TransformError::NoApiKey { provider: "OpenAI".to_string() };
+        let err = TransformError::NoApiKey {
+            provider: "OpenAI".to_string(),
+        };
         assert!(err.user_message().contains("No API key"));
-        
-        let err = TransformError::RateLimited { 
-            provider: "OpenRouter".to_string(), 
-            retry_after: Some(30) 
+
+        let err = TransformError::RateLimited {
+            provider: "OpenRouter".to_string(),
+            retry_after: Some(30),
         };
         assert!(err.user_message().contains("30 seconds"));
-        
-        let err = TransformError::ModelNotFound { 
-            provider: "Anthropic".to_string(), 
-            model: "claude-unknown".to_string() 
+
+        let err = TransformError::ModelNotFound {
+            provider: "Anthropic".to_string(),
+            model: "claude-unknown".to_string(),
         };
         assert!(err.user_message().contains("claude-unknown"));
     }

@@ -8,8 +8,8 @@ const USAGE_SCHEMA_VERSION: u32 = 2;
 
 // OpenAI pricing constants (as of Dec 2024)
 pub const WHISPER_PRICE_PER_MINUTE: f64 = 0.006;
-pub const GPT4O_MINI_INPUT_PRICE_PER_1K: f64 = 0.00015;  // $0.150 per 1M input tokens
-pub const GPT4O_MINI_OUTPUT_PRICE_PER_1K: f64 = 0.0006;  // $0.600 per 1M output tokens
+pub const GPT4O_MINI_INPUT_PRICE_PER_1K: f64 = 0.00015; // $0.150 per 1M input tokens
+pub const GPT4O_MINI_OUTPUT_PRICE_PER_1K: f64 = 0.0006; // $0.600 per 1M output tokens
 
 /// Transcription-specific usage stats
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -143,7 +143,8 @@ impl UsageStats {
 
             self.current_month.transcription.count = self.month_transcriptions;
             self.current_month.transcription.duration_ms = self.month_duration_ms;
-            self.current_month.transcription.cost_usd = self.current_month.transcription.calculate_cost();
+            self.current_month.transcription.cost_usd =
+                self.current_month.transcription.calculate_cost();
 
             // Set current month if not set
             if self.current_month.month.is_empty() {
@@ -193,8 +194,8 @@ pub struct AppConfig {
 }
 
 fn get_config_path() -> Result<PathBuf> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
+    let config_dir =
+        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
     let app_dir = config_dir.join("SpeakEasy");
     fs::create_dir_all(&app_dir)?;
     Ok(app_dir.join("config.json"))
@@ -205,9 +206,7 @@ pub fn load_config() -> AppConfig {
         Ok(path) => {
             if path.exists() {
                 match fs::read_to_string(&path) {
-                    Ok(contents) => {
-                        serde_json::from_str(&contents).unwrap_or_default()
-                    }
+                    Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
                     Err(_) => AppConfig::default(),
                 }
             } else {
@@ -264,7 +263,11 @@ pub fn record_usage_event(event: UsageEvent) -> Result<()> {
     }
 
     match event {
-        UsageEvent::Transcription { duration_ms, audio_bytes, .. } => {
+        UsageEvent::Transcription {
+            duration_ms,
+            audio_bytes,
+            ..
+        } => {
             // Calculate cost for this transcription
             let minutes = duration_ms as f64 / 60_000.0;
             let cost = minutes * WHISPER_PRICE_PER_MINUTE;
@@ -290,10 +293,17 @@ pub fn record_usage_event(event: UsageEvent) -> Result<()> {
 
             log::info!(
                 "Recorded transcription: {:.2} min, {} bytes, ${:.4}",
-                minutes, audio_bytes, cost
+                minutes,
+                audio_bytes,
+                cost
             );
         }
-        UsageEvent::GptTransform { prompt_tokens, completion_tokens, total_tokens, model } => {
+        UsageEvent::GptTransform {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            model,
+        } => {
             // Calculate cost based on model pricing
             let input_cost = (prompt_tokens as f64 / 1000.0) * GPT4O_MINI_INPUT_PRICE_PER_1K;
             let output_cost = (completion_tokens as f64 / 1000.0) * GPT4O_MINI_OUTPUT_PRICE_PER_1K;
@@ -315,7 +325,11 @@ pub fn record_usage_event(event: UsageEvent) -> Result<()> {
 
             log::info!(
                 "Recorded GPT transform ({}): {} prompt + {} completion = {} total tokens, ${:.6}",
-                model, prompt_tokens, completion_tokens, total_tokens, cost
+                model,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                cost
             );
         }
         UsageEvent::Webhook { success } => {
@@ -352,11 +366,11 @@ pub fn get_usage_stats() -> UsageStats {
 pub fn mark_usage_synced() -> Result<String> {
     let mut config = load_config();
     config.usage.migrate();
-    
+
     let now = chrono::Utc::now();
     let timestamp = now.to_rfc3339();
     config.usage.last_synced_at = Some(timestamp.clone());
-    
+
     save_config(&config)?;
     log::info!("Usage stats marked as synced at {}", timestamp);
     Ok(timestamp)
@@ -365,7 +379,7 @@ pub fn mark_usage_synced() -> Result<String> {
 /// Reset all usage statistics (lifetime and monthly)
 pub fn reset_usage_stats() -> Result<()> {
     let mut config = load_config();
-    
+
     // Preserve schema version but reset everything else
     config.usage = UsageStats {
         schema_version: USAGE_SCHEMA_VERSION,
@@ -375,7 +389,7 @@ pub fn reset_usage_stats() -> Result<()> {
         },
         ..Default::default()
     };
-    
+
     save_config(&config)?;
     log::info!("All usage stats reset");
     Ok(())
@@ -385,16 +399,16 @@ pub fn reset_usage_stats() -> Result<()> {
 pub fn reset_monthly_usage() -> Result<()> {
     let mut config = load_config();
     config.usage.migrate();
-    
+
     config.usage.current_month = MonthlyUsage {
         month: chrono::Utc::now().format("%Y-%m").to_string(),
         ..Default::default()
     };
-    
+
     // Also reset legacy monthly fields
     config.usage.month_transcriptions = 0;
     config.usage.month_duration_ms = 0;
-    
+
     save_config(&config)?;
     log::info!("Monthly usage stats reset");
     Ok(())
@@ -410,7 +424,7 @@ mod tests {
     fn test_whisper_cost_calculation() {
         let mut usage = TranscriptionUsage::default();
         usage.duration_ms = 60_000; // 1 minute
-        
+
         let cost = usage.calculate_cost();
         assert!((cost - 0.006).abs() < 0.0001, "1 minute should cost $0.006");
     }
@@ -419,18 +433,24 @@ mod tests {
     fn test_whisper_cost_5_minutes() {
         let mut usage = TranscriptionUsage::default();
         usage.duration_ms = 300_000; // 5 minutes
-        
+
         let cost = usage.calculate_cost();
-        assert!((cost - 0.030).abs() < 0.0001, "5 minutes should cost $0.030");
+        assert!(
+            (cost - 0.030).abs() < 0.0001,
+            "5 minutes should cost $0.030"
+        );
     }
 
     #[test]
     fn test_whisper_cost_fractional_minutes() {
         let mut usage = TranscriptionUsage::default();
         usage.duration_ms = 90_000; // 1.5 minutes
-        
+
         let cost = usage.calculate_cost();
-        assert!((cost - 0.009).abs() < 0.0001, "1.5 minutes should cost $0.009");
+        assert!(
+            (cost - 0.009).abs() < 0.0001,
+            "1.5 minutes should cost $0.009"
+        );
     }
 
     #[test]
@@ -438,8 +458,11 @@ mod tests {
         let mut stats = UsageStats::default();
         stats.transcription.cost_usd = 0.10;
         stats.gpt.cost_usd = 0.05;
-        
-        assert!((stats.total_cost_usd() - 0.15).abs() < 0.0001, "Total cost should combine all features");
+
+        assert!(
+            (stats.total_cost_usd() - 0.15).abs() < 0.0001,
+            "Total cost should combine all features"
+        );
     }
 
     // ===== Minutes Calculation Tests =====
@@ -448,16 +471,22 @@ mod tests {
     fn test_minutes_from_ms() {
         let mut usage = TranscriptionUsage::default();
         usage.duration_ms = 120_000; // 2 minutes
-        
-        assert!((usage.minutes() - 2.0).abs() < 0.001, "Minutes calculation incorrect");
+
+        assert!(
+            (usage.minutes() - 2.0).abs() < 0.001,
+            "Minutes calculation incorrect"
+        );
     }
 
     #[test]
     fn test_minutes_partial() {
         let mut usage = TranscriptionUsage::default();
         usage.duration_ms = 45_000; // 0.75 minutes
-        
-        assert!((usage.minutes() - 0.75).abs() < 0.001, "Partial minutes calculation incorrect");
+
+        assert!(
+            (usage.minutes() - 0.75).abs() < 0.001,
+            "Partial minutes calculation incorrect"
+        );
     }
 
     // ===== Schema Migration Tests =====
@@ -483,18 +512,39 @@ mod tests {
         stats.migrate();
 
         // Verify migration copied legacy data to new structure
-        assert_eq!(stats.schema_version, 2, "Schema version should be 2 after migration");
-        assert_eq!(stats.transcription.count, 10, "Transcription count should be migrated");
-        assert_eq!(stats.transcription.duration_ms, 600_000, "Duration should be migrated");
-        assert_eq!(stats.transcription.audio_bytes, 1_000_000, "Audio bytes should be migrated");
-        
+        assert_eq!(
+            stats.schema_version, 2,
+            "Schema version should be 2 after migration"
+        );
+        assert_eq!(
+            stats.transcription.count, 10,
+            "Transcription count should be migrated"
+        );
+        assert_eq!(
+            stats.transcription.duration_ms, 600_000,
+            "Duration should be migrated"
+        );
+        assert_eq!(
+            stats.transcription.audio_bytes, 1_000_000,
+            "Audio bytes should be migrated"
+        );
+
         // Verify cost was calculated during migration
         let expected_cost = (600_000.0 / 60_000.0) * WHISPER_PRICE_PER_MINUTE;
-        assert!((stats.transcription.cost_usd - expected_cost).abs() < 0.0001, "Cost should be calculated during migration");
+        assert!(
+            (stats.transcription.cost_usd - expected_cost).abs() < 0.0001,
+            "Cost should be calculated during migration"
+        );
 
         // Monthly data
-        assert_eq!(stats.current_month.transcription.count, 3, "Monthly count should be migrated");
-        assert_eq!(stats.current_month.transcription.duration_ms, 180_000, "Monthly duration should be migrated");
+        assert_eq!(
+            stats.current_month.transcription.count, 3,
+            "Monthly count should be migrated"
+        );
+        assert_eq!(
+            stats.current_month.transcription.duration_ms, 180_000,
+            "Monthly duration should be migrated"
+        );
     }
 
     #[test]
@@ -503,12 +553,12 @@ mod tests {
         stats.schema_version = 2;
         stats.transcription.count = 5;
         stats.transcription.cost_usd = 0.123;
-        
+
         let original_count = stats.transcription.count;
         let original_cost = stats.transcription.cost_usd;
-        
+
         stats.migrate();
-        
+
         // Verify no changes were made
         assert_eq!(stats.schema_version, 2);
         assert_eq!(stats.transcription.count, original_count);
@@ -520,7 +570,7 @@ mod tests {
     #[test]
     fn test_default_usage_stats() {
         let stats = UsageStats::default();
-        
+
         assert_eq!(stats.schema_version, USAGE_SCHEMA_VERSION);
         assert_eq!(stats.transcription.count, 0);
         assert_eq!(stats.gpt.count, 0);
@@ -533,8 +583,11 @@ mod tests {
         let stats = UsageStats::default();
         let now = chrono::Utc::now();
         let expected_month = now.format("%Y-%m").to_string();
-        
-        assert_eq!(stats.current_month.month, expected_month, "Default should have current month set");
+
+        assert_eq!(
+            stats.current_month.month, expected_month,
+            "Default should have current month set"
+        );
     }
 
     // ===== Monthly Usage Tests =====
@@ -544,7 +597,7 @@ mod tests {
         let mut monthly = MonthlyUsage::default();
         monthly.transcription.cost_usd = 0.05;
         monthly.gpt.cost_usd = 0.03;
-        
+
         assert!((monthly.total_cost_usd() - 0.08).abs() < 0.0001);
     }
 
@@ -555,7 +608,7 @@ mod tests {
         let stats = UsageStats::default();
         let json = serde_json::to_string(&stats).expect("Should serialize");
         let deserialized: UsageStats = serde_json::from_str(&json).expect("Should deserialize");
-        
+
         assert_eq!(deserialized.schema_version, stats.schema_version);
     }
 
@@ -571,13 +624,14 @@ mod tests {
             "month_transcriptions": 2,
             "month_duration_ms": 120000
         }"#;
-        
-        let stats: UsageStats = serde_json::from_str(legacy_json).expect("Should deserialize legacy JSON");
-        
+
+        let stats: UsageStats =
+            serde_json::from_str(legacy_json).expect("Should deserialize legacy JSON");
+
         // Verify legacy fields were read
         assert_eq!(stats.total_transcriptions, 5);
         assert_eq!(stats.total_duration_ms, 300000);
-        
+
         // Verify defaults were applied for new fields
         assert_eq!(stats.schema_version, 1); // default_schema_version returns 1
         assert_eq!(stats.transcription.count, 0); // New field defaults to 0
@@ -597,9 +651,10 @@ mod tests {
                 "month_duration_ms": 180000
             }
         }"#;
-        
-        let config: AppConfig = serde_json::from_str(config_json).expect("Should deserialize legacy config");
-        
+
+        let config: AppConfig =
+            serde_json::from_str(config_json).expect("Should deserialize legacy config");
+
         // Verify it loaded correctly
         assert_eq!(config.api_key, Some("sk-test".to_string()));
         assert_eq!(config.usage.total_transcriptions, 10);
