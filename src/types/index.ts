@@ -48,7 +48,6 @@ export interface UserSettings {
   translateToEnglish: boolean;
   audioEnabled: boolean;
   floatingIndicator: boolean;
-  showStatusBar?: boolean;
   historyLimitMb: number;
   startOnBoot: boolean;
   startMinimized: boolean;
@@ -97,6 +96,15 @@ export interface WebhookAction {
   method: "POST" | "GET" | "URL" | "SMART_URL";
   headers?: Record<string, string>;
   enabled: boolean;
+  // Chrome profile targeting (for URL method)
+  // When true, shows a profile chooser before opening the URL
+  askChromeProfile?: boolean;
+}
+
+// Chrome profile info returned from backend
+export interface ChromeProfile {
+  profile_directory: string; // e.g., "Default", "Profile 1"
+  display_name: string; // Friendly name from Chrome, e.g., "Work", "Personal"
 }
 
 // API response types

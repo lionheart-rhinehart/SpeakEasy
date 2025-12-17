@@ -1,11 +1,13 @@
 {
-  "ignorePatterns": [
-    "node_modules",
-    ".git",
-    "dist",
-    "build",
-    "src-tauri/target",
-    "target",
-    "*.log"
-  ]
+  "permissions": {
+    "deny": [
+      "Read(node_modules/**)",
+      "Read(.git/**)",
+      "Read(dist/**)",
+      "Read(build/**)",
+      "Read(src-tauri/target/**)",
+      "Read(target/**)",
+      "Read(**/*.log)"
+    ]
+  }
 }

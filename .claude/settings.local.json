@@ -30,7 +30,9 @@
       "Bash(powershell -Command:*)",
       "Bash(cmd /c \"where cargo\")",
       "Bash(export PATH=\"$PATH:/c/Users/lionh/.cargo/bin:/d/Users/lionh/.cargo/bin:$HOME/.cargo/bin\")",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(cd:*)",
+      "Bash(winget install:*)"
     ],
     "deny": [],
     "ask": []

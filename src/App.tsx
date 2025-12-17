@@ -1,14 +1,15 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, emit } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "./stores/appStore";
 import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import RecordingIndicator from "./components/RecordingIndicator";
 import Toast, { ToastMessage } from "./components/Toast";
-import type { WebhookAction } from "./types";
+import ProfileChooserModal from "./components/ProfileChooserModal";
+import type { WebhookAction, ChromeProfile } from "./types";
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
 // These are now just fallbacks - actual hotkeys come from settings
@@ -78,14 +79,15 @@ function App() {
   // Debounce tracking for hotkey actions (prevents spam opens)
   const actionLastRunRef = useRef<Map<string, number>>(new Map());
 
+  // Chrome profile chooser state
+  const [profileChooserOpen, setProfileChooserOpen] = useState(false);
+  const [chromeProfiles, setChromeProfiles] = useState<ChromeProfile[]>([]);
+  const [pendingUrlAction, setPendingUrlAction] = useState<{ action: WebhookAction; url: string } | null>(null);
+  const profilesCacheRef = useRef<ChromeProfile[] | null>(null);
+
   useEffect(() => {
     initialize();
-    // Show status bar on startup if enabled
-    const showBar = settings.showStatusBar ?? true;
-    if (showBar) {
-      invoke("show_status_bar").catch(console.error);
-    }
-  }, [initialize, settings.showStatusBar]);
+  }, [initialize]);
 
   // Listen for tray menu events
   useEffect(() => {
@@ -488,17 +490,6 @@ function App() {
     };
   }, [hotkeyAiTransform]);
 
-  // Emit status updates to status-bar window
-  useEffect(() => {
-    const unsubscribe = useAppStore.subscribe((state) => {
-      emit("status_update", {
-        recordingState: state.recordingState,
-        recordingStartTime: state.recordingStartTime,
-      });
-    });
-    return () => unsubscribe();
-  }, []);
-
   // Handle hotkey action execution (webhooks, URL, SMART_URL)
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {
     console.log(`Action: executing "${action.name}" (${action.method})`);
@@ -524,18 +515,46 @@ function App() {
         return;
       }
 
+      // If askChromeProfile is enabled, show the profile chooser
+      if (action.askChromeProfile) {
+        try {
+          // Use cached profiles if available, otherwise fetch
+          let profiles = profilesCacheRef.current;
+          if (!profiles) {
+            console.log("URL action: fetching Chrome profiles...");
+            profiles = await invoke<ChromeProfile[]>("list_chrome_profiles");
+            profilesCacheRef.current = profiles;
+          }
+
+          if (profiles.length === 0) {
+            // No profiles found, show toast and fall back to normal open
+            showToast("No Chrome profiles found. Opening in default profile.", "info");
+          } else {
+            // Show profile chooser modal
+            setChromeProfiles(profiles);
+            setPendingUrlAction({ action, url: normalized.url });
+            setProfileChooserOpen(true);
+            return; // Don't open yet - wait for user selection
+          }
+        } catch (error) {
+          console.error("URL action: failed to list Chrome profiles:", error);
+          showToast("Couldn't list Chrome profiles. Opening in default profile.", "info");
+          // Fall through to open without profile
+        }
+      }
+
       // Play sound if enabled
       if (currentSettings.audioEnabled) {
         invoke("play_sound", { soundType: "start" }).catch(console.error);
       }
 
-      // Open the URL
+      // Open the URL (without specific profile)
       try {
         const result = await invoke<{
           success: boolean;
           opened_with: string;
           error: string | null;
-        }>("open_url_in_chrome", { url: normalized.url });
+        }>("open_url_in_chrome", { url: normalized.url, profileDirectory: null });
 
         if (result.success) {
           console.log(`URL action: opened in ${result.opened_with}`);
@@ -597,7 +616,7 @@ function App() {
           success: boolean;
           opened_with: string;
           error: string | null;
-        }>("open_url_in_chrome", { url: normalized.url });
+        }>("open_url_in_chrome", { url: normalized.url, profileDirectory: null });
 
         if (result.success) {
           console.log(`SMART_URL: opened ${normalized.isSearch ? "search" : "URL"} in ${result.opened_with}`);
@@ -760,6 +779,60 @@ function App() {
     };
   }, [webhookActions, executeWebhookAction]);
 
+  // Handle profile selection from the chooser modal
+  const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {
+    if (!pendingUrlAction) return;
+
+    const { action, url } = pendingUrlAction;
+    const currentSettings = useAppStore.getState().settings;
+
+    // Close modal
+    setProfileChooserOpen(false);
+    setPendingUrlAction(null);
+
+    // Play sound if enabled
+    if (currentSettings.audioEnabled) {
+      invoke("play_sound", { soundType: "start" }).catch(console.error);
+    }
+
+    // Open URL with selected profile
+    try {
+      const result = await invoke<{
+        success: boolean;
+        opened_with: string;
+        error: string | null;
+      }>("open_url_in_chrome", { 
+        url, 
+        profileDirectory: profile.profile_directory 
+      });
+
+      if (result.success) {
+        console.log(`URL action: opened in ${result.opened_with} (profile: ${profile.display_name})`);
+        // Log to history
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[URL Open - ${action.name}] ${url} (Profile: ${profile.display_name})`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        console.error("URL action failed:", result.error);
+        showToast(result.error || "Failed to open URL", "error");
+      }
+    } catch (error) {
+      console.error("URL action error:", error);
+      showToast(`Failed to open URL: ${error}`, "error");
+    }
+  }, [pendingUrlAction, showToast]);
+
+  // Handle profile chooser cancel
+  const handleProfileCancel = useCallback(() => {
+    setProfileChooserOpen(false);
+    setPendingUrlAction(null);
+    console.log("Profile chooser cancelled");
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <MainWindow />
@@ -767,6 +840,13 @@ function App() {
       <SettingsPanel />
       <RecordingIndicator />
       <Toast messages={toasts} onDismiss={dismissToast} />
+      <ProfileChooserModal
+        isOpen={profileChooserOpen}
+        profiles={chromeProfiles}
+        actionName={pendingUrlAction?.action.name ?? ""}
+        onSelect={handleProfileSelect}
+        onCancel={handleProfileCancel}
+      />
     </div>
   );
 }

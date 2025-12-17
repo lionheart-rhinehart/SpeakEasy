@@ -586,27 +586,6 @@ export default function SettingsPanel() {
             </label>
           </section>
 
-          {/* Status Bar */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Status Bar</h3>
-            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
-              <div>
-                <p className="text-sm font-medium text-text-primary">Always-on-top status bar</p>
-                <p className="text-xs text-text-secondary">Show floating status indicator (bottom-right)</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.showStatusBar ?? true}
-                onChange={(e) => {
-                  const show = e.target.checked;
-                  updateSettings({ showStatusBar: show });
-                  invoke(show ? "show_status_bar" : "set_status_bar_visibility", show ? {} : { show: false });
-                }}
-                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
-              />
-            </label>
-          </section>
-
           {/* Startup */}
           <section>
             <h3 className="text-sm font-medium text-text-primary mb-3">Startup</h3>
@@ -1095,6 +1074,21 @@ export default function SettingsPanel() {
                         className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     </div>
+                  )}
+                  {/* Chrome profile chooser option - only for URL method */}
+                  {editingWebhook.method === "URL" && (
+                    <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingWebhook.askChromeProfile ?? false}
+                        onChange={(e) => setEditingWebhook({ ...editingWebhook, askChromeProfile: e.target.checked })}
+                        className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">Ask which Chrome profile</p>
+                        <p className="text-xs text-text-secondary">Show profile chooser when hotkey is pressed (e.g., Work/Personal Gmail)</p>
+                      </div>
+                    </label>
                   )}
                   <div className="flex gap-2 pt-2">
                     <button

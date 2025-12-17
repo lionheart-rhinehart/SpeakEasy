@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-17T01:26:12.166Z",
-  "count": 13,
+  "last_updated": "2025-12-17T04:30:58.441Z",
+  "count": 15,
   "entries": [
     {
       "id": "2025-12-17__feature__webhook-url-actions",
@@ -15,6 +15,32 @@
       "summary": "Extended Webhook Actions to support URL and SMART_URL modes that open URLs in Chrome or perform Google searches from highlighted text",
       "problem": "",
       "fix": ""
+    },
+    {
+      "id": "2025-12-17__feature__chrome-profile-chooser-for-url-hotkeys",
+      "file": "2025-12-17__feature__chrome-profile-chooser-for-url-hotkeys.md",
+      "title": "chrome-profile-chooser-for-url-hotkeys",
+      "date": "2025-12-17",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Added Chrome profile chooser for URL hotkeys - when enabled, shows modal to pick which Chrome profile (Work/Personal/etc) to open the URL in",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-17__devops__debug-hidden-instance",
+      "file": "2025-12-17__devops__debug-hidden-instance.md",
+      "title": "debug-hidden-instance",
+      "date": "2025-12-17",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Debugged why new URL action types were not visible - killed hidden SpeakEasy instance from previous build that was blocking dev server startup",
+      "problem": "Dev server kept exiting immediately with code 0 due to single-instance plugin detecting existing process",
+      "fix": "Used taskkill to terminate hidden speakeasy.exe process running in system tray"
     },
     {
       "id": "2025-12-16__fix__duplicate-process-single-instance",

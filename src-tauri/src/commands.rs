@@ -6,7 +6,6 @@ use crate::transcription;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_positioner::{Position, WindowExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AudioDevice {
@@ -1141,6 +1140,110 @@ pub async fn transform_with_llm(
 }
 
 // ============================================================================
+// CHROME PROFILE DISCOVERY (Windows-first)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChromeProfile {
+    pub profile_directory: String, // e.g., "Default", "Profile 1"
+    pub display_name: String,      // Friendly name from Chrome, e.g., "Work", "Personal"
+}
+
+/// Get the Chrome User Data directory path (Windows)
+fn get_chrome_user_data_dir() -> Option<String> {
+    std::env::var("LOCALAPPDATA")
+        .map(|local| format!(r"{}\Google\Chrome\User Data", local))
+        .ok()
+        .filter(|path| std::path::Path::new(path).exists())
+}
+
+/// List available Chrome profiles by reading Local State and scanning profile directories.
+/// Returns profiles sorted by display name (case-insensitive).
+#[tauri::command]
+pub async fn list_chrome_profiles() -> Result<Vec<ChromeProfile>, String> {
+    log::info!("Listing Chrome profiles");
+
+    #[cfg(target_os = "windows")]
+    {
+        let user_data_dir = match get_chrome_user_data_dir() {
+            Some(dir) => dir,
+            None => {
+                log::warn!("Chrome User Data directory not found");
+                return Err("Chrome User Data directory not found".to_string());
+            }
+        };
+
+        let mut profiles: Vec<ChromeProfile> = Vec::new();
+        let mut profile_names: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+
+        // Try to read Local State for friendly names
+        let local_state_path = format!(r"{}\Local State", user_data_dir);
+        if let Ok(contents) = std::fs::read_to_string(&local_state_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
+                if let Some(info_cache) = json
+                    .get("profile")
+                    .and_then(|p| p.get("info_cache"))
+                    .and_then(|c| c.as_object())
+                {
+                    for (dir_name, profile_info) in info_cache {
+                        if let Some(name) = profile_info.get("name").and_then(|n| n.as_str()) {
+                            profile_names.insert(dir_name.clone(), name.to_string());
+                        }
+                    }
+                    log::info!(
+                        "Parsed {} profile names from Local State",
+                        profile_names.len()
+                    );
+                }
+            }
+        }
+
+        // Scan for profile directories (Default and Profile *)
+        if let Ok(entries) = std::fs::read_dir(&user_data_dir) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+
+                // Only include "Default" or "Profile X" directories
+                if file_name == "Default" || file_name.starts_with("Profile ") {
+                    if entry.path().is_dir() {
+                        // Check if this looks like a valid profile (has Preferences file)
+                        let prefs_path = entry.path().join("Preferences");
+                        if prefs_path.exists() {
+                            let display_name = profile_names
+                                .get(&file_name)
+                                .cloned()
+                                .unwrap_or_else(|| file_name.clone());
+
+                            profiles.push(ChromeProfile {
+                                profile_directory: file_name,
+                                display_name,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by display name (case-insensitive)
+        profiles.sort_by(|a, b| {
+            a.display_name
+                .to_lowercase()
+                .cmp(&b.display_name.to_lowercase())
+        });
+
+        log::info!("Found {} Chrome profiles", profiles.len());
+        Ok(profiles)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        log::warn!("Chrome profile listing not yet implemented for this platform");
+        Err("Chrome profile listing is only supported on Windows".to_string())
+    }
+}
+
+// ============================================================================
 // OPEN URL IN CHROME (Windows-first)
 // ============================================================================
 
@@ -1152,10 +1255,18 @@ pub struct OpenUrlResponse {
 }
 
 /// Open a URL in Google Chrome (Windows).
+/// Optionally opens in a specific Chrome profile using --profile-directory.
 /// Falls back to system default browser if Chrome is not found.
 #[tauri::command]
-pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> {
-    log::info!("Opening URL: {}", url);
+pub async fn open_url_in_chrome(
+    url: String,
+    profile_directory: Option<String>,
+) -> Result<OpenUrlResponse, String> {
+    log::info!(
+        "Opening URL: {} (profile: {:?})",
+        url,
+        profile_directory
+    );
 
     // Validate URL is not empty
     if url.trim().is_empty() {
@@ -1199,10 +1310,27 @@ pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> 
         }
 
         if let Some(path) = chrome_path {
+            // Build the command with optional profile directory
+            let mut cmd = std::process::Command::new(path);
+
+            if let Some(ref profile_dir) = profile_directory {
+                cmd.arg(format!("--profile-directory={}", profile_dir));
+                log::info!("Using Chrome profile: {}", profile_dir);
+            }
+
+            cmd.arg(&url);
+
             // Try to launch Chrome with the URL
-            match std::process::Command::new(path).arg(&url).spawn() {
+            match cmd.spawn() {
                 Ok(_) => {
-                    log::info!("Opened URL in Chrome: {}", url);
+                    log::info!(
+                        "Opened URL in Chrome{}: {}",
+                        profile_directory
+                            .as_ref()
+                            .map(|p| format!(" (profile: {})", p))
+                            .unwrap_or_default(),
+                        url
+                    );
                     return Ok(OpenUrlResponse {
                         success: true,
                         opened_with: "chrome".to_string(),
@@ -1210,7 +1338,10 @@ pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> 
                     });
                 }
                 Err(e) => {
-                    log::warn!("Failed to launch Chrome: {}. Falling back to default browser.", e);
+                    log::warn!(
+                        "Failed to launch Chrome: {}. Falling back to default browser.",
+                        e
+                    );
                 }
             }
         } else {
@@ -1240,7 +1371,11 @@ pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> 
 
     #[cfg(not(target_os = "windows"))]
     {
-        // For non-Windows, just use the system default browser
+        // For non-Windows, just use the system default browser (no profile support)
+        if profile_directory.is_some() {
+            log::warn!("Chrome profile selection not supported on this platform, ignoring");
+        }
+
         match open::that(&url) {
             Ok(_) => {
                 log::info!("Opened URL in default browser: {}", url);
@@ -1262,66 +1397,3 @@ pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> 
     }
 }
 
-// ============================================================================
-// STATUS BAR WINDOW
-// ============================================================================
-
-#[tauri::command]
-pub async fn show_status_bar(app: AppHandle) -> Result<(), String> {
-    use tauri::WebviewUrl;
-
-    // create or get window
-    let win = app.get_webview_window("status-bar");
-    if win.is_none() {
-        log::info!("[show_status_bar] Creating status-bar window");
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app,
-            "status-bar",
-            WebviewUrl::App("statusbar.html".into()),
-        )
-        .title("Status")
-        .inner_size(220.0, 80.0)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .visible(false)
-        .focused(false)
-        .build()
-        .map_err(|e| e.to_string())?;
-    }
-    let window = app
-        .get_webview_window("status-bar")
-        .ok_or("Cannot get status-bar window")?;
-
-    // position bottom-right using plugin
-    window
-        .move_window(Position::BottomRight)
-        .map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())?;
-    log::info!("[show_status_bar] Status bar positioned and shown");
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn set_status_bar_visibility(app: AppHandle, show: bool) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("status-bar") {
-        if show {
-            win.show().ok();
-        } else {
-            win.hide().ok();
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn enable_status_bar_click_through(app: AppHandle) -> Result<(), String> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
-    if let Some(win) = app.get_webview_window("status-bar") {
-        win.set_ignore_cursor_events(true)
-            .map_err(|e| e.to_string())?;
-        log::info!("[enable_status_bar_click_through] Click-through enabled");
-    }
-    Ok(())
-}

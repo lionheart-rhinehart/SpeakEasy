@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import RecordingButton from "./RecordingButton";
-import StatusIndicator from "./StatusIndicator";
 
 // Helper to display hotkey in user-friendly format
 function formatHotkeyDisplay(hotkey: string): string {
@@ -175,8 +174,6 @@ export default function MainWindow() {
             </div>
           </div>
         )}
-
-        <StatusIndicator />
 
         {/* Mode Toggle: Transcribe vs Translate */}
         <div className="flex items-center gap-3 p-1 bg-slate-100 rounded-full">

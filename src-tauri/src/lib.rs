@@ -14,7 +14,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Listener, Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -152,23 +152,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Setup global event listeners for display changes to reposition status bar
-            let app_handle = app.handle().clone();
-            app.handle().listen("tauri://scale-change", move |_event| {
-                let app_clone = app_handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = commands::show_status_bar(app_clone).await;
-                });
-            });
-
-            let app_handle2 = app.handle().clone();
-            app.handle().listen("tauri://resize", move |_event| {
-                let app_clone = app_handle2.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = commands::show_status_bar(app_clone).await;
-                });
-            });
-
             log::info!("SpeakEasy initialized successfully with system tray");
             Ok(())
         })
@@ -216,12 +199,9 @@ pub fn run() {
             // Multi-provider LLM transform
             commands::transform_with_llm,
             commands::fetch_provider_models,
-            // Status bar window
-            commands::show_status_bar,
-            commands::set_status_bar_visibility,
-            commands::enable_status_bar_click_through,
-            // URL opening (Chrome-first)
+            // URL opening (Chrome-first) and profile discovery
             commands::open_url_in_chrome,
+            commands::list_chrome_profiles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
