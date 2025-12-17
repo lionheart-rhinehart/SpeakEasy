@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-17T19:12:24.090Z",
-  "count": 19,
+  "last_updated": "2025-12-17T20:20:41.297Z",
+  "count": 20,
   "entries": [
     {
       "id": "2025-12-17__feature__webhook-url-actions",
@@ -15,6 +15,19 @@
       "summary": "Extended Webhook Actions to support URL and SMART_URL modes that open URLs in Chrome or perform Google searches from highlighted text",
       "problem": "",
       "fix": ""
+    },
+    {
+      "id": "2025-12-17__feature__unify-prompt-action-dropdown",
+      "file": "2025-12-17__feature__unify-prompt-action-dropdown.md",
+      "title": "unify-prompt-action-dropdown",
+      "date": "2025-12-17",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Unified prompt actions into the Hotkey Actions dropdown and increased window sizes for better usability",
+      "problem": "Prompt Actions were in a separate hidden section requiring scrolling, and windows were too small",
+      "fix": "Added PROMPT as an action type in the existing dropdown alongside POST/GET/URL/Smart URL, removed the separate section, and increased main window to 500x650 and settings modal to max-w-xl"
     },
     {
       "id": "2025-12-17__feature__prompt-actions-hotkey-llm",

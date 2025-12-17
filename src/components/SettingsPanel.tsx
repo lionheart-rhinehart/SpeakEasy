@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
-import type { AutoPasteMode, WebhookAction, PromptAction, TransformProvider, ApiKeyStatus } from "../types";
+import type { AutoPasteMode, WebhookAction, TransformProvider, ApiKeyStatus } from "../types";
 
 // Model info from provider API
 interface ProviderModel {
@@ -126,8 +126,6 @@ export default function SettingsPanel() {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<WebhookAction | null>(null);
   const [isAddingWebhook, setIsAddingWebhook] = useState(false);
-  const [editingPrompt, setEditingPrompt] = useState<PromptAction | null>(null);
-  const [isAddingPrompt, setIsAddingPrompt] = useState(false);
   const [capturingHotkeyState, setCapturingHotkeyState] = useState<"record" | "aiTransform" | null>(null);
   const [autostart, setAutostart] = useState(false);
   
@@ -361,9 +359,8 @@ export default function SettingsPanel() {
     }
   };
 
-  // Ensure webhookActions and promptActions are always arrays (handles initial state before persist loads)
+  // Ensure webhookActions is always an array (handles initial state before persist loads)
   const webhookActions = settings.webhookActions ?? [];
-  const promptActions = settings.promptActions ?? [];
 
   // Webhook management functions
   const addWebhookAction = (webhook: Omit<WebhookAction, "id">) => {
@@ -403,44 +400,6 @@ export default function SettingsPanel() {
     });
   };
 
-  // Prompt action management functions
-  const addPromptAction = (prompt: Omit<PromptAction, "id">) => {
-    const newPrompt: PromptAction = {
-      ...prompt,
-      id: crypto.randomUUID(),
-    };
-    updateSettings({
-      promptActions: [...promptActions, newPrompt],
-    });
-    setIsAddingPrompt(false);
-    setEditingPrompt(null);
-  };
-
-  const updatePromptAction = (prompt: PromptAction) => {
-    updateSettings({
-      promptActions: promptActions.map((p) =>
-        p.id === prompt.id ? prompt : p
-      ),
-    });
-    setEditingPrompt(null);
-  };
-
-  const deletePromptAction = (id: string) => {
-    if (confirm("Delete this prompt action?")) {
-      updateSettings({
-        promptActions: promptActions.filter((p) => p.id !== id),
-      });
-    }
-  };
-
-  const togglePromptEnabled = (id: string) => {
-    updateSettings({
-      promptActions: promptActions.map((p) =>
-        p.id === id ? { ...p, enabled: !p.enabled } : p
-      ),
-    });
-  };
-
   if (!isSettingsOpen) return null;
 
   const handleSaveApiKey = () => {
@@ -458,7 +417,7 @@ export default function SettingsPanel() {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <h2 className="text-lg font-semibold text-text-primary">Settings</h2>
@@ -1082,23 +1041,25 @@ export default function SettingsPanel() {
                     <label className="block text-xs text-text-secondary mb-1">Action Type</label>
                     <select
                       value={editingWebhook.method}
-                      onChange={(e) => setEditingWebhook({ ...editingWebhook, method: e.target.value as "POST" | "GET" | "URL" | "SMART_URL" })}
+                      onChange={(e) => setEditingWebhook({ ...editingWebhook, method: e.target.value as "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT" })}
                       className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       <option value="POST">POST (webhook)</option>
                       <option value="GET">GET (webhook)</option>
                       <option value="URL">URL (open in Chrome)</option>
                       <option value="SMART_URL">Selection → URL or Google search</option>
+                      <option value="PROMPT">Prompt (AI Transform)</option>
                     </select>
                     <p className="text-xs text-text-secondary mt-1">
                       {editingWebhook.method === "POST" && "Send selected text to a webhook, paste the response"}
                       {editingWebhook.method === "GET" && "Send selected text as query param, paste the response"}
                       {editingWebhook.method === "URL" && "Open a preset URL in Chrome when hotkey is pressed"}
                       {editingWebhook.method === "SMART_URL" && "Highlight text → opens it as URL, or Googles it"}
+                      {editingWebhook.method === "PROMPT" && "Apply a stored prompt to selected text via AI Transform"}
                     </p>
                   </div>
-                  {/* URL input - shown for POST, GET, URL but not SMART_URL */}
-                  {editingWebhook.method !== "SMART_URL" && (
+                  {/* URL input - shown for POST, GET, URL but not SMART_URL or PROMPT */}
+                  {editingWebhook.method !== "SMART_URL" && editingWebhook.method !== "PROMPT" && (
                     <div>
                       <label className="block text-xs text-text-secondary mb-1">
                         {editingWebhook.method === "URL" ? "Website URL" : "Webhook URL"}
@@ -1114,6 +1075,24 @@ export default function SettingsPanel() {
                         }
                         className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
+                    </div>
+                  )}
+                  {/* Prompt textarea - shown only for PROMPT method */}
+                  {editingWebhook.method === "PROMPT" && (
+                    <div>
+                      <label className="block text-xs text-text-secondary mb-1">
+                        Prompt (use {"{{text}}"} for selected text)
+                      </label>
+                      <textarea
+                        value={editingWebhook.prompt || ""}
+                        onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
+                        placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
+                        rows={4}
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                      />
+                      <p className="text-xs text-text-secondary mt-1">
+                        {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
+                      </p>
                     </div>
                   )}
                   {/* Chrome profile chooser option - only for URL method */}
@@ -1142,7 +1121,8 @@ export default function SettingsPanel() {
                       }}
                       disabled={
                         !editingWebhook.name ||
-                        (editingWebhook.method !== "SMART_URL" && !editingWebhook.webhookUrl)
+                        (editingWebhook.method !== "SMART_URL" && editingWebhook.method !== "PROMPT" && !editingWebhook.webhookUrl) ||
+                        (editingWebhook.method === "PROMPT" && !editingWebhook.prompt)
                       }
                       className="flex-1 px-3 py-1.5 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
@@ -1165,182 +1145,8 @@ export default function SettingsPanel() {
             <p className="text-xs text-text-secondary mt-3">
               <strong>Webhook:</strong> Highlight text → press hotkey → response replaces selection.<br />
               <strong>URL:</strong> Press hotkey → opens preset URL in Chrome.<br />
-              <strong>Smart URL:</strong> Highlight text → press hotkey → opens as URL or Google searches it.
-            </p>
-          </section>
-
-          {/* Prompt Actions */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-text-primary">Prompt Actions</h3>
-              <button
-                onClick={() => {
-                  setIsAddingPrompt(true);
-                  setEditingPrompt({
-                    id: "",
-                    name: "",
-                    hotkey: "Control+Shift+E",
-                    prompt: "",
-                    enabled: true,
-                  });
-                }}
-                className="text-xs text-primary-500 hover:text-primary-700 font-medium"
-              >
-                + Add Prompt
-              </button>
-            </div>
-            <p className="text-xs text-text-secondary mb-3">
-              Run stored prompts through AI Transform with a hotkey. Use {"{{text}}"} to insert selected text.
-            </p>
-
-            {/* Prompt Actions List */}
-            {promptActions.length === 0 && !isAddingPrompt ? (
-              <div className="p-4 bg-slate-50 rounded-lg text-center">
-                <p className="text-sm text-text-secondary">No prompt actions configured</p>
-                <p className="text-xs text-text-secondary mt-1">
-                  Add a prompt to quickly apply AI transforms with one hotkey
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {promptActions.map((prompt) => (
-                  <div
-                    key={prompt.id}
-                    className={`p-3 rounded-lg border ${
-                      prompt.enabled
-                        ? "bg-white border-slate-200"
-                        : "bg-slate-50 border-slate-200 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <input
-                          type="checkbox"
-                          checked={prompt.enabled}
-                          onChange={() => togglePromptEnabled(prompt.id)}
-                          className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500 flex-shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-text-primary">{prompt.name}</p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
-                              {prompt.hotkey.replace("Control", "Ctrl")}
-                            </kbd>
-                            <span className="text-xs text-text-secondary truncate max-w-[180px]">
-                              {prompt.prompt}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                        <button
-                          onClick={() => setEditingPrompt(prompt)}
-                          className="p-1 text-text-secondary hover:text-text-primary"
-                          title="Edit"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => deletePromptAction(prompt.id)}
-                          className="p-1 text-text-secondary hover:text-red-500"
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Add/Edit Prompt Action Form */}
-            {(isAddingPrompt || editingPrompt) && editingPrompt && (
-              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <h4 className="text-sm font-medium text-text-primary mb-3">
-                  {isAddingPrompt ? "Add Prompt Action" : "Edit Prompt Action"}
-                </h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">Name</label>
-                    <input
-                      type="text"
-                      value={editingPrompt.name}
-                      onChange={(e) => setEditingPrompt({ ...editingPrompt, name: e.target.value })}
-                      placeholder="e.g., Add Emojis, Fix Grammar, Make Professional"
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">Hotkey</label>
-                    <select
-                      value={editingPrompt.hotkey}
-                      onChange={(e) => setEditingPrompt({ ...editingPrompt, hotkey: e.target.value })}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="Control+Shift+E">Ctrl+Shift+E</option>
-                      <option value="Control+Shift+F">Ctrl+Shift+F</option>
-                      <option value="Control+Shift+G">Ctrl+Shift+G</option>
-                      <option value="Control+Shift+P">Ctrl+Shift+P</option>
-                      <option value="Control+Shift+T">Ctrl+Shift+T</option>
-                      <option value="Control+Shift+U">Ctrl+Shift+U</option>
-                      <option value="Control+Shift+Y">Ctrl+Shift+Y</option>
-                      <option value="Control+Shift+I">Ctrl+Shift+I</option>
-                      <option value="Control+Shift+O">Ctrl+Shift+O</option>
-                      <option value="Control+Shift+J">Ctrl+Shift+J</option>
-                      <option value="Control+Shift+K">Ctrl+Shift+K</option>
-                      <option value="Control+Shift+L">Ctrl+Shift+L</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">
-                      Prompt (use {"{{text}}"} for selected text)
-                    </label>
-                    <textarea
-                      value={editingPrompt.prompt}
-                      onChange={(e) => setEditingPrompt({ ...editingPrompt, prompt: e.target.value })}
-                      placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
-                      rows={4}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
-                    />
-                    <p className="text-xs text-text-secondary mt-1">
-                      {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
-                    </p>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <button
-                      onClick={() => {
-                        if (isAddingPrompt) {
-                          addPromptAction(editingPrompt);
-                        } else {
-                          updatePromptAction(editingPrompt);
-                        }
-                      }}
-                      disabled={!editingPrompt.name || !editingPrompt.prompt}
-                      className="flex-1 px-3 py-1.5 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isAddingPrompt ? "Add" : "Save"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsAddingPrompt(false);
-                        setEditingPrompt(null);
-                      }}
-                      className="px-3 py-1.5 bg-slate-200 text-text-secondary text-sm rounded hover:bg-slate-300 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <p className="text-xs text-text-secondary mt-3">
-              <strong>Example:</strong> "Make this more professional: {"{{text}}"}" or "Add emojis to {"{{text}}"}"
+              <strong>Smart URL:</strong> Highlight text → press hotkey → opens as URL or Google searches it.<br />
+              <strong>Prompt:</strong> Highlight text → press hotkey → AI transforms text using your prompt.
             </p>
           </section>
 

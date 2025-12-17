@@ -32,6 +32,7 @@ function convertWebhookToSnakeCase(action: WebhookAction): FileWebhookAction {
     headers: action.headers,
     enabled: action.enabled,
     ask_chrome_profile: action.askChromeProfile,
+    prompt: action.prompt,
   };
 }
 
@@ -45,6 +46,7 @@ function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
     headers: action.headers,
     enabled: action.enabled,
     askChromeProfile: action.ask_chrome_profile,
+    prompt: action.prompt,
   };
 }
 

@@ -91,17 +91,20 @@ export type RecordingState = "idle" | "recording" | "processing" | "error";
 // - "POST" / "GET": webhook transform (copy selection → call backend → paste response)
 // - "URL": open a preset URL in Chrome
 // - "SMART_URL": copy highlighted text, if URL-like open it, else Google search it
+// - "PROMPT": apply a stored prompt to selected text via AI Transform
 export interface WebhookAction {
   id: string;
   name: string;
   hotkey: string; // e.g., "Control+1", "Control+2", etc.
-  webhookUrl: string; // For POST/GET: webhook endpoint; For URL: preset website URL; For SMART_URL: unused
-  method: "POST" | "GET" | "URL" | "SMART_URL";
+  webhookUrl: string; // For POST/GET: webhook endpoint; For URL: preset website URL; For SMART_URL/PROMPT: unused
+  method: "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT";
   headers?: Record<string, string>;
   enabled: boolean;
   // Chrome profile targeting (for URL method)
   // When true, shows a profile chooser before opening the URL
   askChromeProfile?: boolean;
+  // For PROMPT method: the stored prompt template (use {{text}} for selected text placeholder)
+  prompt?: string;
 }
 
 // Prompt Action for LLM-based transforms with stored prompts
@@ -152,6 +155,7 @@ export interface FileWebhookAction {
   headers?: Record<string, string>;
   enabled: boolean;
   ask_chrome_profile?: boolean;
+  prompt?: string;
 }
 
 export interface FilePromptAction {

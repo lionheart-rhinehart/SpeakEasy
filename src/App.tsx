@@ -749,6 +749,106 @@ function App() {
       return;
     }
 
+    // ========== PROMPT MODE ==========
+    if (action.method === "PROMPT") {
+      if (!action.prompt) {
+        showToast("No prompt configured for this action", "error");
+        return;
+      }
+
+      // Copy selected text
+      let selectedText: string;
+      try {
+        console.log("PROMPT action: copying selected text...");
+        await invoke("simulate_copy");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        selectedText = await invoke<string>("get_clipboard_text");
+      } catch (error) {
+        console.error("PROMPT action: Failed to copy selected text:", error);
+        showToast("Failed to copy selected text", "error");
+        return;
+      }
+
+      if (!selectedText || selectedText.trim() === "") {
+        console.log("PROMPT action: No text selected");
+        showToast("No text selected", "error");
+        return;
+      }
+
+      console.log(`PROMPT action: captured ${selectedText.length} chars from selection`);
+
+      // Play sound to indicate transform started
+      if (currentSettings.audioEnabled) {
+        invoke("play_sound", { soundType: "start" }).catch(console.error);
+      }
+
+      // Process the prompt: replace {{text}} placeholder or append text
+      let finalInstruction: string;
+      if (action.prompt.includes("{{text}}")) {
+        finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
+      } else {
+        // No placeholder - append text to end of prompt
+        finalInstruction = `${action.prompt}\n\n${selectedText}`;
+      }
+
+      console.log(`PROMPT action: using prompt template, final instruction length: ${finalInstruction.length}`);
+
+      // Call LLM transform using global settings
+      try {
+        const result = await invoke<{
+          success: boolean;
+          output_text: string | null;
+          error: string | null;
+          error_type: string | null;
+          provider: string | null;
+          model: string | null;
+        }>("transform_with_llm", {
+          provider: currentSettings.transformProvider,
+          model: currentSettings.transformModel,
+          inputText: selectedText,
+          instruction: finalInstruction,
+          temperature: currentSettings.transformTemperature ?? 0.7,
+          maxTokens: currentSettings.transformMaxTokens ?? 4096,
+        });
+
+        if (result.success && result.output_text) {
+          console.log(`PROMPT action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
+
+          // Copy to clipboard and paste
+          await invoke("copy_to_clipboard", { text: result.output_text });
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          await invoke("paste_text");
+
+          // Play success sound
+          if (currentSettings.audioEnabled) {
+            invoke("play_sound", { soundType: "stop" }).catch(console.error);
+          }
+
+          // Add to history
+          useAppStore.getState().addTranscription({
+            id: crypto.randomUUID(),
+            text: `[Prompt: ${action.name}] ${result.output_text.substring(0, 100)}${result.output_text.length > 100 ? "..." : ""}`,
+            durationMs: 0,
+            language: "en",
+            createdAt: new Date().toISOString(),
+          });
+
+          console.log("PROMPT action: transform complete and pasted");
+        } else {
+          console.error("PROMPT action failed:", result.error);
+          if (result.error_type === "NoApiKey") {
+            showToast("No API key set for AI Transform - configure in Settings", "error");
+          } else {
+            showToast(result.error || "Prompt action failed", "error");
+          }
+        }
+      } catch (error) {
+        console.error("PROMPT action error:", error);
+        showToast(`Prompt action error: ${error}`, "error");
+      }
+      return;
+    }
+
     // ========== WEBHOOK MODE (POST/GET) ==========
     // Copy selected text using the same approach as AI Transform (which works)
     // This triggers on Pressed, so the selection is still active

@@ -17,12 +17,14 @@ pub struct WebhookAction {
     pub name: String,
     pub hotkey: String,
     pub webhook_url: String,
-    pub method: String, // "POST" | "GET" | "URL" | "SMART_URL"
+    pub method: String, // "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT"
     #[serde(default)]
     pub headers: Option<HashMap<String, String>>,
     pub enabled: bool,
     #[serde(default)]
     pub ask_chrome_profile: Option<bool>,
+    #[serde(default)]
+    pub prompt: Option<String>, // For PROMPT method: the stored prompt template
 }
 
 /// Prompt action configuration for LLM-based transforms with stored prompts
