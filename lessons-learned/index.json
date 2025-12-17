@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-17T04:30:58.441Z",
-  "count": 15,
+  "last_updated": "2025-12-17T18:02:00.911Z",
+  "count": 16,
   "entries": [
     {
       "id": "2025-12-17__feature__webhook-url-actions",
@@ -41,6 +41,19 @@
       "summary": "Debugged why new URL action types were not visible - killed hidden SpeakEasy instance from previous build that was blocking dev server startup",
       "problem": "Dev server kept exiting immediately with code 0 due to single-instance plugin detecting existing process",
       "fix": "Used taskkill to terminate hidden speakeasy.exe process running in system tray"
+    },
+    {
+      "id": "2025-12-17__bugfix__fix-overlay-zorder-subclassing",
+      "file": "2025-12-17__bugfix__fix-overlay-zorder-subclassing.md",
+      "title": "fix-overlay-zorder-subclassing",
+      "date": "2025-12-17",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed recording overlay z-order issue using Windows window subclassing to intercept WM_WINDOWPOSCHANGING and force HWND_TOPMOST",
+      "problem": "Recording overlay window disappeared behind other windows despite alwaysOnTop setting - previous fix attempts using SetWindowPos were overridden by other apps",
+      "fix": "Implemented window subclassing via SetWindowSubclass to intercept WM_WINDOWPOSCHANGING messages and force HWND_TOPMOST before Windows processes z-order changes - this prevents other apps from overriding the topmost status"
     },
     {
       "id": "2025-12-16__fix__duplicate-process-single-instance",

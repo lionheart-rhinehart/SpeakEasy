@@ -32,7 +32,9 @@
       "Bash(export PATH=\"$PATH:/c/Users/lionh/.cargo/bin:/d/Users/lionh/.cargo/bin:$HOME/.cargo/bin\")",
       "Bash(echo:*)",
       "Bash(cd:*)",
-      "Bash(winget install:*)"
+      "Bash(winget install:*)",
+      "Bash(dir:*)",
+      "Bash(git show:*)"
     ],
     "deny": [],
     "ask": []

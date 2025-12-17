@@ -246,6 +246,14 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
 
         overlay.show().map_err(|e| e.to_string())?;
 
+        // Apply Windows topmost subclass to prevent z-order loss
+        // This intercepts WM_WINDOWPOSCHANGING and forces HWND_TOPMOST
+        if let Err(e) = crate::window_topmost::apply_topmost_subclass(&overlay) {
+            log::warn!("[show_recording_overlay] Failed to apply topmost subclass: {}", e);
+        } else {
+            log::info!("[show_recording_overlay] Applied topmost subclass for z-order enforcement");
+        }
+
         // Reset overlay to recording state when showing (emit directly to overlay)
         let payload = serde_json::json!({
             "state": "recording",
@@ -263,6 +271,11 @@ pub async fn show_recording_overlay(app: AppHandle) -> Result<(), String> {
 pub async fn hide_recording_overlay(app: AppHandle) -> Result<(), String> {
     let overlay_opt = app.get_webview_window("recording-overlay");
     if let Some(overlay) = overlay_opt {
+        // Remove the topmost subclass before hiding
+        if let Err(e) = crate::window_topmost::remove_topmost_subclass(&overlay) {
+            log::warn!("[hide_recording_overlay] Failed to remove topmost subclass: {}", e);
+        }
+
         overlay.hide().map_err(|e| e.to_string())?;
         log::info!("[hide_recording_overlay] Recording overlay hidden");
     } else {

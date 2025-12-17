@@ -1,7 +1,7 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-17T04:30:58.437Z
+Updated: 2025-12-17T18:02:00.907Z
 
 ## Entries
 
@@ -10,6 +10,7 @@ Updated: 2025-12-17T04:30:58.437Z
 | 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |
 | 2025-12-17 | feature | [chrome profile chooser for url hotkeys](2025-12-17__feature__chrome-profile-chooser-for-url-hotkeys.md) |
 | 2025-12-17 | devops | [debug hidden instance](2025-12-17__devops__debug-hidden-instance.md) |
+| 2025-12-17 | bugfix | [fix overlay zorder subclassing](2025-12-17__bugfix__fix-overlay-zorder-subclassing.md) |
 | 2025-12-16 | fix | [duplicate process single instance](2025-12-16__fix__duplicate-process-single-instance.md) |
 | 2025-12-16 | feature | [implement always on top status bar](2025-12-16__feature__implement-always-on-top-status-bar.md) |
 | 2025-12-16 | bugfix | [fix duplicate process single instance](2025-12-16__bugfix__fix-duplicate-process-single-instance.md) |

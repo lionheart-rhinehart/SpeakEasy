@@ -7,6 +7,7 @@ mod llm;
 mod secrets;
 mod state;
 mod transcription;
+mod window_topmost;
 
 use state::AppState;
 use std::sync::Mutex;
@@ -88,13 +89,29 @@ pub fn run() {
                     .skip_taskbar(true)
                     .build();
                     match overlay_window_result {
-                        Ok(_) => log::info!("[aggressive-setup] Overlay window created at startup (QA/robustness)."),
+                        Ok(_) => {
+                            log::info!("[aggressive-setup] Overlay window created at startup (QA/robustness).");
+                            // Apply topmost subclass immediately after creation
+                            if let Some(overlay) = app.get_webview_window("recording-overlay") {
+                                if let Err(e) = window_topmost::apply_topmost_subclass(&overlay) {
+                                    log::warn!("[aggressive-setup] Failed to apply topmost subclass: {}", e);
+                                } else {
+                                    log::info!("[aggressive-setup] Applied topmost subclass for z-order enforcement");
+                                }
+                            }
+                        }
                         Err(e) => log::error!("[aggressive-setup] Failed to create overlay window: {}", e),
                     }
                 } else {
                     // Window exists (likely dev reload); ensure it's clean and hidden
                     if let Some(overlay) = app.get_webview_window("recording-overlay") {
                         let _ = overlay.hide();
+                        // Apply topmost subclass to existing window as well
+                        if let Err(e) = window_topmost::apply_topmost_subclass(&overlay) {
+                            log::warn!("[aggressive-setup] Failed to apply topmost subclass to existing window: {}", e);
+                        } else {
+                            log::info!("[aggressive-setup] Applied topmost subclass to existing overlay window");
+                        }
                         log::info!("[aggressive-setup] Overlay window exists and has been hidden for clean state.");
                     }
                 }
