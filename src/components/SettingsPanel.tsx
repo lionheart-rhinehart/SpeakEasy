@@ -921,10 +921,10 @@ export default function SettingsPanel() {
             </div>
           </section>
 
-          {/* Webhook Actions */}
+          {/* Hotkey Actions */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-text-primary">Webhook Actions</h3>
+              <h3 className="text-sm font-medium text-text-primary">Hotkey Actions</h3>
               <button
                 onClick={() => {
                   setIsAddingWebhook(true);
@@ -943,15 +943,15 @@ export default function SettingsPanel() {
               </button>
             </div>
             <p className="text-xs text-text-secondary mb-3">
-              Connect hotkeys to your APIs and automation tools (N8N, Make, etc.)
+              Connect hotkeys to webhooks, URLs, or smart URL/search actions
             </p>
 
-            {/* Webhook List */}
+            {/* Hotkey Actions List */}
             {webhookActions.length === 0 && !isAddingWebhook ? (
               <div className="p-4 bg-slate-50 rounded-lg text-center">
-                <p className="text-sm text-text-secondary">No webhook actions configured</p>
+                <p className="text-sm text-text-secondary">No hotkey actions configured</p>
                 <p className="text-xs text-text-secondary mt-1">
-                  Add an action to connect a hotkey to your API
+                  Add an action to connect a hotkey to a webhook, URL, or search
                 </p>
               </div>
             ) : (
@@ -979,9 +979,22 @@ export default function SettingsPanel() {
                             <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
                               {webhook.hotkey.replace("Control", "Ctrl")}
                             </kbd>
-                            <span className="text-xs text-text-secondary truncate max-w-[150px]">
-                              {webhook.webhookUrl}
+                            <span className="text-xs text-slate-400 font-mono">
+                              {webhook.method === "POST" && "POST"}
+                              {webhook.method === "GET" && "GET"}
+                              {webhook.method === "URL" && "URL"}
+                              {webhook.method === "SMART_URL" && "Smart"}
                             </span>
+                            {webhook.method !== "SMART_URL" && (
+                              <span className="text-xs text-text-secondary truncate max-w-[120px]">
+                                {webhook.webhookUrl}
+                              </span>
+                            )}
+                            {webhook.method === "SMART_URL" && (
+                              <span className="text-xs text-text-secondary italic">
+                                Selection → URL or Search
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1011,11 +1024,11 @@ export default function SettingsPanel() {
               </div>
             )}
 
-            {/* Add/Edit Webhook Form */}
+            {/* Add/Edit Hotkey Action Form */}
             {(isAddingWebhook || editingWebhook) && editingWebhook && (
               <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <h4 className="text-sm font-medium text-text-primary mb-3">
-                  {isAddingWebhook ? "Add Webhook Action" : "Edit Webhook Action"}
+                  {isAddingWebhook ? "Add Hotkey Action" : "Edit Hotkey Action"}
                 </h4>
                 <div className="space-y-3">
                   <div>
@@ -1024,7 +1037,7 @@ export default function SettingsPanel() {
                       type="text"
                       value={editingWebhook.name}
                       onChange={(e) => setEditingWebhook({ ...editingWebhook, name: e.target.value })}
-                      placeholder="e.g., Claude API, My N8N Workflow"
+                      placeholder="e.g., Claude API, Open Docs, Quick Search"
                       className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
@@ -1046,26 +1059,43 @@ export default function SettingsPanel() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-text-secondary mb-1">Webhook URL</label>
-                    <input
-                      type="url"
-                      value={editingWebhook.webhookUrl}
-                      onChange={(e) => setEditingWebhook({ ...editingWebhook, webhookUrl: e.target.value })}
-                      placeholder="https://your-webhook-url.com/endpoint"
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">Method</label>
+                    <label className="block text-xs text-text-secondary mb-1">Action Type</label>
                     <select
                       value={editingWebhook.method}
-                      onChange={(e) => setEditingWebhook({ ...editingWebhook, method: e.target.value as "POST" | "GET" })}
+                      onChange={(e) => setEditingWebhook({ ...editingWebhook, method: e.target.value as "POST" | "GET" | "URL" | "SMART_URL" })}
                       className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="POST">POST (recommended)</option>
-                      <option value="GET">GET</option>
+                      <option value="POST">POST (webhook)</option>
+                      <option value="GET">GET (webhook)</option>
+                      <option value="URL">URL (open in Chrome)</option>
+                      <option value="SMART_URL">Selection → URL or Google search</option>
                     </select>
+                    <p className="text-xs text-text-secondary mt-1">
+                      {editingWebhook.method === "POST" && "Send selected text to a webhook, paste the response"}
+                      {editingWebhook.method === "GET" && "Send selected text as query param, paste the response"}
+                      {editingWebhook.method === "URL" && "Open a preset URL in Chrome when hotkey is pressed"}
+                      {editingWebhook.method === "SMART_URL" && "Highlight text → opens it as URL, or Googles it"}
+                    </p>
                   </div>
+                  {/* URL input - shown for POST, GET, URL but not SMART_URL */}
+                  {editingWebhook.method !== "SMART_URL" && (
+                    <div>
+                      <label className="block text-xs text-text-secondary mb-1">
+                        {editingWebhook.method === "URL" ? "Website URL" : "Webhook URL"}
+                      </label>
+                      <input
+                        type="url"
+                        value={editingWebhook.webhookUrl}
+                        onChange={(e) => setEditingWebhook({ ...editingWebhook, webhookUrl: e.target.value })}
+                        placeholder={
+                          editingWebhook.method === "URL"
+                            ? "https://example.com or docs.google.com/..."
+                            : "https://your-webhook-url.com/endpoint"
+                        }
+                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  )}
                   <div className="flex gap-2 pt-2">
                     <button
                       onClick={() => {
@@ -1075,7 +1105,10 @@ export default function SettingsPanel() {
                           updateWebhookAction(editingWebhook);
                         }
                       }}
-                      disabled={!editingWebhook.name || !editingWebhook.webhookUrl}
+                      disabled={
+                        !editingWebhook.name ||
+                        (editingWebhook.method !== "SMART_URL" && !editingWebhook.webhookUrl)
+                      }
                       className="flex-1 px-3 py-1.5 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isAddingWebhook ? "Add" : "Save"}
@@ -1095,8 +1128,9 @@ export default function SettingsPanel() {
             )}
 
             <p className="text-xs text-text-secondary mt-3">
-              Highlight text, then press the hotkey to send it to your webhook.
-              The response will replace the highlighted text automatically.
+              <strong>Webhook:</strong> Highlight text → press hotkey → response replaces selection.<br />
+              <strong>URL:</strong> Press hotkey → opens preset URL in Chrome.<br />
+              <strong>Smart URL:</strong> Highlight text → press hotkey → opens as URL or Google searches it.
             </p>
           </section>
 

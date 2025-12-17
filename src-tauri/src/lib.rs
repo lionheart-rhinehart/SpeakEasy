@@ -220,6 +220,8 @@ pub fn run() {
             commands::show_status_bar,
             commands::set_status_bar_visibility,
             commands::enable_status_bar_click_through,
+            // URL opening (Chrome-first)
+            commands::open_url_in_chrome,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

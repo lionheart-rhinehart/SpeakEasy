@@ -84,13 +84,17 @@ export interface VocabularyEntry {
 // Recording state
 export type RecordingState = "idle" | "recording" | "processing" | "error";
 
-// Webhook Action for Transform feature
+// Webhook/Hotkey Action for Transform feature
+// method values:
+// - "POST" / "GET": webhook transform (copy selection → call backend → paste response)
+// - "URL": open a preset URL in Chrome
+// - "SMART_URL": copy highlighted text, if URL-like open it, else Google search it
 export interface WebhookAction {
   id: string;
   name: string;
   hotkey: string; // e.g., "Control+1", "Control+2", etc.
-  webhookUrl: string;
-  method: "POST" | "GET";
+  webhookUrl: string; // For POST/GET: webhook endpoint; For URL: preset website URL; For SMART_URL: unused
+  method: "POST" | "GET" | "URL" | "SMART_URL";
   headers?: Record<string, string>;
   enabled: boolean;
 }

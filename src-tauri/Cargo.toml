@@ -64,6 +64,9 @@ chrono = "0.4"
 # URL encoding for webhooks
 urlencoding = "2"
 
+# Open URLs in default browser (fallback)
+open = "5"
+
 # Secure credential storage (OS keychain/credential manager)
 # windows-native required for Windows Credential Manager to work correctly
 keyring = { version = "3", features = ["windows-native"] }

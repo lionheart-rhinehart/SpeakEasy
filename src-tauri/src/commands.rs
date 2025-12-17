@@ -1141,6 +1141,128 @@ pub async fn transform_with_llm(
 }
 
 // ============================================================================
+// OPEN URL IN CHROME (Windows-first)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OpenUrlResponse {
+    pub success: bool,
+    pub opened_with: String, // "chrome" or "default"
+    pub error: Option<String>,
+}
+
+/// Open a URL in Google Chrome (Windows).
+/// Falls back to system default browser if Chrome is not found.
+#[tauri::command]
+pub async fn open_url_in_chrome(url: String) -> Result<OpenUrlResponse, String> {
+    log::info!("Opening URL: {}", url);
+
+    // Validate URL is not empty
+    if url.trim().is_empty() {
+        return Ok(OpenUrlResponse {
+            success: false,
+            opened_with: "none".to_string(),
+            error: Some("URL is empty".to_string()),
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Try to find Chrome in common locations
+        let chrome_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ];
+
+        // Also check LOCALAPPDATA
+        let local_chrome = std::env::var("LOCALAPPDATA")
+            .map(|local| format!(r"{}\Google\Chrome\Application\chrome.exe", local))
+            .ok();
+
+        let mut chrome_path: Option<&str> = None;
+
+        // Check standard paths
+        for path in &chrome_paths {
+            if std::path::Path::new(path).exists() {
+                chrome_path = Some(path);
+                break;
+            }
+        }
+
+        // Check LOCALAPPDATA path if standard paths don't exist
+        if chrome_path.is_none() {
+            if let Some(ref local_path) = local_chrome {
+                if std::path::Path::new(local_path).exists() {
+                    chrome_path = Some(local_path.as_str());
+                }
+            }
+        }
+
+        if let Some(path) = chrome_path {
+            // Try to launch Chrome with the URL
+            match std::process::Command::new(path).arg(&url).spawn() {
+                Ok(_) => {
+                    log::info!("Opened URL in Chrome: {}", url);
+                    return Ok(OpenUrlResponse {
+                        success: true,
+                        opened_with: "chrome".to_string(),
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    log::warn!("Failed to launch Chrome: {}. Falling back to default browser.", e);
+                }
+            }
+        } else {
+            log::info!("Chrome not found in standard locations, falling back to default browser");
+        }
+
+        // Fallback: use system default browser via shell open
+        match open::that(&url) {
+            Ok(_) => {
+                log::info!("Opened URL in default browser: {}", url);
+                Ok(OpenUrlResponse {
+                    success: true,
+                    opened_with: "default".to_string(),
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log::error!("Failed to open URL in any browser: {}", e);
+                Ok(OpenUrlResponse {
+                    success: false,
+                    opened_with: "none".to_string(),
+                    error: Some(format!("Failed to open URL: {}", e)),
+                })
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // For non-Windows, just use the system default browser
+        match open::that(&url) {
+            Ok(_) => {
+                log::info!("Opened URL in default browser: {}", url);
+                Ok(OpenUrlResponse {
+                    success: true,
+                    opened_with: "default".to_string(),
+                    error: None,
+                })
+            }
+            Err(e) => {
+                log::error!("Failed to open URL: {}", e);
+                Ok(OpenUrlResponse {
+                    success: false,
+                    opened_with: "none".to_string(),
+                    error: Some(format!("Failed to open URL: {}", e)),
+                })
+            }
+        }
+    }
+}
+
+// ============================================================================
 // STATUS BAR WINDOW
 // ============================================================================
 

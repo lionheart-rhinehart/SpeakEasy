@@ -4489,6 +4489,7 @@ dependencies = [
  "hound",
  "keyring",
  "log",
+ "open",
  "rdev",
  "reqwest",
  "rodio",

@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-16T22:19:53.616Z
+Updated: 2025-12-17T01:26:12.160Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |
 | 2025-12-16 | fix | [duplicate process single instance](2025-12-16__fix__duplicate-process-single-instance.md) |
 | 2025-12-16 | feature | [implement always on top status bar](2025-12-16__feature__implement-always-on-top-status-bar.md) |
 | 2025-12-16 | bugfix | [fix duplicate process single instance](2025-12-16__bugfix__fix-duplicate-process-single-instance.md) |

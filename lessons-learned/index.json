@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-16T22:19:53.621Z",
-  "count": 12,
+  "last_updated": "2025-12-17T01:26:12.166Z",
+  "count": 13,
   "entries": [
+    {
+      "id": "2025-12-17__feature__webhook-url-actions",
+      "file": "2025-12-17__feature__webhook-url-actions.md",
+      "title": "webhook-url-actions",
+      "date": "2025-12-17",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Extended Webhook Actions to support URL and SMART_URL modes that open URLs in Chrome or perform Google searches from highlighted text",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-16__fix__duplicate-process-single-instance",
       "file": "2025-12-16__fix__duplicate-process-single-instance.md",

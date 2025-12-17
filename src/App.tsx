@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
@@ -7,6 +7,7 @@ import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import RecordingIndicator from "./components/RecordingIndicator";
+import Toast, { ToastMessage } from "./components/Toast";
 import type { WebhookAction } from "./types";
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
@@ -14,6 +15,42 @@ import type { WebhookAction } from "./types";
 const DEFAULT_RECORD_HOTKEY = "Control+Space";
 const DEFAULT_AI_TRANSFORM_HOTKEY = "Control+Backquote";
 const MIN_AI_TRANSFORM_RECORDING_MS = 300; // Minimum recording time to prevent immediate stop
+const DEBOUNCE_MS = 500; // Debounce time to prevent spam opens
+
+/**
+ * Normalize a string into a URL.
+ * - If empty → null (error)
+ * - If starts with http://, https://, file:// → use as-is
+ * - If looks like a host/path (contains dot, no spaces, or localhost/IP) → prepend https://
+ * - Otherwise → Google search URL
+ */
+function normalizeToUrl(text: string): { url: string; isSearch: boolean } | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  // Already a valid URL scheme
+  if (/^(https?|file):\/\//i.test(trimmed)) {
+    return { url: trimmed, isSearch: false };
+  }
+
+  // Check if it looks like a URL (host/path pattern)
+  // - Contains a dot and no spaces (e.g., "example.com", "foo.bar/baz")
+  // - OR matches localhost/IP patterns (e.g., "localhost:3000", "127.0.0.1:4000")
+  const looksLikeUrl =
+    (/^[^\s]+\.[^\s]+$/.test(trimmed) && !trimmed.includes(" ")) ||
+    /^localhost(:\d+)?/i.test(trimmed) ||
+    /^(\d{1,3}\.){3}\d{1,3}(:\d+)?/.test(trimmed);
+
+  if (looksLikeUrl) {
+    return { url: `https://${trimmed}`, isSearch: false };
+  }
+
+  // Otherwise, treat as a search query
+  return {
+    url: `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`,
+    isSearch: true,
+  };
+}
 
 function App() {
   const initialize = useAppStore((state) => state.initialize);
@@ -27,6 +64,19 @@ function App() {
   const registeredWebhookHotkeys = useRef<string[]>([]);
   const aiTransformClipboardText = useRef<string>("");
   const aiTransformStartTime = useRef<number>(0);
+
+  // Toast notification state
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const showToast = useCallback((message: string, type: "error" | "success" | "info" = "error") => {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, message, type }]);
+  }, []);
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // Debounce tracking for hotkey actions (prevents spam opens)
+  const actionLastRunRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     initialize();
@@ -449,10 +499,130 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Handle webhook action execution
+  // Handle hotkey action execution (webhooks, URL, SMART_URL)
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {
-    console.log(`Webhook: executing action "${action.name}"`);
+    console.log(`Action: executing "${action.name}" (${action.method})`);
 
+    // Debounce check - prevent spam execution
+    const now = Date.now();
+    const lastRun = actionLastRunRef.current.get(action.id) || 0;
+    if (now - lastRun < DEBOUNCE_MS) {
+      console.log(`Action: debounced (${now - lastRun}ms < ${DEBOUNCE_MS}ms)`);
+      return;
+    }
+    actionLastRunRef.current.set(action.id, now);
+
+    const currentSettings = useAppStore.getState().settings;
+
+    // ========== URL MODE ==========
+    if (action.method === "URL") {
+      // Normalize the preset URL
+      const normalized = normalizeToUrl(action.webhookUrl);
+      if (!normalized) {
+        console.error("URL action: Invalid or empty URL");
+        showToast("URL is invalid or empty", "error");
+        return;
+      }
+
+      // Play sound if enabled
+      if (currentSettings.audioEnabled) {
+        invoke("play_sound", { soundType: "start" }).catch(console.error);
+      }
+
+      // Open the URL
+      try {
+        const result = await invoke<{
+          success: boolean;
+          opened_with: string;
+          error: string | null;
+        }>("open_url_in_chrome", { url: normalized.url });
+
+        if (result.success) {
+          console.log(`URL action: opened in ${result.opened_with}`);
+          // Log to history
+          useAppStore.getState().addTranscription({
+            id: crypto.randomUUID(),
+            text: `[URL Open - ${action.name}] ${normalized.url}`,
+            durationMs: 0,
+            language: "en",
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          console.error("URL action failed:", result.error);
+          showToast(result.error || "Failed to open URL", "error");
+        }
+      } catch (error) {
+        console.error("URL action error:", error);
+        showToast(`Failed to open URL: ${error}`, "error");
+      }
+      return;
+    }
+
+    // ========== SMART_URL MODE ==========
+    if (action.method === "SMART_URL") {
+      // Copy selected text
+      let selectedText: string;
+      try {
+        console.log("SMART_URL: copying selected text...");
+        await invoke("simulate_copy");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        selectedText = await invoke<string>("get_clipboard_text");
+      } catch (error) {
+        console.error("SMART_URL: Failed to copy selected text:", error);
+        showToast("Failed to copy selected text", "error");
+        return;
+      }
+
+      if (!selectedText || selectedText.trim() === "") {
+        console.log("SMART_URL: No text selected");
+        showToast("No text selected", "error");
+        return;
+      }
+
+      // Normalize the selected text
+      const normalized = normalizeToUrl(selectedText);
+      if (!normalized) {
+        showToast("Invalid selection", "error");
+        return;
+      }
+
+      // Play sound if enabled
+      if (currentSettings.audioEnabled) {
+        invoke("play_sound", { soundType: "start" }).catch(console.error);
+      }
+
+      // Open the URL
+      try {
+        const result = await invoke<{
+          success: boolean;
+          opened_with: string;
+          error: string | null;
+        }>("open_url_in_chrome", { url: normalized.url });
+
+        if (result.success) {
+          console.log(`SMART_URL: opened ${normalized.isSearch ? "search" : "URL"} in ${result.opened_with}`);
+          // Log to history
+          useAppStore.getState().addTranscription({
+            id: crypto.randomUUID(),
+            text: normalized.isSearch
+              ? `[Smart URL - ${action.name}] Search: ${selectedText.trim()}`
+              : `[Smart URL - ${action.name}] ${normalized.url}`,
+            durationMs: 0,
+            language: "en",
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          console.error("SMART_URL action failed:", result.error);
+          showToast(result.error || "Failed to open URL", "error");
+        }
+      } catch (error) {
+        console.error("SMART_URL action error:", error);
+        showToast(`Failed to open URL: ${error}`, "error");
+      }
+      return;
+    }
+
+    // ========== WEBHOOK MODE (POST/GET) ==========
     // Copy selected text using the same approach as AI Transform (which works)
     // This triggers on Pressed, so the selection is still active
     let selectedText: string;
@@ -467,19 +637,20 @@ function App() {
       selectedText = await invoke<string>("get_clipboard_text");
     } catch (error) {
       console.error("Webhook: Failed to copy selected text:", error);
+      showToast("Failed to copy selected text", "error");
       return;
     }
 
     if (!selectedText || selectedText.trim() === "") {
       console.log("Webhook: No text selected - nothing to send");
+      showToast("No text selected", "error");
       return;
     }
 
     console.log(`Webhook: captured ${selectedText.length} chars from selection`);
 
     // Play a sound to indicate transform started
-    const settings = useAppStore.getState().settings;
-    if (settings.audioEnabled) {
+    if (currentSettings.audioEnabled) {
       invoke("play_sound", { soundType: "start" }).catch(console.error);
     }
 
@@ -508,29 +679,31 @@ function App() {
         await invoke("paste_text");
 
         // Play success sound
-        if (settings.audioEnabled) {
+        if (currentSettings.audioEnabled) {
           invoke("play_sound", { soundType: "stop" }).catch(console.error);
         }
 
         console.log("Webhook: transform complete and pasted");
       } else {
         console.error("Webhook: request failed -", result.error);
+        showToast(result.error || "Webhook request failed", "error");
       }
     } catch (error) {
       console.error("Webhook: HTTP request error -", error);
+      showToast(`Webhook error: ${error}`, "error");
     }
-  }, []);
+  }, [showToast]);
 
-  // Register webhook hotkeys
+  // Register hotkey actions (webhooks, URL, SMART_URL)
   useEffect(() => {
     const setupWebhookHotkeys = async () => {
-      // Unregister any previously registered webhook hotkeys
+      // Unregister any previously registered hotkeys
       for (const hotkey of registeredWebhookHotkeys.current) {
         try {
           const isReg = await isRegistered(hotkey);
           if (isReg) {
             await unregister(hotkey);
-            console.log(`Unregistered webhook hotkey: ${hotkey}`);
+            console.log(`Unregistered action hotkey: ${hotkey}`);
           }
         } catch (e) {
           console.error(`Failed to unregister hotkey ${hotkey}:`, e);
@@ -538,9 +711,16 @@ function App() {
       }
       registeredWebhookHotkeys.current = [];
 
-      // Register new webhook hotkeys
+      // Register new action hotkeys
       for (const action of webhookActions) {
-        if (!action.enabled || !action.hotkey || !action.webhookUrl) continue;
+        // Check if action should be registered:
+        // - Must be enabled and have a hotkey
+        // - For POST/GET/URL: must have webhookUrl
+        // - For SMART_URL: no webhookUrl required
+        if (!action.enabled || !action.hotkey) continue;
+        if ((action.method === "POST" || action.method === "GET" || action.method === "URL") && !action.webhookUrl) {
+          continue;
+        }
 
         try {
           const isReg = await isRegistered(action.hotkey);
@@ -553,7 +733,7 @@ function App() {
             // This ensures the selection is still active before the editor processes the chord
             if (event.state === "Pressed") {
               // Get fresh action data in case it was updated
-              const currentActions = useAppStore.getState().settings.webhookActions;
+              const currentActions = useAppStore.getState().settings.webhookActions ?? [];
               const currentAction = currentActions.find((a) => a.id === action.id);
               if (currentAction && currentAction.enabled) {
                 executeWebhookAction(currentAction);
@@ -562,9 +742,9 @@ function App() {
           });
 
           registeredWebhookHotkeys.current.push(action.hotkey);
-          console.log(`Registered webhook hotkey: ${action.hotkey} -> ${action.name}`);
+          console.log(`Registered action hotkey: ${action.hotkey} -> ${action.name} (${action.method})`);
         } catch (error) {
-          console.error(`Failed to register webhook hotkey ${action.hotkey}:`, error);
+          console.error(`Failed to register action hotkey ${action.hotkey}:`, error);
         }
       }
     };
@@ -586,6 +766,7 @@ function App() {
       <HistoryPanel />
       <SettingsPanel />
       <RecordingIndicator />
+      <Toast messages={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
