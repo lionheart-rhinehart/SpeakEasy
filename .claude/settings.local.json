@@ -34,7 +34,9 @@
       "Bash(cd:*)",
       "Bash(winget install:*)",
       "Bash(dir:*)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

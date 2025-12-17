@@ -1,13 +1,14 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-17T18:21:56.034Z
+Updated: 2025-12-17T19:12:24.084Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
 | 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |
+| 2025-12-17 | feature | [prompt actions hotkey llm](2025-12-17__feature__prompt-actions-hotkey-llm.md) |
 | 2025-12-17 | feature | [file based settings persistence](2025-12-17__feature__file-based-settings-persistence.md) |
 | 2025-12-17 | feature | [chrome profile chooser for url hotkeys](2025-12-17__feature__chrome-profile-chooser-for-url-hotkeys.md) |
 | 2025-12-17 | devops | [debug hidden instance](2025-12-17__devops__debug-hidden-instance.md) |

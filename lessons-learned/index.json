@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-17T18:21:56.038Z",
-  "count": 18,
+  "last_updated": "2025-12-17T19:12:24.090Z",
+  "count": 19,
   "entries": [
     {
       "id": "2025-12-17__feature__webhook-url-actions",
@@ -13,6 +13,19 @@
         "feature"
       ],
       "summary": "Extended Webhook Actions to support URL and SMART_URL modes that open URLs in Chrome or perform Google searches from highlighted text",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-17__feature__prompt-actions-hotkey-llm",
+      "file": "2025-12-17__feature__prompt-actions-hotkey-llm.md",
+      "title": "prompt-actions-hotkey-llm",
+      "date": "2025-12-17",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Added Prompt Actions feature for hotkey-triggered LLM transforms with stored prompts, bypassing webhooks and voice",
       "problem": "",
       "fix": ""
     },

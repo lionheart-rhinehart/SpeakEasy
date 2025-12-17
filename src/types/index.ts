@@ -62,6 +62,9 @@ export interface UserSettings {
   
   // Webhook actions
   webhookActions: WebhookAction[];
+
+  // Prompt actions (LLM-based transforms with stored prompts)
+  promptActions: PromptAction[];
 }
 
 // API key status from backend (does not contain the actual key)
@@ -99,6 +102,16 @@ export interface WebhookAction {
   // Chrome profile targeting (for URL method)
   // When true, shows a profile chooser before opening the URL
   askChromeProfile?: boolean;
+}
+
+// Prompt Action for LLM-based transforms with stored prompts
+// Bypasses webhooks and voice - directly applies a stored prompt to selected text
+export interface PromptAction {
+  id: string;
+  name: string;           // e.g., "Add Emojis", "Fix Grammar"
+  hotkey: string;         // e.g., "Control+Shift+E"
+  prompt: string;         // The stored prompt, use {{text}} for selected text placeholder
+  enabled: boolean;
 }
 
 // Chrome profile info returned from backend
@@ -141,6 +154,14 @@ export interface FileWebhookAction {
   ask_chrome_profile?: boolean;
 }
 
+export interface FilePromptAction {
+  id: string;
+  name: string;
+  hotkey: string;
+  prompt: string;
+  enabled: boolean;
+}
+
 export interface FileUserSettings {
   settings_version?: number;
   hotkey_record: string;
@@ -161,4 +182,5 @@ export interface FileUserSettings {
   transform_temperature: number;
   transform_max_tokens: number;
   webhook_actions: FileWebhookAction[];
+  prompt_actions?: FilePromptAction[];  // Optional for backward compatibility
 }

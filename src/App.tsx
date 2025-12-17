@@ -9,7 +9,7 @@ import SettingsPanel from "./components/SettingsPanel";
 import RecordingIndicator from "./components/RecordingIndicator";
 import Toast, { ToastMessage } from "./components/Toast";
 import ProfileChooserModal from "./components/ProfileChooserModal";
-import type { WebhookAction, ChromeProfile } from "./types";
+import type { WebhookAction, PromptAction, ChromeProfile } from "./types";
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
 // These are now just fallbacks - actual hotkeys come from settings
@@ -58,6 +58,7 @@ function App() {
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const settings = useAppStore((state) => state.settings);
   const webhookActions = useMemo(() => settings.webhookActions ?? [], [settings.webhookActions]);
+  const promptActions = useMemo(() => settings.promptActions ?? [], [settings.promptActions]);
   const hotkeyRecord = settings.hotkeyRecord || DEFAULT_RECORD_HOTKEY;
   const hotkeyAiTransform = settings.hotkeyAiTransform || DEFAULT_AI_TRANSFORM_HOTKEY;
   const registeredRecordHotkey = useRef<string>("");
@@ -490,6 +491,113 @@ function App() {
     };
   }, [hotkeyAiTransform]);
 
+  // Handle prompt action execution (LLM-based transforms with stored prompts)
+  const executePromptAction = useCallback(async (action: PromptAction) => {
+    console.log(`Prompt Action: executing "${action.name}"`);
+
+    // Debounce check - prevent spam execution
+    const now = Date.now();
+    const lastRun = actionLastRunRef.current.get(action.id) || 0;
+    if (now - lastRun < DEBOUNCE_MS) {
+      console.log(`Prompt Action: debounced (${now - lastRun}ms < ${DEBOUNCE_MS}ms)`);
+      return;
+    }
+    actionLastRunRef.current.set(action.id, now);
+
+    const currentSettings = useAppStore.getState().settings;
+
+    // Copy selected text using the same approach as webhook actions
+    let selectedText: string;
+    try {
+      console.log("Prompt Action: copying selected text...");
+      await invoke("simulate_copy");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      selectedText = await invoke<string>("get_clipboard_text");
+    } catch (error) {
+      console.error("Prompt Action: Failed to copy selected text:", error);
+      showToast("Failed to copy selected text", "error");
+      return;
+    }
+
+    if (!selectedText || selectedText.trim() === "") {
+      console.log("Prompt Action: No text selected");
+      showToast("No text selected", "error");
+      return;
+    }
+
+    console.log(`Prompt Action: captured ${selectedText.length} chars from selection`);
+
+    // Play sound to indicate transform started
+    if (currentSettings.audioEnabled) {
+      invoke("play_sound", { soundType: "start" }).catch(console.error);
+    }
+
+    // Process the prompt: replace {{text}} placeholder or append text
+    let finalInstruction: string;
+    if (action.prompt.includes("{{text}}")) {
+      finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
+    } else {
+      // No placeholder - append text to end of prompt
+      finalInstruction = `${action.prompt}\n\n${selectedText}`;
+    }
+
+    console.log(`Prompt Action: using prompt template, final instruction length: ${finalInstruction.length}`);
+
+    // Call LLM transform using global settings
+    try {
+      const result = await invoke<{
+        success: boolean;
+        output_text: string | null;
+        error: string | null;
+        error_type: string | null;
+        provider: string | null;
+        model: string | null;
+      }>("transform_with_llm", {
+        provider: currentSettings.transformProvider,
+        model: currentSettings.transformModel,
+        inputText: selectedText,
+        instruction: finalInstruction,
+        temperature: currentSettings.transformTemperature ?? 0.7,
+        maxTokens: currentSettings.transformMaxTokens ?? 4096,
+      });
+
+      if (result.success && result.output_text) {
+        console.log(`Prompt Action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
+
+        // Copy to clipboard and paste
+        await invoke("copy_to_clipboard", { text: result.output_text });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await invoke("paste_text");
+
+        // Play success sound
+        if (currentSettings.audioEnabled) {
+          invoke("play_sound", { soundType: "stop" }).catch(console.error);
+        }
+
+        // Add to history
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Prompt: ${action.name}] ${result.output_text.substring(0, 100)}${result.output_text.length > 100 ? "..." : ""}`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
+
+        console.log("Prompt Action: transform complete and pasted");
+      } else {
+        console.error("Prompt Action failed:", result.error);
+        if (result.error_type === "NoApiKey") {
+          showToast("No API key set for AI Transform - configure in Settings", "error");
+        } else {
+          showToast(result.error || "Prompt action failed", "error");
+        }
+      }
+    } catch (error) {
+      console.error("Prompt Action error:", error);
+      showToast(`Prompt action error: ${error}`, "error");
+    }
+  }, [showToast]);
+
   // Handle hotkey action execution (webhooks, URL, SMART_URL)
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {
     console.log(`Action: executing "${action.name}" (${action.method})`);
@@ -713,9 +821,9 @@ function App() {
     }
   }, [showToast]);
 
-  // Register hotkey actions (webhooks, URL, SMART_URL)
+  // Register hotkey actions (webhooks, URL, SMART_URL, and prompt actions)
   useEffect(() => {
-    const setupWebhookHotkeys = async () => {
+    const setupActionHotkeys = async () => {
       // Unregister any previously registered hotkeys
       for (const hotkey of registeredWebhookHotkeys.current) {
         try {
@@ -730,7 +838,7 @@ function App() {
       }
       registeredWebhookHotkeys.current = [];
 
-      // Register new action hotkeys
+      // Register webhook action hotkeys
       for (const action of webhookActions) {
         // Check if action should be registered:
         // - Must be enabled and have a hotkey
@@ -761,23 +869,51 @@ function App() {
           });
 
           registeredWebhookHotkeys.current.push(action.hotkey);
-          console.log(`Registered action hotkey: ${action.hotkey} -> ${action.name} (${action.method})`);
+          console.log(`Registered webhook hotkey: ${action.hotkey} -> ${action.name} (${action.method})`);
         } catch (error) {
-          console.error(`Failed to register action hotkey ${action.hotkey}:`, error);
+          console.error(`Failed to register webhook hotkey ${action.hotkey}:`, error);
+        }
+      }
+
+      // Register prompt action hotkeys
+      for (const action of promptActions) {
+        if (!action.enabled || !action.hotkey || !action.prompt) continue;
+
+        try {
+          const isReg = await isRegistered(action.hotkey);
+          if (isReg) {
+            await unregister(action.hotkey);
+          }
+
+          await register(action.hotkey, async (event) => {
+            if (event.state === "Pressed") {
+              // Get fresh action data in case it was updated
+              const currentActions = useAppStore.getState().settings.promptActions ?? [];
+              const currentAction = currentActions.find((a) => a.id === action.id);
+              if (currentAction && currentAction.enabled) {
+                executePromptAction(currentAction);
+              }
+            }
+          });
+
+          registeredWebhookHotkeys.current.push(action.hotkey);
+          console.log(`Registered prompt hotkey: ${action.hotkey} -> ${action.name}`);
+        } catch (error) {
+          console.error(`Failed to register prompt hotkey ${action.hotkey}:`, error);
         }
       }
     };
 
-    setupWebhookHotkeys();
+    setupActionHotkeys();
 
-    // Cleanup on unmount or when webhookActions changes
+    // Cleanup on unmount or when actions change
     return () => {
       for (const hotkey of registeredWebhookHotkeys.current) {
         unregister(hotkey).catch(console.error);
       }
       registeredWebhookHotkeys.current = [];
     };
-  }, [webhookActions, executeWebhookAction]);
+  }, [webhookActions, promptActions, executeWebhookAction, executePromptAction]);
 
   // Handle profile selection from the chooser modal
   const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {

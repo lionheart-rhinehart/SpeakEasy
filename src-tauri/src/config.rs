@@ -25,6 +25,17 @@ pub struct WebhookAction {
     pub ask_chrome_profile: Option<bool>,
 }
 
+/// Prompt action configuration for LLM-based transforms with stored prompts
+/// These bypass webhooks and voice - directly apply a stored prompt to selected text
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PromptAction {
+    pub id: String,
+    pub name: String,
+    pub hotkey: String,
+    pub prompt: String, // The stored prompt, use {{text}} for selected text placeholder
+    pub enabled: bool,
+}
+
 /// User settings that survive app reinstalls
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserSettings {
@@ -74,6 +85,10 @@ pub struct UserSettings {
     // Webhook actions
     #[serde(default)]
     pub webhook_actions: Vec<WebhookAction>,
+
+    // Prompt actions (LLM-based transforms with stored prompts)
+    #[serde(default)]
+    pub prompt_actions: Vec<PromptAction>,
 }
 
 // Default value functions for UserSettings
@@ -139,6 +154,7 @@ impl Default for UserSettings {
             transform_temperature: default_transform_temperature(),
             transform_max_tokens: default_transform_max_tokens(),
             webhook_actions: Vec::new(),
+            prompt_actions: Vec::new(),
         }
     }
 }

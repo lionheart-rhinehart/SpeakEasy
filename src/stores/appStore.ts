@@ -9,7 +9,9 @@ import type {
   VocabularyEntry,
   FileUserSettings,
   FileWebhookAction,
+  FilePromptAction,
   WebhookAction,
+  PromptAction,
   AutoPasteMode,
   DisplayMode,
   TransformProvider,
@@ -46,6 +48,26 @@ function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
   };
 }
 
+function convertPromptToSnakeCase(action: PromptAction): FilePromptAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    prompt: action.prompt,
+    enabled: action.enabled,
+  };
+}
+
+function convertPromptToCamelCase(action: FilePromptAction): PromptAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    prompt: action.prompt,
+    enabled: action.enabled,
+  };
+}
+
 function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
   return {
     settings_version: settings.settingsVersion ?? SETTINGS_SCHEMA_VERSION,
@@ -67,6 +89,7 @@ function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
     transform_temperature: settings.transformTemperature ?? 0.7,
     transform_max_tokens: settings.transformMaxTokens ?? 4096,
     webhook_actions: settings.webhookActions.map(convertWebhookToSnakeCase),
+    prompt_actions: settings.promptActions.map(convertPromptToSnakeCase),
   };
 }
 
@@ -91,6 +114,7 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     transformTemperature: fileSettings.transform_temperature,
     transformMaxTokens: fileSettings.transform_max_tokens,
     webhookActions: fileSettings.webhook_actions.map(convertWebhookToCamelCase),
+    promptActions: (fileSettings.prompt_actions ?? []).map(convertPromptToCamelCase),
   };
 }
 
@@ -222,9 +246,12 @@ const defaultSettings: UserSettings = {
   transformModel: "openai/gpt-4o-mini", // OpenRouter model ID format
   transformTemperature: 0.7,
   transformMaxTokens: 4096,
-  
+
   // Webhook actions
   webhookActions: [],
+
+  // Prompt actions (LLM-based transforms with stored prompts)
+  promptActions: [],
 };
 
 /**
