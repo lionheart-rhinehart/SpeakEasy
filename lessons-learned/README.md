@@ -1,7 +1,7 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-17T20:20:41.291Z
+Updated: 2025-12-17T22:29:41.142Z
 
 ## Entries
 
@@ -13,6 +13,7 @@ Updated: 2025-12-17T20:20:41.291Z
 | 2025-12-17 | feature | [file based settings persistence](2025-12-17__feature__file-based-settings-persistence.md) |
 | 2025-12-17 | feature | [chrome profile chooser for url hotkeys](2025-12-17__feature__chrome-profile-chooser-for-url-hotkeys.md) |
 | 2025-12-17 | devops | [debug hidden instance](2025-12-17__devops__debug-hidden-instance.md) |
+| 2025-12-17 | bugfix | [fix profile chooser zorder](2025-12-17__bugfix__fix-profile-chooser-zorder.md) |
 | 2025-12-17 | bugfix | [fix overlay zorder subclassing](2025-12-17__bugfix__fix-overlay-zorder-subclassing.md) |
 | 2025-12-17 | bugfix | [fix claude code notification hooks](2025-12-17__bugfix__fix-claude-code-notification-hooks.md) |
 | 2025-12-16 | fix | [duplicate process single instance](2025-12-16__fix__duplicate-process-single-instance.md) |

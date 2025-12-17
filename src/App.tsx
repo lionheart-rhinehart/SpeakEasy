@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAppStore } from "./stores/appStore";
 import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
@@ -641,6 +642,12 @@ function App() {
             // Show profile chooser modal
             setChromeProfiles(profiles);
             setPendingUrlAction({ action, url: normalized.url });
+
+            // Bring main window to foreground so user can see the modal
+            const mainWindow = getCurrentWindow();
+            await mainWindow.show();
+            await mainWindow.setFocus();
+
             setProfileChooserOpen(true);
             return; // Don't open yet - wait for user selection
           }
