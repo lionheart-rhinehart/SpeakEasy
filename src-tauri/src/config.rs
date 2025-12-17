@@ -1,10 +1,149 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 // Current schema version for migrations
 const USAGE_SCHEMA_VERSION: u32 = 2;
+const SETTINGS_SCHEMA_VERSION: u32 = 2;
+
+// ==================== User Settings (persisted to file) ====================
+
+/// Webhook action configuration (matches frontend WebhookAction interface)
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct WebhookAction {
+    pub id: String,
+    pub name: String,
+    pub hotkey: String,
+    pub webhook_url: String,
+    pub method: String, // "POST" | "GET" | "URL" | "SMART_URL"
+    #[serde(default)]
+    pub headers: Option<HashMap<String, String>>,
+    pub enabled: bool,
+    #[serde(default)]
+    pub ask_chrome_profile: Option<bool>,
+}
+
+/// User settings that survive app reinstalls
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserSettings {
+    #[serde(default = "default_settings_version")]
+    pub settings_version: u32,
+
+    // Hotkeys
+    #[serde(default = "default_hotkey_record")]
+    pub hotkey_record: String,
+    #[serde(default = "default_hotkey_ai_transform")]
+    pub hotkey_ai_transform: String,
+    #[serde(default = "default_hotkey_history")]
+    pub hotkey_history: String,
+
+    // Transcription settings
+    #[serde(default = "default_auto_paste_mode")]
+    pub auto_paste_mode: String, // "always" | "smart" | "never"
+    #[serde(default = "default_display_mode")]
+    pub display_mode: String, // "direct" | "toast" | "edit"
+    #[serde(default = "default_language")]
+    pub language: String,
+    #[serde(default)]
+    pub translate_to_english: bool,
+    #[serde(default = "default_true")]
+    pub audio_enabled: bool,
+    #[serde(default)]
+    pub floating_indicator: bool,
+    #[serde(default = "default_history_limit")]
+    pub history_limit_mb: u32,
+    #[serde(default)]
+    pub start_on_boot: bool,
+    #[serde(default = "default_true")]
+    pub start_minimized: bool,
+    #[serde(default)]
+    pub selected_microphone: Option<String>,
+
+    // Transform settings
+    #[serde(default = "default_transform_provider")]
+    pub transform_provider: String,
+    #[serde(default = "default_transform_model")]
+    pub transform_model: String,
+    #[serde(default = "default_transform_temperature")]
+    pub transform_temperature: f64,
+    #[serde(default = "default_transform_max_tokens")]
+    pub transform_max_tokens: u32,
+
+    // Webhook actions
+    #[serde(default)]
+    pub webhook_actions: Vec<WebhookAction>,
+}
+
+// Default value functions for UserSettings
+fn default_settings_version() -> u32 {
+    SETTINGS_SCHEMA_VERSION
+}
+fn default_hotkey_record() -> String {
+    "Control+Space".to_string()
+}
+fn default_hotkey_ai_transform() -> String {
+    "Control+Backquote".to_string()
+}
+fn default_hotkey_history() -> String {
+    "Control+H".to_string()
+}
+fn default_auto_paste_mode() -> String {
+    "smart".to_string()
+}
+fn default_display_mode() -> String {
+    "direct".to_string()
+}
+fn default_language() -> String {
+    "en".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_history_limit() -> u32 {
+    10
+}
+fn default_transform_provider() -> String {
+    "openrouter".to_string()
+}
+fn default_transform_model() -> String {
+    "openai/gpt-4o-mini".to_string()
+}
+fn default_transform_temperature() -> f64 {
+    0.7
+}
+fn default_transform_max_tokens() -> u32 {
+    4096
+}
+
+impl Default for UserSettings {
+    fn default() -> Self {
+        Self {
+            settings_version: SETTINGS_SCHEMA_VERSION,
+            hotkey_record: default_hotkey_record(),
+            hotkey_ai_transform: default_hotkey_ai_transform(),
+            hotkey_history: default_hotkey_history(),
+            auto_paste_mode: default_auto_paste_mode(),
+            display_mode: default_display_mode(),
+            language: default_language(),
+            translate_to_english: false,
+            audio_enabled: true,
+            floating_indicator: false,
+            history_limit_mb: default_history_limit(),
+            start_on_boot: false,
+            start_minimized: true,
+            selected_microphone: None,
+            transform_provider: default_transform_provider(),
+            transform_model: default_transform_model(),
+            transform_temperature: default_transform_temperature(),
+            transform_max_tokens: default_transform_max_tokens(),
+            webhook_actions: Vec::new(),
+        }
+    }
+}
+
+// ==================== Usage Stats ====================
 
 // OpenAI pricing constants (as of Dec 2024)
 pub const WHISPER_PRICE_PER_MINUTE: f64 = 0.006;
@@ -191,6 +330,8 @@ pub struct AppConfig {
     pub selected_device: Option<String>,
     #[serde(default)]
     pub usage: UsageStats,
+    #[serde(default)]
+    pub user_settings: Option<UserSettings>,
 }
 
 fn get_config_path() -> Result<PathBuf> {
@@ -232,6 +373,21 @@ pub fn save_api_key(api_key: &str) -> Result<()> {
 
 pub fn get_api_key() -> Option<String> {
     load_config().api_key
+}
+
+/// Load user settings from file-based config
+pub fn load_user_settings() -> UserSettings {
+    let config = load_config();
+    config.user_settings.unwrap_or_default()
+}
+
+/// Save user settings to file-based config
+pub fn save_user_settings(settings: &UserSettings) -> Result<()> {
+    let mut config = load_config();
+    config.user_settings = Some(settings.clone());
+    save_config(&config)?;
+    log::info!("User settings saved to config file");
+    Ok(())
 }
 
 /// Legacy function for backward compatibility - records transcription usage

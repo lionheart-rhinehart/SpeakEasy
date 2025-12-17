@@ -1,13 +1,157 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   User,
   UserSettings,
   Transcription,
   RecordingState,
   VocabularyEntry,
+  FileUserSettings,
+  FileWebhookAction,
+  WebhookAction,
+  AutoPasteMode,
+  DisplayMode,
+  TransformProvider,
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
+
+// ============================================================================
+// Settings conversion helpers (camelCase <-> snake_case for Rust interop)
+// ============================================================================
+
+function convertWebhookToSnakeCase(action: WebhookAction): FileWebhookAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    webhook_url: action.webhookUrl,
+    method: action.method,
+    headers: action.headers,
+    enabled: action.enabled,
+    ask_chrome_profile: action.askChromeProfile,
+  };
+}
+
+function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    webhookUrl: action.webhook_url,
+    method: action.method as WebhookAction["method"],
+    headers: action.headers,
+    enabled: action.enabled,
+    askChromeProfile: action.ask_chrome_profile,
+  };
+}
+
+function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
+  return {
+    settings_version: settings.settingsVersion ?? SETTINGS_SCHEMA_VERSION,
+    hotkey_record: settings.hotkeyRecord,
+    hotkey_ai_transform: settings.hotkeyAiTransform,
+    hotkey_history: settings.hotkeyHistory,
+    auto_paste_mode: settings.autoPasteMode,
+    display_mode: settings.displayMode,
+    language: settings.language,
+    translate_to_english: settings.translateToEnglish,
+    audio_enabled: settings.audioEnabled,
+    floating_indicator: settings.floatingIndicator,
+    history_limit_mb: settings.historyLimitMb,
+    start_on_boot: settings.startOnBoot,
+    start_minimized: settings.startMinimized,
+    selected_microphone: settings.selectedMicrophone,
+    transform_provider: settings.transformProvider,
+    transform_model: settings.transformModel,
+    transform_temperature: settings.transformTemperature ?? 0.7,
+    transform_max_tokens: settings.transformMaxTokens ?? 4096,
+    webhook_actions: settings.webhookActions.map(convertWebhookToSnakeCase),
+  };
+}
+
+function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSettings {
+  return {
+    settingsVersion: fileSettings.settings_version ?? SETTINGS_SCHEMA_VERSION,
+    hotkeyRecord: fileSettings.hotkey_record,
+    hotkeyAiTransform: fileSettings.hotkey_ai_transform,
+    hotkeyHistory: fileSettings.hotkey_history,
+    autoPasteMode: fileSettings.auto_paste_mode as AutoPasteMode,
+    displayMode: fileSettings.display_mode as DisplayMode,
+    language: fileSettings.language,
+    translateToEnglish: fileSettings.translate_to_english,
+    audioEnabled: fileSettings.audio_enabled,
+    floatingIndicator: fileSettings.floating_indicator,
+    historyLimitMb: fileSettings.history_limit_mb,
+    startOnBoot: fileSettings.start_on_boot,
+    startMinimized: fileSettings.start_minimized,
+    selectedMicrophone: fileSettings.selected_microphone,
+    transformProvider: fileSettings.transform_provider as TransformProvider,
+    transformModel: fileSettings.transform_model,
+    transformTemperature: fileSettings.transform_temperature,
+    transformMaxTokens: fileSettings.transform_max_tokens,
+    webhookActions: fileSettings.webhook_actions.map(convertWebhookToCamelCase),
+  };
+}
+
+// ============================================================================
+// Debounced settings save to file
+// ============================================================================
+
+let saveSettingsTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedSaveSettingsToFile(settings: UserSettings) {
+  if (saveSettingsTimeout) {
+    clearTimeout(saveSettingsTimeout);
+  }
+  saveSettingsTimeout = setTimeout(async () => {
+    try {
+      const fileSettings = convertSettingsToSnakeCase(settings);
+      await invoke("save_user_settings", { settings: fileSettings });
+      console.log("[Settings] Saved to file");
+    } catch (error) {
+      console.error("[Settings] Failed to save to file:", error);
+    }
+  }, 500); // 500ms debounce
+}
+
+// ============================================================================
+// One-time migration from localStorage to file-based storage
+// ============================================================================
+
+async function migrateSettingsFromLocalStorage(): Promise<void> {
+  const migrationKey = "speakeasy-settings-migrated-to-file-v1";
+
+  // Check if already migrated
+  if (localStorage.getItem(migrationKey)) {
+    return;
+  }
+
+  try {
+    const oldData = localStorage.getItem("speakeasy-storage");
+    if (!oldData) {
+      localStorage.setItem(migrationKey, "true");
+      return;
+    }
+
+    const parsed = JSON.parse(oldData);
+    const oldSettings = parsed.state?.settings;
+
+    if (oldSettings) {
+      console.log("[Settings] Migrating from localStorage to file...");
+
+      // Save to file via Tauri
+      const fileSettings = convertSettingsToSnakeCase(oldSettings);
+      await invoke("save_user_settings", { settings: fileSettings });
+
+      console.log("[Settings] Migration complete - settings now persist to config.json");
+    }
+
+    localStorage.setItem(migrationKey, "true");
+  } catch (error) {
+    console.error("[Settings] Migration failed:", error);
+  }
+}
 
 interface AppState {
   // Auth state
@@ -130,6 +274,21 @@ export const useAppStore = create<AppState>()(
 
       // Actions
       initialize: async () => {
+        try {
+          // First, try to migrate from localStorage (one-time)
+          await migrateSettingsFromLocalStorage();
+
+          // Load settings from file-based storage
+          const fileSettings = await invoke<FileUserSettings>("load_user_settings");
+          const settings = convertSettingsToCamelCase(fileSettings);
+          const migratedSettings = migrateSettings(settings);
+
+          set({ settings: migratedSettings });
+          console.log("[Settings] Loaded from file");
+        } catch (error) {
+          console.error("[Settings] Failed to load from file, using defaults:", error);
+        }
+
         console.log("SpeakEasy initialized");
       },
 
@@ -185,9 +344,12 @@ export const useAppStore = create<AppState>()(
       },
 
       updateSettings: (newSettings) => {
-        set((state) => ({
-          settings: { ...state.settings, ...newSettings },
-        }));
+        set((state) => {
+          const updatedSettings = { ...state.settings, ...newSettings };
+          // Debounced save to file (survives reinstalls)
+          debouncedSaveSettingsToFile(updatedSettings);
+          return { settings: updatedSettings };
+        });
       },
 
       setSettingsOpen: (isSettingsOpen) => {
@@ -214,25 +376,26 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "speakeasy-storage",
+      // NOTE: Settings are NO LONGER stored in localStorage - they persist to file
+      // via config.json which survives app reinstalls. Only transient data lives here.
       partialize: (state) => ({
-        settings: state.settings,
+        // Settings removed - now stored in config.json file (survives reinstalls)
         history: state.history,
         vocabulary: state.vocabulary,
         apiKey: state.apiKey,
       }),
-      // Migrate settings on load to handle schema changes
+      // Merge localStorage data with current state
+      // Settings are loaded separately from file in initialize()
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<AppState>;
-        
-        // Migrate settings if present
-        const migratedSettings = persisted.settings
-          ? migrateSettings(persisted.settings)
-          : currentState.settings;
-        
+
         return {
           ...currentState,
-          ...persisted,
-          settings: migratedSettings,
+          // Only merge non-settings data from localStorage
+          history: persisted.history ?? currentState.history,
+          vocabulary: persisted.vocabulary ?? currentState.vocabulary,
+          apiKey: persisted.apiKey ?? currentState.apiKey,
+          // Settings come from file, not localStorage (set in initialize())
         };
       },
     }

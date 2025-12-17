@@ -1410,3 +1410,18 @@ pub async fn open_url_in_chrome(
     }
 }
 
+// ============================================================================
+// USER SETTINGS PERSISTENCE (File-based, survives reinstalls)
+// ============================================================================
+
+/// Load user settings from file-based config
+#[tauri::command]
+pub fn load_user_settings() -> config::UserSettings {
+    config::load_user_settings()
+}
+
+/// Save user settings to file-based config
+#[tauri::command]
+pub fn save_user_settings(settings: config::UserSettings) -> Result<(), String> {
+    config::save_user_settings(&settings).map_err(|e| e.to_string())
+}

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-17T18:02:00.911Z",
-  "count": 16,
+  "last_updated": "2025-12-17T18:21:56.038Z",
+  "count": 18,
   "entries": [
     {
       "id": "2025-12-17__feature__webhook-url-actions",
@@ -13,6 +13,19 @@
         "feature"
       ],
       "summary": "Extended Webhook Actions to support URL and SMART_URL modes that open URLs in Chrome or perform Google searches from highlighted text",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-17__feature__file-based-settings-persistence",
+      "file": "2025-12-17__feature__file-based-settings-persistence.md",
+      "title": "file-based-settings-persistence",
+      "date": "2025-12-17",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Moved all user settings (hotkeys, webhook actions, preferences) from localStorage to file-based config.json to survive app reinstalls",
       "problem": "",
       "fix": ""
     },
@@ -54,6 +67,19 @@
       "summary": "Fixed recording overlay z-order issue using Windows window subclassing to intercept WM_WINDOWPOSCHANGING and force HWND_TOPMOST",
       "problem": "Recording overlay window disappeared behind other windows despite alwaysOnTop setting - previous fix attempts using SetWindowPos were overridden by other apps",
       "fix": "Implemented window subclassing via SetWindowSubclass to intercept WM_WINDOWPOSCHANGING messages and force HWND_TOPMOST before Windows processes z-order changes - this prevents other apps from overriding the topmost status"
+    },
+    {
+      "id": "2025-12-17__bugfix__fix-claude-code-notification-hooks",
+      "file": "2025-12-17__bugfix__fix-claude-code-notification-hooks.md",
+      "title": "fix-claude-code-notification-hooks",
+      "date": "2025-12-17",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed Claude Code notification sounds by changing invalid Notification hook to valid PermissionRequest and Stop hooks",
+      "problem": "User had configured a Notification hook which is not a valid Claude Code hook event type so no sounds played",
+      "fix": "Changed hook event type from Notification to PermissionRequest and Stop which are valid hook events"
     },
     {
       "id": "2025-12-16__fix__duplicate-process-single-instance",

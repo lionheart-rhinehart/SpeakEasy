@@ -124,3 +124,41 @@ export interface TranscriptionResponse {
   durationMs: number;
   processingTimeMs: number;
 }
+
+// ============================================================================
+// File-based settings (snake_case for Rust interop via Tauri)
+// These interfaces match the Rust UserSettings/WebhookAction structs in config.rs
+// ============================================================================
+
+export interface FileWebhookAction {
+  id: string;
+  name: string;
+  hotkey: string;
+  webhook_url: string;
+  method: string;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  ask_chrome_profile?: boolean;
+}
+
+export interface FileUserSettings {
+  settings_version?: number;
+  hotkey_record: string;
+  hotkey_ai_transform: string;
+  hotkey_history: string;
+  auto_paste_mode: string;
+  display_mode: string;
+  language: string;
+  translate_to_english: boolean;
+  audio_enabled: boolean;
+  floating_indicator: boolean;
+  history_limit_mb: number;
+  start_on_boot: boolean;
+  start_minimized: boolean;
+  selected_microphone: string | null;
+  transform_provider: string;
+  transform_model: string;
+  transform_temperature: number;
+  transform_max_tokens: number;
+  webhook_actions: FileWebhookAction[];
+}

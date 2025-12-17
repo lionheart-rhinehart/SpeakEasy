@@ -219,6 +219,9 @@ pub fn run() {
             // URL opening (Chrome-first) and profile discovery
             commands::open_url_in_chrome,
             commands::list_chrome_profiles,
+            // User settings persistence (file-based, survives reinstalls)
+            commands::load_user_settings,
+            commands::save_user_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
