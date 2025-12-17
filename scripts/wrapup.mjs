@@ -13,7 +13,7 @@
  *   --tags "tag1,tag2"        Comma-separated tags (optional)
  * 
  * Control flags:
- *   --release        Run full Tauri build (heavy)
+ *   --skip-release   Skip full Tauri build (installer) - by default, always builds
  *   --skip-gates     Skip quality gates (lint/typecheck/build)
  *   --skip-rust      Skip Rust checking (cargo check)
  *   --skip-secrets   Skip secret scanning (use if another agent handles secrets)
@@ -410,19 +410,22 @@ function runQualityGates() {
     }
   }
   
-  // Optional: Full Tauri build
-  if (parsedArgs.flags.includes('release')) {
-    logInfo('Running full Tauri build (this may take a while)...');
+  logSuccess('All quality gates passed');
+
+  // Full Tauri release build (creates installer)
+  // This runs by default so the one-click installer is always up to date
+  if (parsedArgs.flags.includes('skip-release')) {
+    logInfo('Skipping Tauri release build (--skip-release flag)');
+  } else {
+    logInfo('Building Tauri release (installer)... this may take a minute');
     try {
-      run('npm run tauri:build');
-      logSuccess('Tauri build passed');
+      run('npm run tauri build');
+      logSuccess('Tauri release build complete - installer ready!');
     } catch (e) {
-      logError('Tauri build failed');
-      throw new Error('Quality gate failed: tauri:build');
+      logError('Tauri release build failed');
+      throw new Error('Release build failed: tauri build');
     }
   }
-  
-  logSuccess('All quality gates passed');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
