@@ -452,6 +452,61 @@ pub async fn emit_voice_review_result(app: AppHandle, result: VoiceReviewResult)
     Ok(())
 }
 
+/// Set main window topmost state.
+/// Used to ensure modals (like profile chooser) appear above all windows.
+#[tauri::command]
+pub async fn set_main_window_topmost(app: AppHandle, enable: bool) -> Result<(), String> {
+    use tauri::Manager;
+
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found")?;
+
+    if enable {
+        // Apply topmost subclass to keep window on top
+        if let Err(e) = crate::window_topmost::apply_topmost_subclass(&main_window) {
+            log::warn!(
+                "[set_main_window_topmost] Failed to apply topmost subclass: {}",
+                e
+            );
+            // Don't fail - continue with set_always_on_top
+        } else {
+            log::info!("[set_main_window_topmost] Applied topmost subclass to main window");
+        }
+
+        // Also explicitly set always_on_top via Tauri API for belt-and-suspenders
+        main_window
+            .set_always_on_top(true)
+            .map_err(|e| e.to_string())?;
+
+        // Bring to front and focus
+        main_window.show().map_err(|e| e.to_string())?;
+        main_window.set_focus().map_err(|e| e.to_string())?;
+
+        log::info!("[set_main_window_topmost] Main window set to topmost");
+    } else {
+        // Remove topmost subclass
+        if let Err(e) = crate::window_topmost::remove_topmost_subclass(&main_window) {
+            log::warn!(
+                "[set_main_window_topmost] Failed to remove topmost subclass: {}",
+                e
+            );
+            // Not critical - continue
+        } else {
+            log::info!("[set_main_window_topmost] Removed topmost subclass from main window");
+        }
+
+        // Remove always_on_top
+        main_window
+            .set_always_on_top(false)
+            .map_err(|e| e.to_string())?;
+
+        log::info!("[set_main_window_topmost] Main window topmost disabled");
+    }
+
+    Ok(())
+}
+
 /// Transcription usage response (for UI)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TranscriptionUsageResponse {

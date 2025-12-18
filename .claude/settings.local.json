@@ -50,7 +50,11 @@
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show --stat 5562168)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 5562168:src-tauri/src/commands.rs)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" diff 678a5cb..5562168 -- src/App.tsx)",
-      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" diff HEAD -- src/App.tsx)"
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" diff HEAD -- src/App.tsx)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" log --oneline --all)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 --stat)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 3c11abb --stat)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 -- src/App.tsx)"
     ],
     "deny": [],
     "ask": []

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T14:36:33.941Z",
-  "count": 27,
+  "last_updated": "2025-12-18T15:01:20.019Z",
+  "count": 28,
   "entries": [
     {
       "id": "2025-12-18__feature__voice-command-hotkeys",
@@ -80,6 +80,19 @@
       "summary": "Fixed voice command review window not working and boosted fuzzy match confidence scores for reliable auto-execution",
       "problem": "Voice review window showed Loading forever due to missing Vite build entry, and confidence scores were too low causing review window to appear when it should auto-execute",
       "fix": "Added voice-review.html to vite.config.ts build inputs, added defensive timeout/escape handlers to VoiceReviewPanel, and boosted fuzzy match confidence ranges from 30-80% to 50-95% for word overlap and 18-60% to 40-85% for Levenshtein"
+    },
+    {
+      "id": "2025-12-18__bugfix__fix-profile-chooser-topmost",
+      "file": "2025-12-18__bugfix__fix-profile-chooser-topmost.md",
+      "title": "fix-profile-chooser-topmost",
+      "date": "2025-12-18",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed Chrome profile chooser appearing behind other windows by applying Win32 topmost subclass to main window while modal is open",
+      "problem": "",
+      "fix": ""
     },
     {
       "id": "2025-12-17__feature__webhook-url-actions",

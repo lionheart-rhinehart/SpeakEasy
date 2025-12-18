@@ -667,16 +667,20 @@ function App() {
           setPendingUrlAction({ action, url: normalized.url });
           setProfileChooserOpen(true);
 
-          // Step 3: Try to bring window to foreground (separate try-catch)
+          // Step 3: Make main window topmost so profile chooser appears above everything
           try {
-            const mainWindow = getCurrentWindow();
-            await mainWindow.show();
-            await mainWindow.setFocus();
-            console.log("Window shown and focused");
-          } catch (windowError) {
-            // Window operations failed, but modal state is already set
-            // The modal should still render when window becomes visible
-            console.error("Failed to show/focus window:", windowError);
+            await invoke("set_main_window_topmost", { enable: true });
+            console.log("Main window set to topmost for profile chooser");
+          } catch (err) {
+            console.error("Failed to set main window topmost:", err);
+            // Fall back to basic show/focus (may not work but try anyway)
+            try {
+              const mainWindow = getCurrentWindow();
+              await mainWindow.show();
+              await mainWindow.setFocus();
+            } catch (e) {
+              console.error("Fallback show/focus also failed:", e);
+            }
           }
 
           console.log("Returning - waiting for user to select profile");
@@ -1085,9 +1089,14 @@ function App() {
     const { action, url } = pendingUrlAction;
     const currentSettings = useAppStore.getState().settings;
 
-    // Close modal
+    // Close modal and remove topmost
     setProfileChooserOpen(false);
     setPendingUrlAction(null);
+
+    // Remove topmost from main window (fire and forget)
+    invoke("set_main_window_topmost", { enable: false }).catch((err) => {
+      console.error("Failed to remove main window topmost:", err);
+    });
 
     // Play sound if enabled
     if (currentSettings.audioEnabled) {
@@ -1129,6 +1138,12 @@ function App() {
   const handleProfileCancel = useCallback(() => {
     setProfileChooserOpen(false);
     setPendingUrlAction(null);
+
+    // Remove topmost from main window (fire and forget)
+    invoke("set_main_window_topmost", { enable: false }).catch((err) => {
+      console.error("Failed to remove main window topmost:", err);
+    });
+
     console.log("Profile chooser cancelled");
   }, []);
 

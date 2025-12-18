@@ -262,6 +262,8 @@ pub fn run() {
             commands::show_voice_review,
             commands::hide_voice_review,
             commands::emit_voice_review_result,
+            // Main window topmost control (for profile chooser modal)
+            commands::set_main_window_topmost,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
