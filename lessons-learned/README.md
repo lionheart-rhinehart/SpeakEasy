@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-17T22:29:41.142Z
+Updated: 2025-12-18T00:11:37.641Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-18 | devops | [nsis delete old shortcut](2025-12-18__devops__nsis-delete-old-shortcut.md) |
 | 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |
 | 2025-12-17 | feature | [unify prompt action dropdown](2025-12-17__feature__unify-prompt-action-dropdown.md) |
 | 2025-12-17 | feature | [prompt actions hotkey llm](2025-12-17__feature__prompt-actions-hotkey-llm.md) |
