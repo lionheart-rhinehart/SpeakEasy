@@ -91,6 +91,14 @@ pub struct UserSettings {
     // Prompt actions (LLM-based transforms with stored prompts)
     #[serde(default)]
     pub prompt_actions: Vec<PromptAction>,
+
+    // Voice command settings
+    #[serde(default = "default_hotkey_voice_command")]
+    pub hotkey_voice_command: String,
+    #[serde(default = "default_true")]
+    pub voice_command_enabled: bool,
+    #[serde(default = "default_voice_command_threshold")]
+    pub voice_command_auto_execute_threshold: f64,
 }
 
 // Default value functions for UserSettings
@@ -133,6 +141,12 @@ fn default_transform_temperature() -> f64 {
 fn default_transform_max_tokens() -> u32 {
     4096
 }
+fn default_hotkey_voice_command() -> String {
+    "Control+Shift+Space".to_string()
+}
+fn default_voice_command_threshold() -> f64 {
+    0.9
+}
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -157,6 +171,9 @@ impl Default for UserSettings {
             transform_max_tokens: default_transform_max_tokens(),
             webhook_actions: Vec::new(),
             prompt_actions: Vec::new(),
+            hotkey_voice_command: default_hotkey_voice_command(),
+            voice_command_enabled: true,
+            voice_command_auto_execute_threshold: default_voice_command_threshold(),
         }
     }
 }

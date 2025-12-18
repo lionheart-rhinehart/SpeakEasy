@@ -37,7 +37,15 @@
       "Bash(git show:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(if [ -f /tmp/claude/tasks/b0f282d.output ])",
+      "Bash(then cat /tmp/claude/tasks/b0f282d.output)",
+      "Bash(else echo \"File not found\")",
+      "Bash(fi)",
+      "Bash(cmd /c \"echo %LOCALAPPDATA%\")",
+      "Bash(git log:*)",
+      "Bash(cmd /c \"powershell -NoProfile -Command \"\"& { $s = New-Object -ComObject WScript.Shell; $lnk = $s.CreateShortcut(''C:\\Users\\lionh\\OneDrive\\Desktop\\SpeakEasy.lnk''); echo $lnk.TargetPath }\"\"\")",
+      "Bash(start \"\" \"D:\\Claude CODE\\SpeakEasy\\src-tauri\\target\\release\\bundle\\nsis\\SpeakEasy_1.0.0_x64-setup.exe\")"
     ],
     "deny": [],
     "ask": []

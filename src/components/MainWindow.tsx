@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import RecordingButton from "./RecordingButton";
+import VoiceCommandButton from "./VoiceCommandButton";
 
 // Helper to display hotkey in user-friendly format
 function formatHotkeyDisplay(hotkey: string): string {
@@ -206,6 +207,18 @@ export default function MainWindow() {
 
         <RecordingButton />
 
+        {/* Voice Command Button */}
+        {settings.voiceCommandEnabled && (
+          <VoiceCommandButton
+            onClick={() => {
+              // Voice command logic is handled in App.tsx via global hotkey
+              // This button is for manual triggering without hotkey
+              const event = new CustomEvent("voice-command-trigger");
+              window.dispatchEvent(event);
+            }}
+          />
+        )}
+
         {/* API Key Status */}
         {apiKey && (
           <button
@@ -244,6 +257,15 @@ export default function MainWindow() {
               {formatHotkeyDisplay(settings.hotkeyAiTransform || "Ctrl+`")}
             </kbd>
           </div>
+          {/* Voice Command hotkey */}
+          {settings.voiceCommandEnabled && (
+            <div className="text-xs text-text-secondary text-center">
+              <span className="text-text-tertiary">Voice Cmd:</span>{" "}
+              <kbd className="px-1.5 py-0.5 bg-purple-100 rounded text-xs font-mono text-purple-700">
+                {formatHotkeyDisplay(settings.hotkeyVoiceCommand || "Ctrl+Shift+Space")}
+              </kbd>
+            </div>
+          )}
           {/* Active webhook hotkeys */}
           {settings.webhookActions?.filter(w => w.enabled).map((webhook) => (
             <div key={webhook.id} className="text-xs text-text-secondary text-center">

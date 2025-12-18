@@ -65,6 +65,11 @@ export interface UserSettings {
 
   // Prompt actions (LLM-based transforms with stored prompts)
   promptActions: PromptAction[];
+
+  // Voice command settings (optional for backward compatibility)
+  hotkeyVoiceCommand?: string;
+  voiceCommandEnabled?: boolean;
+  voiceCommandAutoExecuteThreshold?: number;
 }
 
 // API key status from backend (does not contain the actual key)
@@ -85,6 +90,38 @@ export interface VocabularyEntry {
 
 // Recording state
 export type RecordingState = "idle" | "recording" | "processing" | "error";
+
+// ============================================================================
+// Custom Hotkey Types
+// ============================================================================
+
+// Hotkey modifier keys supported by Tauri global-shortcut plugin
+export type HotkeyModifier = "Control" | "Alt" | "Shift" | "Meta";
+
+// Structured representation of a hotkey combination
+export interface HotkeyDefinition {
+  modifiers: HotkeyModifier[];  // e.g., ["Control", "Shift"]
+  key: string;                   // e.g., "D" or "1" or "Space"
+}
+
+// ============================================================================
+// Voice Command Types
+// ============================================================================
+
+// Represents a main system hotkey (Voice to Text, AI Transform, etc.)
+export interface MainHotkeyAction {
+  type: "main";
+  id: string;
+  name: string;  // e.g., "Voice to Text", "AI Transform"
+  hotkey: string;
+}
+
+// Result of matching spoken text against available actions
+export interface VoiceCommandMatch {
+  action: WebhookAction | PromptAction | MainHotkeyAction;
+  confidence: number;  // 0-1, where 1 = exact match
+  matchType: "exact" | "contains" | "fuzzy";
+}
 
 // Webhook/Hotkey Action for Transform feature
 // method values:
@@ -187,4 +224,8 @@ export interface FileUserSettings {
   transform_max_tokens: number;
   webhook_actions: FileWebhookAction[];
   prompt_actions?: FilePromptAction[];  // Optional for backward compatibility
+  // Voice command settings (optional for backward compatibility)
+  hotkey_voice_command?: string;
+  voice_command_enabled?: boolean;
+  voice_command_auto_execute_threshold?: number;
 }

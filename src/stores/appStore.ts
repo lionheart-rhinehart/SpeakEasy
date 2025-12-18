@@ -92,6 +92,10 @@ function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
     transform_max_tokens: settings.transformMaxTokens ?? 4096,
     webhook_actions: settings.webhookActions.map(convertWebhookToSnakeCase),
     prompt_actions: settings.promptActions.map(convertPromptToSnakeCase),
+    // Voice command settings
+    hotkey_voice_command: settings.hotkeyVoiceCommand ?? "Control+Shift+Space",
+    voice_command_enabled: settings.voiceCommandEnabled ?? true,
+    voice_command_auto_execute_threshold: settings.voiceCommandAutoExecuteThreshold ?? 0.9,
   };
 }
 
@@ -117,6 +121,10 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     transformMaxTokens: fileSettings.transform_max_tokens,
     webhookActions: fileSettings.webhook_actions.map(convertWebhookToCamelCase),
     promptActions: (fileSettings.prompt_actions ?? []).map(convertPromptToCamelCase),
+    // Voice command settings
+    hotkeyVoiceCommand: fileSettings.hotkey_voice_command ?? "Control+Shift+Space",
+    voiceCommandEnabled: fileSettings.voice_command_enabled ?? true,
+    voiceCommandAutoExecuteThreshold: fileSettings.voice_command_auto_execute_threshold ?? 0.9,
   };
 }
 
@@ -207,6 +215,12 @@ interface AppState {
   isHistoryOpen: boolean;
   isCapturingHotkey: boolean;
 
+  // Voice command state
+  globalBusy: boolean;  // Prevents overlapping operations
+  voiceCommandListening: boolean;
+  showVoiceCommandModal: boolean;
+  voiceCommandTranscript: string | null;
+
   // Actions
   initialize: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -221,6 +235,11 @@ interface AppState {
   setCapturingHotkey: (capturing: boolean) => void;
   clearHistory: () => void;
   deleteTranscription: (id: string) => void;
+  // Voice command actions
+  setGlobalBusy: (busy: boolean) => void;
+  setVoiceCommandListening: (listening: boolean) => void;
+  setShowVoiceCommandModal: (show: boolean) => void;
+  setVoiceCommandTranscript: (transcript: string | null) => void;
 }
 
 const defaultSettings: UserSettings = {
@@ -254,6 +273,11 @@ const defaultSettings: UserSettings = {
 
   // Prompt actions (LLM-based transforms with stored prompts)
   promptActions: [],
+
+  // Voice command settings
+  hotkeyVoiceCommand: "Control+Shift+Space",
+  voiceCommandEnabled: true,
+  voiceCommandAutoExecuteThreshold: 0.9,
 };
 
 /**
@@ -300,6 +324,12 @@ export const useAppStore = create<AppState>()(
       isSettingsOpen: false,
       isHistoryOpen: false,
       isCapturingHotkey: false,
+
+      // Voice command state
+      globalBusy: false,
+      voiceCommandListening: false,
+      showVoiceCommandModal: false,
+      voiceCommandTranscript: null,
 
       // Actions
       initialize: async () => {
@@ -405,6 +435,23 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           history: state.history.filter((t) => t.id !== id),
         }));
+      },
+
+      // Voice command actions
+      setGlobalBusy: (globalBusy) => {
+        set({ globalBusy });
+      },
+
+      setVoiceCommandListening: (voiceCommandListening) => {
+        set({ voiceCommandListening });
+      },
+
+      setShowVoiceCommandModal: (showVoiceCommandModal) => {
+        set({ showVoiceCommandModal });
+      },
+
+      setVoiceCommandTranscript: (voiceCommandTranscript) => {
+        set({ voiceCommandTranscript });
       },
     }),
     {

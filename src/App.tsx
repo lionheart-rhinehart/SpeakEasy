@@ -10,13 +10,17 @@ import SettingsPanel from "./components/SettingsPanel";
 import RecordingIndicator from "./components/RecordingIndicator";
 import Toast, { ToastMessage } from "./components/Toast";
 import ProfileChooserModal from "./components/ProfileChooserModal";
-import type { WebhookAction, PromptAction, ChromeProfile } from "./types";
+import VoiceCommandModal from "./components/VoiceCommandModal";
+import { matchVoiceCommand } from "./utils/fuzzyMatch";
+import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
 // These are now just fallbacks - actual hotkeys come from settings
 const DEFAULT_RECORD_HOTKEY = "Control+Space";
 const DEFAULT_AI_TRANSFORM_HOTKEY = "Control+Backquote";
+const DEFAULT_VOICE_COMMAND_HOTKEY = "Control+Shift+Space";
 const MIN_AI_TRANSFORM_RECORDING_MS = 300; // Minimum recording time to prevent immediate stop
+const MIN_VOICE_COMMAND_RECORDING_MS = 200; // Minimum recording time for voice commands
 const DEBOUNCE_MS = 500; // Debounce time to prevent spam opens
 
 /**
@@ -62,11 +66,14 @@ function App() {
   const promptActions = useMemo(() => settings.promptActions ?? [], [settings.promptActions]);
   const hotkeyRecord = settings.hotkeyRecord || DEFAULT_RECORD_HOTKEY;
   const hotkeyAiTransform = settings.hotkeyAiTransform || DEFAULT_AI_TRANSFORM_HOTKEY;
+  const hotkeyVoiceCommand = settings.hotkeyVoiceCommand || DEFAULT_VOICE_COMMAND_HOTKEY;
   const registeredRecordHotkey = useRef<string>("");
   const registeredAiTransformHotkey = useRef<string>("");
+  const registeredVoiceCommandHotkey = useRef<string>("");
   const registeredWebhookHotkeys = useRef<string[]>([]);
   const aiTransformClipboardText = useRef<string>("");
   const aiTransformStartTime = useRef<number>(0);
+  const voiceCommandStartTime = useRef<number>(0);
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -86,6 +93,15 @@ function App() {
   const [chromeProfiles, setChromeProfiles] = useState<ChromeProfile[]>([]);
   const [pendingUrlAction, setPendingUrlAction] = useState<{ action: WebhookAction; url: string } | null>(null);
   const profilesCacheRef = useRef<ChromeProfile[] | null>(null);
+
+  // Voice command state
+  const [voiceCommandModalOpen, setVoiceCommandModalOpen] = useState(false);
+  const [voiceCommandTranscript, setVoiceCommandTranscript] = useState("");
+  const [voiceCommandMatches, setVoiceCommandMatches] = useState<VoiceCommandMatch[]>([]);
+  const voiceCommandListening = useAppStore((state) => state.voiceCommandListening);
+  const setVoiceCommandListening = useAppStore((state) => state.setVoiceCommandListening);
+  const globalBusy = useAppStore((state) => state.globalBusy);
+  const setGlobalBusy = useAppStore((state) => state.setGlobalBusy);
 
   useEffect(() => {
     initialize();
@@ -1094,6 +1110,307 @@ function App() {
     console.log("Profile chooser cancelled");
   }, []);
 
+  // Get all available actions for voice command matching
+  const getAllActions = useCallback((): Array<WebhookAction | PromptAction | MainHotkeyAction> => {
+    const currentSettings = useAppStore.getState().settings;
+    const actions: Array<WebhookAction | PromptAction | MainHotkeyAction> = [];
+
+    // Add main hotkeys as actions
+    actions.push({
+      type: "main",
+      id: "voice-to-text",
+      name: "Voice to Text",
+      hotkey: currentSettings.hotkeyRecord || DEFAULT_RECORD_HOTKEY,
+    });
+    actions.push({
+      type: "main",
+      id: "ai-transform",
+      name: "AI Transform",
+      hotkey: currentSettings.hotkeyAiTransform || DEFAULT_AI_TRANSFORM_HOTKEY,
+    });
+
+    // Add enabled webhook actions
+    const webhooks = currentSettings.webhookActions ?? [];
+    for (const action of webhooks) {
+      if (action.enabled) {
+        actions.push(action);
+      }
+    }
+
+    // Add enabled prompt actions
+    const prompts = currentSettings.promptActions ?? [];
+    for (const action of prompts) {
+      if (action.enabled) {
+        actions.push(action);
+      }
+    }
+
+    return actions;
+  }, []);
+
+  // Execute a voice command match
+  const executeVoiceCommandMatch = useCallback(async (match: VoiceCommandMatch) => {
+    console.log(`Voice Command: executing match "${match.action.name}" (confidence: ${match.confidence})`);
+    setVoiceCommandModalOpen(false);
+
+    const action = match.action;
+
+    // Check if it's a main hotkey action
+    if ("type" in action && action.type === "main") {
+      // For main actions, we just show a toast since they require user interaction (press-hold-release)
+      showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
+      return;
+    }
+
+    // Check if it's a webhook action
+    if ("method" in action) {
+      await executeWebhookAction(action as WebhookAction);
+      return;
+    }
+
+    // Check if it's a prompt action
+    if ("prompt" in action) {
+      await executePromptAction(action as PromptAction);
+      return;
+    }
+  }, [executeWebhookAction, executePromptAction, showToast]);
+
+  // Handle voice command cancellation
+  const handleVoiceCommandCancel = useCallback(() => {
+    setVoiceCommandModalOpen(false);
+    setVoiceCommandMatches([]);
+    setVoiceCommandTranscript("");
+    console.log("Voice command cancelled");
+  }, []);
+
+  // Start voice command recording flow
+  const startVoiceCommandRecording = useCallback(async () => {
+    // Check if voice commands are enabled
+    if (!settings.voiceCommandEnabled) {
+      console.log("Voice commands are disabled");
+      return;
+    }
+
+    // Check if already busy
+    if (globalBusy) {
+      showToast("Wait for current action to complete", "info");
+      return;
+    }
+
+    // Check if already recording
+    const state = useAppStore.getState();
+    if (state.recordingState !== "idle") {
+      showToast("Already recording", "info");
+      return;
+    }
+
+    console.log("Voice Command: starting recording...");
+    setGlobalBusy(true);
+    setVoiceCommandListening(true);
+    voiceCommandStartTime.current = Date.now();
+
+    try {
+      // Play start sound if enabled
+      if (state.settings.audioEnabled) {
+        invoke("play_sound", { soundType: "start" }).catch(console.error);
+      }
+
+      await invoke("start_recording");
+      useAppStore.getState().startRecording();
+
+      // Show recording overlay in voice command mode
+      invoke("show_recording_overlay").catch(console.error);
+    } catch (error) {
+      console.error("Voice Command: failed to start recording:", error);
+      setGlobalBusy(false);
+      setVoiceCommandListening(false);
+      voiceCommandStartTime.current = 0;
+    }
+  }, [settings.voiceCommandEnabled, globalBusy, showToast, setGlobalBusy, setVoiceCommandListening]);
+
+  // Stop voice command recording and process
+  const stopVoiceCommandRecording = useCallback(async () => {
+    if (!voiceCommandListening) {
+      return;
+    }
+
+    // Check minimum recording time
+    const recordingDurationMs = Date.now() - voiceCommandStartTime.current;
+    if (recordingDurationMs < MIN_VOICE_COMMAND_RECORDING_MS) {
+      console.log(`Voice Command: ignoring early release (${recordingDurationMs}ms < ${MIN_VOICE_COMMAND_RECORDING_MS}ms)`);
+      return;
+    }
+
+    console.log("Voice Command: stopping recording...");
+
+    const state = useAppStore.getState();
+
+    // Play stop sound if enabled
+    if (state.settings.audioEnabled) {
+      invoke("play_sound", { soundType: "stop" }).catch(console.error);
+    }
+
+    // Switch overlay to processing state
+    invoke("set_overlay_state", {
+      state: "processing",
+      recordingDurationMs,
+    }).catch(console.error);
+
+    useAppStore.getState().stopRecording();
+    setVoiceCommandListening(false);
+
+    try {
+      const apiKey = useAppStore.getState().apiKey;
+      if (!apiKey) {
+        console.log("Voice Command: no API key");
+        showToast("Please set your OpenAI API key first", "error");
+        invoke("hide_recording_overlay").catch(console.error);
+        setGlobalBusy(false);
+        voiceCommandStartTime.current = 0;
+        return;
+      }
+
+      // Transcribe the voice command
+      console.log("Voice Command: transcribing...");
+      const result = await invoke<{
+        text: string;
+        language: string;
+        duration_ms: number;
+      }>("transcribe_audio", {
+        apiKey: apiKey,
+        language: "en", // Voice commands always in English
+        translateToEnglish: false,
+      });
+
+      invoke("hide_recording_overlay").catch(console.error);
+
+      const transcribedText = result.text.trim();
+      console.log(`Voice Command: transcribed "${transcribedText}"`);
+
+      if (!transcribedText) {
+        console.log("Voice Command: no speech detected");
+        showToast("No speech detected", "info");
+        setGlobalBusy(false);
+        voiceCommandStartTime.current = 0;
+        return;
+      }
+
+      // Match against available actions
+      const allActions = getAllActions();
+      const matches = matchVoiceCommand(transcribedText, allActions);
+
+      console.log(`Voice Command: found ${matches.length} matches`);
+
+      if (matches.length > 0) {
+        // Execute best match immediately - no modal
+        const bestMatch = matches[0];
+        console.log(`Voice Command: executing "${bestMatch.action.name}" (confidence: ${bestMatch.confidence})`);
+
+        const action = bestMatch.action;
+
+        if ("type" in action && action.type === "main") {
+          showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
+        } else if ("method" in action) {
+          await executeWebhookAction(action as WebhookAction);
+        } else if ("prompt" in action) {
+          await executePromptAction(action as PromptAction);
+        }
+      } else {
+        showToast("No matching action found", "info");
+      }
+
+      // Reset state since we're not using the modal
+      setGlobalBusy(false);
+      voiceCommandStartTime.current = 0;
+    } catch (error) {
+      console.error("Voice Command: transcription failed:", error);
+      invoke("hide_recording_overlay").catch(console.error);
+      showToast(`Voice command error: ${error}`, "error");
+      setGlobalBusy(false);
+      voiceCommandStartTime.current = 0;
+    }
+  }, [voiceCommandListening, getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction]);
+
+  // Reset globalBusy when voice command modal closes
+  useEffect(() => {
+    if (!voiceCommandModalOpen) {
+      setGlobalBusy(false);
+      voiceCommandStartTime.current = 0;
+    }
+  }, [voiceCommandModalOpen, setGlobalBusy]);
+
+  // Register voice command hotkey
+  useEffect(() => {
+    if (!settings.voiceCommandEnabled) {
+      // Unregister if disabled
+      if (registeredVoiceCommandHotkey.current) {
+        unregister(registeredVoiceCommandHotkey.current).catch(console.error);
+        registeredVoiceCommandHotkey.current = "";
+      }
+      return;
+    }
+
+    const setupVoiceCommandHotkey = async () => {
+      try {
+        // Unregister previous hotkey if different
+        if (registeredVoiceCommandHotkey.current && registeredVoiceCommandHotkey.current !== hotkeyVoiceCommand) {
+          await unregister(registeredVoiceCommandHotkey.current).catch(console.error);
+          registeredVoiceCommandHotkey.current = "";
+        }
+
+        const alreadyRegistered = await isRegistered(hotkeyVoiceCommand);
+        if (alreadyRegistered) {
+          await unregister(hotkeyVoiceCommand);
+        }
+
+        await register(hotkeyVoiceCommand, async (event) => {
+          // Skip if we're capturing a new hotkey in settings
+          if (useAppStore.getState().isCapturingHotkey) {
+            console.log("Ignoring voice command hotkey - capturing mode active");
+            return;
+          }
+
+          if (event.state === "Pressed") {
+            startVoiceCommandRecording();
+          } else if (event.state === "Released") {
+            stopVoiceCommandRecording();
+          }
+        });
+
+        registeredVoiceCommandHotkey.current = hotkeyVoiceCommand;
+        console.log(`Voice Command hotkey registered: ${hotkeyVoiceCommand}`);
+      } catch (error) {
+        console.error("Failed to register voice command hotkey:", error);
+      }
+    };
+
+    setupVoiceCommandHotkey();
+
+    return () => {
+      if (registeredVoiceCommandHotkey.current) {
+        unregister(registeredVoiceCommandHotkey.current).catch(console.error);
+        registeredVoiceCommandHotkey.current = "";
+      }
+    };
+  }, [hotkeyVoiceCommand, settings.voiceCommandEnabled, startVoiceCommandRecording, stopVoiceCommandRecording]);
+
+  // Listen for manual voice command button trigger
+  useEffect(() => {
+    const handleVoiceCommandTrigger = () => {
+      // Toggle behavior: if listening, stop; if not, start
+      if (voiceCommandListening) {
+        stopVoiceCommandRecording();
+      } else {
+        startVoiceCommandRecording();
+      }
+    };
+
+    window.addEventListener("voice-command-trigger", handleVoiceCommandTrigger);
+    return () => {
+      window.removeEventListener("voice-command-trigger", handleVoiceCommandTrigger);
+    };
+  }, [voiceCommandListening, startVoiceCommandRecording, stopVoiceCommandRecording]);
+
   return (
     <div className="min-h-screen bg-background">
       <MainWindow />
@@ -1107,6 +1424,14 @@ function App() {
         actionName={pendingUrlAction?.action.name ?? ""}
         onSelect={handleProfileSelect}
         onCancel={handleProfileCancel}
+      />
+      <VoiceCommandModal
+        isOpen={voiceCommandModalOpen}
+        transcribedText={voiceCommandTranscript}
+        matches={voiceCommandMatches}
+        autoExecuteThreshold={settings.voiceCommandAutoExecuteThreshold ?? 0.9}
+        onExecute={executeVoiceCommandMatch}
+        onCancel={handleVoiceCommandCancel}
       />
     </div>
   );

@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-18T04:52:16.930Z
+Updated: 2025-12-18T05:42:30.998Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-18 | feature | [voice command hotkeys](2025-12-18__feature__voice-command-hotkeys.md) |
 | 2025-12-18 | feature | [fix chrome profile chooser](2025-12-18__feature__fix-chrome-profile-chooser.md) |
 | 2025-12-18 | docs | [macos port plan](2025-12-18__docs__macos-port-plan.md) |
 | 2025-12-18 | devops | [nsis delete old shortcut](2025-12-18__devops__nsis-delete-old-shortcut.md) |

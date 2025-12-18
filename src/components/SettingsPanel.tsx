@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import type { AutoPasteMode, WebhookAction, TransformProvider, ApiKeyStatus } from "../types";
+import HotkeyInput from "./HotkeyInput";
 
 // Model info from provider API
 interface ProviderModel {
@@ -1022,20 +1023,12 @@ export default function SettingsPanel() {
                   </div>
                   <div>
                     <label className="block text-xs text-text-secondary mb-1">Hotkey</label>
-                    <select
+                    <HotkeyInput
                       value={editingWebhook.hotkey}
-                      onChange={(e) => setEditingWebhook({ ...editingWebhook, hotkey: e.target.value })}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                        <option key={n} value={`Control+${n}`}>
-                          Ctrl+{n}
-                        </option>
-                      ))}
-                      <option value="Control+Shift+1">Ctrl+Shift+1</option>
-                      <option value="Control+Shift+2">Ctrl+Shift+2</option>
-                      <option value="Control+Shift+3">Ctrl+Shift+3</option>
-                    </select>
+                      onChange={(hotkey) => setEditingWebhook({ ...editingWebhook, hotkey })}
+                      excludeActionName={editingWebhook.name}
+                      showPresetToggle={true}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs text-text-secondary mb-1">Action Type</label>
@@ -1218,6 +1211,61 @@ export default function SettingsPanel() {
             <p className="text-xs text-text-secondary mt-2">
               AI Transform: Copy text, hold hotkey, speak instruction, release
             </p>
+          </section>
+
+          {/* Voice Command Settings */}
+          <section>
+            <h3 className="text-sm font-medium text-text-primary mb-3">Voice Commands</h3>
+            <p className="text-xs text-text-secondary mb-3">
+              Speak the name of any action to execute it instantly.
+            </p>
+
+            {/* Enable/Disable toggle */}
+            <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer mb-3">
+              <input
+                type="checkbox"
+                checked={settings.voiceCommandEnabled ?? true}
+                onChange={(e) => updateSettings({ voiceCommandEnabled: e.target.checked })}
+                className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+              />
+              <div>
+                <p className="text-sm font-medium text-text-primary">Enable voice commands</p>
+                <p className="text-xs text-text-secondary">Say action names to execute them</p>
+              </div>
+            </label>
+
+            {/* Voice command hotkey */}
+            {settings.voiceCommandEnabled && (
+              <>
+                <div className="mb-3">
+                  <label className="block text-xs text-text-secondary mb-1">Voice Command Hotkey</label>
+                  <HotkeyInput
+                    value={settings.hotkeyVoiceCommand || "Control+Shift+Space"}
+                    onChange={(hotkey) => updateSettings({ hotkeyVoiceCommand: hotkey })}
+                    excludeActionName="Voice Command"
+                    showPresetToggle={false}
+                  />
+                </div>
+
+                {/* Auto-execute threshold */}
+                <div className="mb-3">
+                  <label className="block text-xs text-text-secondary mb-1">
+                    Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.9) * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    value={Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.9) * 100)}
+                    onChange={(e) => updateSettings({ voiceCommandAutoExecuteThreshold: parseInt(e.target.value) / 100 })}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-text-secondary mt-1">
+                    Actions with higher confidence than this threshold execute automatically
+                  </p>
+                </div>
+              </>
+            )}
           </section>
         </div>
 

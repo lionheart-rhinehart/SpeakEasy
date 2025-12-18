@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T04:52:16.936Z",
-  "count": 24,
+  "last_updated": "2025-12-18T05:42:31.002Z",
+  "count": 25,
   "entries": [
+    {
+      "id": "2025-12-18__feature__voice-command-hotkeys",
+      "file": "2025-12-18__feature__voice-command-hotkeys.md",
+      "title": "voice-command-hotkeys",
+      "date": "2025-12-18",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Added custom hotkey input component and voice command execution that speaks action names to trigger them immediately",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-18__feature__fix-chrome-profile-chooser",
       "file": "2025-12-18__feature__fix-chrome-profile-chooser.md",
