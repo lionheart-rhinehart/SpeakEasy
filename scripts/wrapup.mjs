@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 /**
- * wrapup.mjs - One-command end-of-task workflow (fully automated)
- * 
+ * wrapup.mjs - Finalize and commit after testing
+ *
  * Usage: npm run wrapup -- [options]
- * 
+ *
+ * This command should be run AFTER /test-protocol and manual testing.
+ * It reads test-protocol results (if available) and incorporates them
+ * into the lessons learned documentation.
+ *
  * Lesson fields (all optional - if provided, skips prompts):
  *   --area "devops"           Area/category of the work
  *   --title "add-feature"     Short title for the lesson
@@ -11,23 +15,19 @@
  *   --problem "What broke"    Problem/symptom encountered (optional)
  *   --fix "How it was fixed"  The solution (optional)
  *   --tags "tag1,tag2"        Comma-separated tags (optional)
- * 
+ *
  * Control flags:
- *   --skip-release   Skip full Tauri build (installer) - by default, always builds
- *   --skip-gates     Skip quality gates (lint/typecheck/build)
- *   --skip-rust      Skip Rust checking (cargo check)
- *   --skip-secrets   Skip secret scanning (use if another agent handles secrets)
+ *   --skip-secrets   Skip secret scanning
  *   --no-git         Skip git operations
- *   --no-restart     Skip dev server auto-restart
  *   --github         Create public GitHub repo (automated, no prompt)
  *   --github-private Create private GitHub repo (automated, no prompt)
- * 
+ *
  * Example (fully automated, no prompts):
- *   npm run wrapup -- --skip-secrets --github-private --area "devops" --title "add-wrapup-sop" --summary "Added automated end-of-task workflow"
+ *   npm run wrapup -- --github-private --area "devops" --title "add-wrapup-sop" --summary "Added automated end-of-task workflow"
  */
 
 import { execSync, spawnSync, spawn } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as readline from 'readline';
@@ -72,6 +72,8 @@ const LESSONS_DIR = join(ROOT, 'lessons-learned');
 const LESSONS_INDEX = join(LESSONS_DIR, 'README.md');
 const LESSONS_JSON_INDEX = join(LESSONS_DIR, 'index.json');
 const LESSONS_TEMPLATE = join(LESSONS_DIR, '_template.md');
+const TEST_PROTOCOL_STATE_FILE = join(ROOT, '.test-protocol-result.json');
+const TEST_PROTOCOL_ARCHIVED_FILE = join(ROOT, '.test-protocol-result.archived.json');
 
 // Secret patterns to scan for (safety net)
 // These are tuned to minimize false positives while catching real secrets
@@ -207,241 +209,73 @@ function slugify(text) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dev Server Management
+// Test Protocol Results
 // ─────────────────────────────────────────────────────────────────────────────
-let devServerInfo = null;
+function readTestProtocolResult() {
+  if (!existsSync(TEST_PROTOCOL_STATE_FILE)) {
+    logInfo('No test-protocol result found - proceeding without test context');
+    return null;
+  }
 
-function detectRunningDevServer() {
-  // Check if dev server (npm run tauri:dev or similar) is running
   try {
-    if (process.platform === 'win32') {
-      // Windows: Check for npm/node processes running tauri dev
-      const tasks = execSync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV /NH', { 
-        encoding: 'utf-8', 
-        stdio: 'pipe' 
-      });
-      
-      // Also check for npm/tauri processes
-      const npmTasks = execSync('tasklist /FI "IMAGENAME eq npm.cmd" /FO CSV /NH', { 
-        encoding: 'utf-8', 
-        stdio: 'pipe' 
-      }).trim();
-      
-      if (tasks.includes('node.exe') || npmTasks.includes('npm.cmd')) {
-        // We have a dev server candidate, but can't reliably get command line on Windows without admin
-        // So we'll just note that something was running and offer to restart tauri:dev
-        devServerInfo = {
-          wasRunning: true,
-          command: 'npm run tauri:dev' // Default assumption
-        };
-        return true;
+    const state = JSON.parse(readFileSync(TEST_PROTOCOL_STATE_FILE, 'utf-8'));
+
+    // Check if it's recent (within last 2 hours)
+    const timestamp = new Date(state.timestamp);
+    const ageHours = (Date.now() - timestamp.getTime()) / (1000 * 60 * 60);
+
+    if (ageHours > 2) {
+      logWarn(`Test protocol result is ${ageHours.toFixed(1)} hours old - may be stale`);
+    }
+
+    logSuccess(`Found test-protocol result from ${timestamp.toLocaleString()}`);
+    logInfo(`Status: ${state.overall_status}`);
+
+    // Collect issues from steps
+    const issues = [];
+    for (const step of state.steps || []) {
+      if (step.warnings && step.warnings.length > 0) {
+        issues.push(...step.warnings.map(w => `[${step.name}] Warning: ${w}`));
       }
-    } else {
-      // Unix-like: Use ps to check for running processes
-      const processes = execSync('ps aux | grep -E "(npm.*tauri:dev|vite|tauri dev)" | grep -v grep', {
-        encoding: 'utf-8',
-        stdio: 'pipe'
-      }).trim();
-      
-      if (processes) {
-        devServerInfo = {
-          wasRunning: true,
-          command: 'npm run tauri:dev'
-        };
-        return true;
+      if (step.errors && step.errors.length > 0) {
+        issues.push(...step.errors.map(e => `[${step.name}] Error: ${e}`));
       }
     }
-  } catch {
-    // No dev server running or error detecting
-  }
-  return false;
-}
 
-function restartDevServer() {
-  if (!devServerInfo || !devServerInfo.wasRunning) {
-    return;
-  }
-  
-  if (parsedArgs.flags.includes('no-restart')) {
-    logInfo('Dev server restart skipped (--no-restart flag)');
-    return;
-  }
-  
-  logInfo('Restarting dev server...');
-  
-  try {
-    // Start dev server in detached mode so it runs in background
-    // Use platform-specific command to avoid deprecation warning DEP0190
-    const isWindows = process.platform === 'win32';
-    const child = isWindows
-      ? spawn('cmd', ['/c', 'npm', 'run', 'tauri:dev'], {
-          cwd: ROOT,
-          detached: true,
-          stdio: 'ignore'
-        })
-      : spawn('npm', ['run', 'tauri:dev'], {
-          cwd: ROOT,
-          detached: true,
-          stdio: 'ignore'
-        });
-    
-    child.unref(); // Allow parent to exit independently
-    
-    logSuccess('Dev server restarted in background (npm run tauri:dev)');
+    if (issues.length > 0) {
+      logWarn(`Found ${issues.length} issue(s) from test-protocol`);
+    }
+
+    return { ...state, issues };
   } catch (e) {
-    logWarn(`Failed to restart dev server: ${e.message}`);
-    logInfo('You can manually restart with: npm run tauri:dev');
+    logWarn(`Failed to read test-protocol result: ${e.message}`);
+    return null;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 1: Preflight
-// ─────────────────────────────────────────────────────────────────────────────
-function preflight() {
-  logStep(1, 'Preflight checks');
-  
-  // Check Node
-  const nodeVersion = process.version;
-  logInfo(`Node: ${nodeVersion}`);
-  
-  // Check npm
-  try {
-    const npmVersion = execSync('npm --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
-    logInfo(`npm: ${npmVersion}`);
-  } catch {
-    logWarn('npm not found');
-  }
-  
-  // Check Rust (optional)
-  try {
-    const rustVersion = execSync('rustc --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
-    logInfo(`Rust: ${rustVersion}`);
-  } catch {
-    logInfo('Rust: not installed (Tauri builds will fail)');
-  }
-  
-  // Check git
-  if (commandExists('git')) {
-    const gitVersion = execSync('git --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
-    logInfo(`Git: ${gitVersion}`);
-  } else {
-    logWarn('git not found - version control steps will be skipped');
-  }
-  
-  // Check gh (GitHub CLI)
-  if (commandExists('gh')) {
-    logInfo('GitHub CLI: installed');
-  } else {
-    logInfo('GitHub CLI: not installed (GitHub features disabled)');
-  }
-  
-  logSuccess('Preflight complete');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 3: Quality Gates
-// ─────────────────────────────────────────────────────────────────────────────
-function runQualityGates() {
-  if (parsedArgs.flags.includes('skip-gates')) {
-    logStep(3, 'Quality gates (SKIPPED)');
-    return;
-  }
-  
-  logStep(3, 'Running quality gates');
-  
-  // Lint
-  logInfo('Running lint...');
-  try {
-    run('npm run lint');
-    logSuccess('Lint passed');
-  } catch (e) {
-    logError('Lint failed');
-    throw new Error('Quality gate failed: lint');
-  }
-  
-  // Typecheck
-  logInfo('Running typecheck...');
-  try {
-    run('npm run typecheck');
-    logSuccess('Typecheck passed');
-  } catch (e) {
-    logError('Typecheck failed');
-    throw new Error('Quality gate failed: typecheck');
-  }
-  
-  // Build
-  logInfo('Running build...');
-  try {
-    run('npm run build');
-    logSuccess('Build passed');
-  } catch (e) {
-    logError('Build failed');
-    throw new Error('Quality gate failed: build');
-  }
-  
-  // Rust check (conditional on Cargo.toml existence)
-  const cargoTomlPath = existsSync(join(ROOT, 'Cargo.toml')) 
-    ? ROOT 
-    : existsSync(join(ROOT, 'src-tauri', 'Cargo.toml')) 
-      ? join(ROOT, 'src-tauri')
-      : null;
-      
-  if (cargoTomlPath && !parsedArgs.flags.includes('skip-rust')) {
-    logInfo('Running Rust check (strict: warnings = errors)...');
+function archiveTestProtocolResult() {
+  if (existsSync(TEST_PROTOCOL_STATE_FILE)) {
     try {
-      // Use RUSTFLAGS to treat warnings as errors (strict mode)
-      const originalRustflags = process.env.RUSTFLAGS || '';
-      process.env.RUSTFLAGS = originalRustflags + ' -D warnings';
-      
-      run('cargo check --all-targets', { cwd: cargoTomlPath });
-      
-      // Restore original RUSTFLAGS
-      if (originalRustflags) {
-        process.env.RUSTFLAGS = originalRustflags;
-      } else {
-        delete process.env.RUSTFLAGS;
-      }
-      
-      logSuccess('Rust check passed (no warnings or errors)');
+      // Copy to archived file (overwrites any previous archive)
+      writeFileSync(TEST_PROTOCOL_ARCHIVED_FILE, readFileSync(TEST_PROTOCOL_STATE_FILE));
+      unlinkSync(TEST_PROTOCOL_STATE_FILE);
+      logInfo('Archived test-protocol result');
     } catch (e) {
-      logError('Rust check failed (warnings or errors found)');
-      logInfo('Tip: Run "cargo fix --lib -p speakeasy" to auto-fix some issues');
-      throw new Error('Quality gate failed: cargo check');
+      logWarn(`Failed to archive test-protocol result: ${e.message}`);
     }
   }
-  
-  logSuccess('All quality gates passed');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 4: Release Build
-// ─────────────────────────────────────────────────────────────────────────────
-function buildRelease() {
-  if (parsedArgs.flags.includes('skip-release')) {
-    logInfo('Skipping Tauri release build (--skip-release flag)');
-    return;
-  }
-
-  logInfo('Building Tauri release (installer)... this may take a minute');
-  try {
-    run('npm run tauri build');
-    logSuccess('Tauri release build complete - installer ready!');
-  } catch (e) {
-    logError('Tauri release build failed');
-    throw new Error('Release build failed: tauri build');
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Step 2: Secret Scan (fail fast - before slow operations)
+// Step 1: Secret Scan (safety net before git push)
 // ─────────────────────────────────────────────────────────────────────────────
 function scanForSecrets() {
   if (parsedArgs.flags.includes('skip-secrets')) {
-    logStep(2, 'Secret scan (SKIPPED)');
+    logStep(1, 'Secret scan (SKIPPED)');
     return;
   }
   
-  logStep(2, 'Scanning for secrets (safety net)');
+  logStep(1, 'Scanning for secrets (safety net)');
   
   const findings = [];
   
@@ -531,10 +365,10 @@ function scanForSecrets() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 5: Change Summary
+// Step 2: Change Summary
 // ─────────────────────────────────────────────────────────────────────────────
 function getChangeSummary() {
-  logStep(5, 'Generating change summary');
+  logStep(2, 'Generating change summary');
   
   let summary = '';
   
@@ -563,21 +397,21 @@ function getChangeSummary() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 6: Lessons Learned
+// Step 3: Lessons Learned
 // ─────────────────────────────────────────────────────────────────────────────
-async function createLessonsLearned(changeSummary) {
-  logStep(6, 'Creating lessons learned entry');
-  
+async function createLessonsLearned(changeSummary, testProtocolResult) {
+  logStep(3, 'Creating lessons learned entry');
+
   // Ensure directory exists
   if (!existsSync(LESSONS_DIR)) {
     mkdirSync(LESSONS_DIR, { recursive: true });
   }
-  
+
   // Check if we have CLI args (automated mode) or need to prompt (interactive mode)
   const hasCliArgs = parsedArgs.options.area || parsedArgs.options.title || parsedArgs.options.summary;
-  
+
   let area, title, context, symptom, rootCause, fix, verification, prevention, tags;
-  
+
   if (hasCliArgs) {
     // AUTOMATED MODE: Use CLI arguments, no prompts
     logInfo('Using CLI arguments (automated mode)');
@@ -587,14 +421,21 @@ async function createLessonsLearned(changeSummary) {
     symptom = parsedArgs.options.problem || '';
     rootCause = '';
     fix = parsedArgs.options.fix || '';
-    verification = 'Quality gates passed (lint, typecheck, build)';
+
+    // Use test-protocol status for verification if available
+    if (testProtocolResult && testProtocolResult.overall_status === 'success') {
+      verification = 'Test protocol passed - app tested manually';
+    } else {
+      verification = 'Tested via manual verification';
+    }
+
     prevention = '';
     tags = parsedArgs.options.tags || area;
   } else {
     // INTERACTIVE MODE: Prompt for details (fallback)
     log('\n  No CLI args provided. Please provide details for the lessons learned entry:\n', colors.cyan);
     log('  (Tip: Use --area, --title, --summary args for fully automated mode)\n', colors.dim);
-    
+
     area = await prompt('  Area (e.g., tauri-build, frontend, api): ');
     title = await prompt('  Short title: ');
     context = await prompt('  What were you trying to do? ');
@@ -605,14 +446,14 @@ async function createLessonsLearned(changeSummary) {
     prevention = await prompt('  How to prevent this in the future? ');
     tags = await prompt('  Tags (comma-separated, e.g., frontend, tauri, rust): ');
   }
-  
+
   // Generate filename
   const date = getDate();
   const slug = slugify(title || 'update');
   const areaSlug = slugify(area || 'general');
   const filename = `${date}__${areaSlug}__${slug}.md`;
   const filepath = join(LESSONS_DIR, filename);
-  
+
   // Generate content (skip empty sections in automated mode)
   let content = `# ${title || 'Untitled'}
 
@@ -631,35 +472,72 @@ ${context || 'N/A'}
 ${symptom}
 `;
   }
-  
+
   if (rootCause) {
     content += `
 ## Root Cause
 ${rootCause}
 `;
   }
-  
+
   if (fix) {
     content += `
 ## Fix
 ${fix}
 `;
   }
-  
+
   if (verification) {
     content += `
 ## Verification
 ${verification}
 `;
   }
-  
+
   if (prevention) {
     content += `
 ## Prevention
 ${prevention}
 `;
   }
-  
+
+  // Add test protocol results if available
+  if (testProtocolResult) {
+    content += `
+## Test Protocol Results
+- **Status**: ${testProtocolResult.overall_status}
+- **Duration**: ${testProtocolResult.duration_seconds}s
+- **Timestamp**: ${testProtocolResult.timestamp}
+`;
+
+    if (testProtocolResult.build_info && testProtocolResult.build_info.installer_path) {
+      content += `- **Build**: ${testProtocolResult.build_info.installer_path}
+`;
+    }
+
+    // Add step summary
+    if (testProtocolResult.steps && testProtocolResult.steps.length > 0) {
+      content += `
+### Steps
+`;
+      for (const step of testProtocolResult.steps) {
+        content += `- ${step.name}: ${step.status} (${step.duration_ms}ms)
+`;
+      }
+    }
+
+    // Add issues if any
+    if (testProtocolResult.issues && testProtocolResult.issues.length > 0) {
+      content += `
+### Issues Noted
+`;
+      for (const issue of testProtocolResult.issues) {
+        content += `- ${issue}
+`;
+      }
+    }
+  }
+
   content += `
 ## Change Summary
 \`\`\`
@@ -669,12 +547,12 @@ ${changeSummary || 'No automatic summary available'}
 
   writeFileSync(filepath, content);
   logSuccess(`Created: lessons-learned/${filename}`);
-  
+
   // Update index
-  logStep(6, 'Updating lessons learned index');
+  logStep(3, 'Updating lessons learned index');
   updateLessonsIndex();
   logSuccess('Index updated');
-  
+
   return { filename, title, area, tags };
 }
 
@@ -785,20 +663,20 @@ npm run lessons:search "<query>"
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 7: Version Control
+// Step 4: Version Control
 // ─────────────────────────────────────────────────────────────────────────────
 async function handleVersionControl(lessonInfo) {
   if (parsedArgs.flags.includes('no-git')) {
-    logStep(7, 'Version control (SKIPPED)');
+    logStep(4, 'Version control (SKIPPED)');
     return;
   }
-  
+
   if (!commandExists('git')) {
-    logStep(7, 'Version control (git not available)');
+    logStep(4, 'Version control (git not available)');
     return;
   }
-  
-  logStep(7, 'Version control');
+
+  logStep(4, 'Version control');
   
   const config = loadConfig();
   const gitDir = join(ROOT, '.git');
@@ -984,6 +862,14 @@ async function handleGitHub(config) {
       logInfo('GitHub disabled for this project (change in .wrapup.json)');
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dev Server Detection (stub - not yet implemented)
+// ─────────────────────────────────────────────────────────────────────────────
+function detectRunningDevServer() {
+  // TODO: Implement detection of running dev server
+  // For now, this is a no-op
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

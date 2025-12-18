@@ -667,7 +667,7 @@ function App() {
           try {
             await invoke("show_profile_chooser", {
               profiles: profiles,
-              actionName: `${action.name}: ${normalized.url}`,
+              action_name: `${action.name}: ${normalized.url}`,
             });
             console.log("Profile chooser window shown");
           } catch (err) {
