@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T17:09:49.564Z",
-  "count": 29,
+  "last_updated": "2025-12-18T18:45:09.601Z",
+  "count": 30,
   "entries": [
     {
       "id": "2025-12-18__feature__voice-command-hotkeys",
@@ -39,6 +39,19 @@
         "docs"
       ],
       "summary": "Created detailed macOS port planning document with implementation tasks for cross-platform support",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-18__devops__split-wrapup-test-protocol",
+      "file": "2025-12-18__devops__split-wrapup-test-protocol.md",
+      "title": "split-wrapup-test-protocol",
+      "date": "2025-12-18",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Split wrapup into test-protocol (build/install/launch) and wrapup (document/commit) commands for better workflow control",
       "problem": "",
       "fix": ""
     },

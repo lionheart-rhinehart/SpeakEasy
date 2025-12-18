@@ -13,6 +13,7 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "wrapup": "node scripts/wrapup.mjs",
+    "test-protocol": "node scripts/test-protocol.mjs",
     "lessons:search": "node scripts/lessons-search.mjs"
   },
   "dependencies": {

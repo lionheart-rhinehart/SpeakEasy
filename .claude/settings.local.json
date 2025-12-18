@@ -55,7 +55,9 @@
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 --stat)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 3c11abb --stat)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 -- src/App.tsx)",
-      "SlashCommand(/wrapup)"
+      "SlashCommand(/wrapup)",
+      "Bash(node --check:*)",
+      "Bash(cmd /c \"del \\\\?\\\\D:\\\\Claude CODE\\\\SpeakEasy\\\\nul\")"
     ],
     "deny": [],
     "ask": []

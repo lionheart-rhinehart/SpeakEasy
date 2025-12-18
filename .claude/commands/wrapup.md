@@ -4,11 +4,16 @@ description: Complete a development session with wrapup logging and git commit
 
 # Wrap Up Session
 
-You are completing a development session. Your job is to wrap up by:
+You are completing a development session. This command should be run AFTER `/test-protocol` and manual testing.
 
-1. Summarize what was done in this chat session
-2. Run the wrapup command with appropriate arguments
-3. Report the result to the user
+## What This Does
+
+1. Reads test-protocol results (if available from a prior `/test-protocol` run)
+2. Scans for secrets (safety net before pushing)
+3. Generates change summary from git
+4. Creates lessons learned entry (incorporating any test-protocol results/issues)
+5. Commits and pushes to git
+6. Archives the test-protocol result file
 
 ## Review the Chat
 
@@ -35,8 +40,7 @@ npm run wrapup -- --area "<AREA>" --title "<SHORT-TITLE>" --summary "<SUMMARY>" 
 - --problem: What went wrong (only if something broke)
 - --fix: How it was solved (only if there was a problem)
 
-**Flags (use when appropriate):**
-- --skip-gates: Skip lint/typecheck/build (use for quick documentation-only changes)
+**Flags:**
 - --skip-secrets: Skip secret scan
 - --no-git: Don't commit changes
 
@@ -57,4 +61,5 @@ npm run wrapup -- --area "frontend" --title "add-dark-mode" --summary "Added dar
 After running, tell the user:
 - Whether wrapup succeeded or failed
 - The lessons-learned file that was created
-- Any warnings or issues encountered
+- Any test-protocol results that were incorporated
+- The git commit that was created

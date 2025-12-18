@@ -30,3 +30,10 @@ src-tauri/target/
 
 # Wrapup config (contains local preferences)
 .wrapup.json
+
+# Test protocol state (temporary, regenerated each run)
+.test-protocol-result.json
+.test-protocol-result.archived.json
+
+# Windows reserved filename (accidentally created)
+nul

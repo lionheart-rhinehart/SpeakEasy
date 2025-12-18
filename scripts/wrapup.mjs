@@ -865,55 +865,38 @@ async function handleGitHub(config) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dev Server Detection (stub - not yet implemented)
-// ─────────────────────────────────────────────────────────────────────────────
-function detectRunningDevServer() {
-  // TODO: Implement detection of running dev server
-  // For now, this is a no-op
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
 async function main() {
-  // Detect running dev server before we start
-  detectRunningDevServer();
-  
   log('\n' + '═'.repeat(60), colors.cyan);
-  log('  WRAP-UP: End-of-Task Workflow', colors.cyan + colors.bold);
+  log('  WRAP-UP: Finalize & Commit', colors.cyan + colors.bold);
   log('═'.repeat(60), colors.cyan);
-  
-  try {
-    // Step 1: Preflight
-    preflight();
 
-    // Step 2: Secret scan (fail fast - before slow operations)
+  try {
+    // Read test-protocol results if available
+    const testProtocolResult = readTestProtocolResult();
+
+    // Step 1: Secret scan (safety net before git push)
     scanForSecrets();
 
-    // Step 3: Quality gates
-    runQualityGates();
-
-    // Step 4: Release build (slowest - do after all checks pass)
-    buildRelease();
-
-    // Step 5: Change summary
+    // Step 2: Change summary
     const changeSummary = getChangeSummary();
 
-    // Step 6: Lessons learned
-    const lessonInfo = await createLessonsLearned(changeSummary);
+    // Step 3: Lessons learned (incorporates test-protocol results)
+    const lessonInfo = await createLessonsLearned(changeSummary, testProtocolResult);
 
-    // Step 7: Version control
+    // Step 4: Version control
     await handleVersionControl(lessonInfo);
-    
+
+    // Archive test-protocol result after successful wrapup
+    archiveTestProtocolResult();
+
     // Done!
     log('\n' + '═'.repeat(60), colors.green);
     log('  WRAP-UP COMPLETE', colors.green + colors.bold);
     log('═'.repeat(60), colors.green);
     log('\n');
-    
-    // Step 8: Restart dev server if it was running
-    restartDevServer();
-    
+
   } catch (e) {
     log('\n' + '═'.repeat(60), colors.red);
     log('  WRAP-UP FAILED', colors.red + colors.bold);
