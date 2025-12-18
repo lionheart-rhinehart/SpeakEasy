@@ -1156,6 +1156,43 @@ pub async fn transform_with_llm(
 // CHROME PROFILE DISCOVERY (Windows-first)
 // ============================================================================
 
+/// DEBUG: Returns diagnostic info about Chrome profile discovery paths
+#[tauri::command]
+pub fn debug_chrome_paths() -> String {
+    let mut result = String::new();
+
+    // Test dirs crate
+    result.push_str("=== dirs crate ===\n");
+    if let Some(local_data) = dirs::data_local_dir() {
+        result.push_str(&format!("data_local_dir: {:?}\n", local_data));
+        let chrome_path = local_data.join("Google").join("Chrome").join("User Data");
+        result.push_str(&format!("Chrome path: {:?}\n", chrome_path));
+        result.push_str(&format!("Exists: {}\n", chrome_path.exists()));
+    } else {
+        result.push_str("data_local_dir: NONE!\n");
+    }
+
+    // Test env vars
+    result.push_str("\n=== Environment Variables ===\n");
+    match std::env::var("LOCALAPPDATA") {
+        Ok(v) => result.push_str(&format!("LOCALAPPDATA: '{}'\n", v)),
+        Err(e) => result.push_str(&format!("LOCALAPPDATA: ERROR - {}\n", e)),
+    }
+    match std::env::var("USERPROFILE") {
+        Ok(v) => result.push_str(&format!("USERPROFILE: '{}'\n", v)),
+        Err(e) => result.push_str(&format!("USERPROFILE: ERROR - {}\n", e)),
+    }
+
+    // Test the actual function
+    result.push_str("\n=== get_chrome_user_data_dir() ===\n");
+    match get_chrome_user_data_dir() {
+        Some(path) => result.push_str(&format!("Result: {}\n", path)),
+        None => result.push_str("Result: NONE!\n"),
+    }
+
+    result
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChromeProfile {
     pub profile_directory: String, // e.g., "Default", "Profile 1"
@@ -1164,25 +1201,82 @@ pub struct ChromeProfile {
 
 /// Get the Chrome User Data directory path (Windows)
 fn get_chrome_user_data_dir() -> Option<String> {
-    std::env::var("LOCALAPPDATA")
-        .map(|local| format!(r"{}\Google\Chrome\User Data", local))
-        .ok()
-        .filter(|path| std::path::Path::new(path).exists())
+    // ==========================================================
+    // PRIMARY METHOD: Use dirs crate (proven to work in Tauri)
+    // This uses Windows Known Folders API (SHGetKnownFolderPath)
+    // Same pattern as config.rs:357 and transcription.rs:50
+    // ==========================================================
+    if let Some(local_data) = dirs::data_local_dir() {
+        let path = local_data.join("Google").join("Chrome").join("User Data");
+        log::info!("[Chrome] Trying dirs::data_local_dir(): {:?}", path);
+        if path.exists() {
+            if let Some(path_str) = path.to_str() {
+                log::info!("[Chrome] SUCCESS via dirs crate: {}", path_str);
+                return Some(path_str.to_string());
+            } else {
+                log::warn!("[Chrome] Path exists but contains invalid UTF-8: {:?}", path);
+            }
+        } else {
+            log::warn!("[Chrome] Path from dirs crate does not exist: {:?}", path);
+        }
+    } else {
+        log::warn!("[Chrome] dirs::data_local_dir() returned None!");
+    }
+
+    // ==========================================================
+    // FALLBACK 1: Try LOCALAPPDATA environment variable
+    // May work in some contexts where dirs crate fails
+    // ==========================================================
+    match std::env::var("LOCALAPPDATA") {
+        Ok(local) if !local.is_empty() => {
+            let path = format!(r"{}\Google\Chrome\User Data", local);
+            log::info!("[Chrome] Trying LOCALAPPDATA: {}", path);
+            if std::path::Path::new(&path).exists() {
+                log::info!("[Chrome] SUCCESS via LOCALAPPDATA");
+                return Some(path);
+            }
+        }
+        Ok(local) => log::warn!("[Chrome] LOCALAPPDATA is empty: '{}'", local),
+        Err(e) => log::warn!("[Chrome] LOCALAPPDATA not available: {}", e),
+    }
+
+    // ==========================================================
+    // FALLBACK 2: Try USERPROFILE environment variable
+    // Last resort fallback
+    // ==========================================================
+    match std::env::var("USERPROFILE") {
+        Ok(userprofile) if !userprofile.is_empty() => {
+            let path = format!(r"{}\AppData\Local\Google\Chrome\User Data", userprofile);
+            log::info!("[Chrome] Trying USERPROFILE: {}", path);
+            if std::path::Path::new(&path).exists() {
+                log::info!("[Chrome] SUCCESS via USERPROFILE");
+                return Some(path);
+            }
+        }
+        Ok(up) => log::warn!("[Chrome] USERPROFILE is empty: '{}'", up),
+        Err(e) => log::warn!("[Chrome] USERPROFILE not available: {}", e),
+    }
+
+    log::error!("[Chrome] FAILED: Could not find Chrome User Data directory via any method");
+    None
 }
 
 /// List available Chrome profiles by reading Local State and scanning profile directories.
 /// Returns profiles sorted by display name (case-insensitive).
 #[tauri::command]
 pub async fn list_chrome_profiles() -> Result<Vec<ChromeProfile>, String> {
-    log::info!("Listing Chrome profiles");
+    log::info!("[Chrome] === list_chrome_profiles command invoked ===");
 
     #[cfg(target_os = "windows")]
     {
         let user_data_dir = match get_chrome_user_data_dir() {
-            Some(dir) => dir,
+            Some(dir) => {
+                log::info!("[Chrome] Using Chrome User Data directory: {}", dir);
+                dir
+            }
             None => {
-                log::warn!("Chrome User Data directory not found");
-                return Err("Chrome User Data directory not found".to_string());
+                log::error!("[Chrome] Chrome User Data directory not found by any method");
+                return Err("Chrome User Data directory not found. Is Chrome installed?".to_string());
             }
         };
 

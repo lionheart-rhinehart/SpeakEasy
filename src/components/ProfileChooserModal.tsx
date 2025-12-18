@@ -45,6 +45,18 @@ export default function ProfileChooserModal({
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Number keys 1-9 for instant profile selection
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= 9) {
+        e.preventDefault();
+        const index = num - 1; // 1 -> index 0, 2 -> index 1, etc.
+        if (filteredProfiles[index]) {
+          onSelect(filteredProfiles[index]);
+        }
+        return;
+      }
+
+      // Arrow keys for navigation
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIndex((i) => Math.min(i + 1, filteredProfiles.length - 1));
@@ -68,7 +80,7 @@ export default function ProfileChooserModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4"
       onClick={onCancel}
     >
       <div
@@ -122,8 +134,14 @@ export default function ProfileChooserModal({
                         : "hover:bg-slate-50 text-text-primary"
                     }`}
                   >
+                    {/* Number badge for quick selection (1-9 only) */}
+                    {index < 9 && (
+                      <kbd className="w-5 h-5 flex items-center justify-center bg-slate-100 border border-slate-200 rounded text-xs text-slate-500 font-mono shrink-0">
+                        {index + 1}
+                      </kbd>
+                    )}
                     {/* Profile icon */}
-                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium text-slate-600">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium text-slate-600 shrink-0">
                       {profile.display_name.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -149,7 +167,7 @@ export default function ProfileChooserModal({
         {/* Footer */}
         <div className="px-4 py-3 border-t border-slate-200 flex justify-between items-center">
           <p className="text-xs text-text-secondary">
-            ↑↓ to navigate • Enter to select • Esc to cancel
+            1-9 or ↑↓+Enter to select • Esc to cancel
           </p>
           <button
             onClick={onCancel}

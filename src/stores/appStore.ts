@@ -314,6 +314,10 @@ export const useAppStore = create<AppState>()(
 
           set({ settings: migratedSettings });
           console.log("[Settings] Loaded from file");
+          console.log("[Settings] Webhook actions askChromeProfile:", migratedSettings.webhookActions?.map(a => ({
+            name: a.name,
+            askChromeProfile: a.askChromeProfile
+          })));
         } catch (error) {
           console.error("[Settings] Failed to load from file, using defaults:", error);
         }

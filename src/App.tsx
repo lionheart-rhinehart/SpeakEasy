@@ -602,6 +602,8 @@ function App() {
   // Handle hotkey action execution (webhooks, URL, SMART_URL)
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {
     console.log(`Action: executing "${action.name}" (${action.method})`);
+    console.log(`[DEBUG] askChromeProfile:`, action.askChromeProfile, `type:`, typeof action.askChromeProfile);
+
 
     // Debounce check - prevent spam execution
     const now = Date.now();
@@ -626,35 +628,46 @@ function App() {
 
       // If askChromeProfile is enabled, show the profile chooser
       if (action.askChromeProfile) {
+        let profiles: ChromeProfile[] = [];
+
+        // Step 1: Fetch profiles (separate try-catch for profile errors)
         try {
-          // Use cached profiles if available, otherwise fetch
-          let profiles = profilesCacheRef.current;
-          if (!profiles) {
-            console.log("URL action: fetching Chrome profiles...");
-            profiles = await invoke<ChromeProfile[]>("list_chrome_profiles");
-            profilesCacheRef.current = profiles;
-          }
-
-          if (profiles.length === 0) {
-            // No profiles found, show toast and fall back to normal open
-            showToast("No Chrome profiles found. Opening in default profile.", "info");
-          } else {
-            // Show profile chooser modal
-            setChromeProfiles(profiles);
-            setPendingUrlAction({ action, url: normalized.url });
-
-            // Bring main window to foreground so user can see the modal
-            const mainWindow = getCurrentWindow();
-            await mainWindow.show();
-            await mainWindow.setFocus();
-
-            setProfileChooserOpen(true);
-            return; // Don't open yet - wait for user selection
-          }
+          console.log("URL action: fetching Chrome profiles...");
+          profiles = await invoke<ChromeProfile[]>("list_chrome_profiles");
+          console.log("URL action: got profiles:", profiles);
+          profilesCacheRef.current = profiles;
         } catch (error) {
           console.error("URL action: failed to list Chrome profiles:", error);
           showToast("Couldn't list Chrome profiles. Opening in default profile.", "info");
           // Fall through to open without profile
+        }
+
+        // Step 2: If we have profiles, show the modal
+        if (profiles.length > 0) {
+          // Set React state FIRST (before any window operations that might fail)
+          console.log("Setting up profile chooser modal with", profiles.length, "profiles");
+          setChromeProfiles(profiles);
+          setPendingUrlAction({ action, url: normalized.url });
+          setProfileChooserOpen(true);
+
+          // Step 3: Try to bring window to foreground (separate try-catch)
+          try {
+            const mainWindow = getCurrentWindow();
+            await mainWindow.show();
+            await mainWindow.setFocus();
+            console.log("Window shown and focused");
+          } catch (windowError) {
+            // Window operations failed, but modal state is already set
+            // The modal should still render when window becomes visible
+            console.error("Failed to show/focus window:", windowError);
+          }
+
+          console.log("Returning - waiting for user to select profile");
+          return; // Don't open URL yet - wait for user selection in modal
+        } else if (profiles.length === 0 && profilesCacheRef.current === profiles) {
+          // Only show "no profiles" if we successfully fetched but got empty list
+          // (not if the fetch failed - that has its own error message)
+          showToast("No Chrome profiles found. Opening in default profile.", "info");
         }
       }
 
@@ -968,7 +981,12 @@ function App() {
             if (event.state === "Pressed") {
               // Get fresh action data in case it was updated
               const currentActions = useAppStore.getState().settings.webhookActions ?? [];
+              console.log(`[DEBUG] Hotkey pressed: ${action.hotkey}, fresh actions:`, currentActions.map(a => ({
+                name: a.name,
+                askChromeProfile: a.askChromeProfile
+              })));
               const currentAction = currentActions.find((a) => a.id === action.id);
+              console.log(`[DEBUG] Found action:`, currentAction?.name, `askChromeProfile:`, currentAction?.askChromeProfile);
               if (currentAction && currentAction.enabled) {
                 executeWebhookAction(currentAction);
               }

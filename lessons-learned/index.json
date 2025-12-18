@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T00:41:43.342Z",
-  "count": 23,
+  "last_updated": "2025-12-18T04:52:16.936Z",
+  "count": 24,
   "entries": [
+    {
+      "id": "2025-12-18__feature__fix-chrome-profile-chooser",
+      "file": "2025-12-18__feature__fix-chrome-profile-chooser.md",
+      "title": "fix-chrome-profile-chooser",
+      "date": "2025-12-18",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Fixed Chrome profile chooser modal not appearing and added number key shortcuts (1-9) for instant profile selection",
+      "problem": "Profile chooser modal never appeared despite profiles being found - window.show() exception caught by wrong try-catch block caused fallthrough to open URL without modal",
+      "fix": "Separated try-catch blocks so window errors don't mask profile errors, set React state before window operations, increased z-index to 9999"
+    },
     {
       "id": "2025-12-18__docs__macos-port-plan",
       "file": "2025-12-18__docs__macos-port-plan.md",
