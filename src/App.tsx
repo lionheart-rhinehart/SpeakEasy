@@ -2,14 +2,14 @@ import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+// getCurrentWindow import removed - no longer needed after profile chooser window refactor
 import { useAppStore } from "./stores/appStore";
 import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import RecordingIndicator from "./components/RecordingIndicator";
 import Toast, { ToastMessage } from "./components/Toast";
-import ProfileChooserModal from "./components/ProfileChooserModal";
+// ProfileChooserModal removed - now using separate Tauri window
 import VoiceCommandModal from "./components/VoiceCommandModal";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
@@ -89,9 +89,7 @@ function App() {
   // Debounce tracking for hotkey actions (prevents spam opens)
   const actionLastRunRef = useRef<Map<string, number>>(new Map());
 
-  // Chrome profile chooser state
-  const [profileChooserOpen, setProfileChooserOpen] = useState(false);
-  const [chromeProfiles, setChromeProfiles] = useState<ChromeProfile[]>([]);
+  // Chrome profile chooser state (using separate Tauri window)
   const [pendingUrlAction, setPendingUrlAction] = useState<{ action: WebhookAction; url: string } | null>(null);
   const profilesCacheRef = useRef<ChromeProfile[] | null>(null);
 
@@ -659,32 +657,27 @@ function App() {
           // Fall through to open without profile
         }
 
-        // Step 2: If we have profiles, show the modal
+        // Step 2: If we have profiles, show the profile chooser window
         if (profiles.length > 0) {
-          // Set React state FIRST (before any window operations that might fail)
-          console.log("Setting up profile chooser modal with", profiles.length, "profiles");
-          setChromeProfiles(profiles);
+          console.log("Showing profile chooser window with", profiles.length, "profiles");
+          // Store pending action FIRST so it's ready when result comes back
           setPendingUrlAction({ action, url: normalized.url });
-          setProfileChooserOpen(true);
 
-          // Step 3: Make main window topmost so profile chooser appears above everything
+          // Show the profile chooser window (separate Tauri window with proper topmost)
           try {
-            await invoke("set_main_window_topmost", { enable: true });
-            console.log("Main window set to topmost for profile chooser");
+            await invoke("show_profile_chooser", {
+              profiles: profiles,
+              actionName: `${action.name}: ${normalized.url}`,
+            });
+            console.log("Profile chooser window shown");
           } catch (err) {
-            console.error("Failed to set main window topmost:", err);
-            // Fall back to basic show/focus (may not work but try anyway)
-            try {
-              const mainWindow = getCurrentWindow();
-              await mainWindow.show();
-              await mainWindow.setFocus();
-            } catch (e) {
-              console.error("Fallback show/focus also failed:", e);
-            }
+            console.error("Failed to show profile chooser window:", err);
+            showToast("Failed to show profile chooser", "error");
+            setPendingUrlAction(null);
           }
 
           console.log("Returning - waiting for user to select profile");
-          return; // Don't open URL yet - wait for user selection in modal
+          return; // Don't open URL yet - wait for user selection
         } else if (profiles.length === 0 && profilesCacheRef.current === profiles) {
           // Only show "no profiles" if we successfully fetched but got empty list
           // (not if the fetch failed - that has its own error message)
@@ -1082,70 +1075,79 @@ function App() {
     };
   }, [webhookActions, promptActions, executeWebhookAction, executePromptAction]);
 
-  // Handle profile selection from the chooser modal
-  const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {
-    if (!pendingUrlAction) return;
+  // Listen for profile chooser result (from the separate Tauri window)
+  useEffect(() => {
+    const setupListener = async () => {
+      const unlisten = await listen<{ profileDirectory: string | null; cancelled: boolean }>(
+        "profile-chooser-result",
+        async (event) => {
+          const { profileDirectory, cancelled } = event.payload;
+          console.log("Profile Chooser Result:", event.payload);
 
-    const { action, url } = pendingUrlAction;
-    const currentSettings = useAppStore.getState().settings;
+          if (cancelled || profileDirectory === null) {
+            console.log("Profile chooser cancelled");
+            setPendingUrlAction(null);
+            return;
+          }
 
-    // Close modal and remove topmost
-    setProfileChooserOpen(false);
-    setPendingUrlAction(null);
+          // Get the pending action (should be set before showing profile chooser)
+          const currentPendingAction = pendingUrlAction;
+          if (!currentPendingAction) {
+            console.warn("Profile chooser result received but no pending action");
+            return;
+          }
 
-    // Remove topmost from main window (fire and forget)
-    invoke("set_main_window_topmost", { enable: false }).catch((err) => {
-      console.error("Failed to remove main window topmost:", err);
-    });
+          const { action, url } = currentPendingAction;
+          const currentSettings = useAppStore.getState().settings;
 
-    // Play sound if enabled
-    if (currentSettings.audioEnabled) {
-      invoke("play_sound", { soundType: "start" }).catch(console.error);
-    }
+          // Clear pending action
+          setPendingUrlAction(null);
 
-    // Open URL with selected profile
-    try {
-      const result = await invoke<{
-        success: boolean;
-        opened_with: string;
-        error: string | null;
-      }>("open_url_in_chrome", { 
-        url, 
-        profileDirectory: profile.profile_directory 
-      });
+          // Play sound if enabled
+          if (currentSettings.audioEnabled) {
+            invoke("play_sound", { soundType: "start" }).catch(console.error);
+          }
 
-      if (result.success) {
-        console.log(`URL action: opened in ${result.opened_with} (profile: ${profile.display_name})`);
-        // Log to history
-        useAppStore.getState().addTranscription({
-          id: crypto.randomUUID(),
-          text: `[URL Open - ${action.name}] ${url} (Profile: ${profile.display_name})`,
-          durationMs: 0,
-          language: "en",
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        console.error("URL action failed:", result.error);
-        showToast(result.error || "Failed to open URL", "error");
-      }
-    } catch (error) {
-      console.error("URL action error:", error);
-      showToast(`Failed to open URL: ${error}`, "error");
-    }
+          // Open URL with selected profile
+          try {
+            const result = await invoke<{
+              success: boolean;
+              opened_with: string;
+              error: string | null;
+            }>("open_url_in_chrome", {
+              url,
+              profileDirectory
+            });
+
+            if (result.success) {
+              console.log(`URL action: opened in ${result.opened_with} (profile: ${profileDirectory})`);
+              // Log to history
+              useAppStore.getState().addTranscription({
+                id: crypto.randomUUID(),
+                text: `[URL Open - ${action.name}] ${url} (Profile: ${profileDirectory})`,
+                durationMs: 0,
+                language: "en",
+                createdAt: new Date().toISOString(),
+              });
+            } else {
+              console.error("URL action failed:", result.error);
+              showToast(result.error || "Failed to open URL", "error");
+            }
+          } catch (error) {
+            console.error("URL action error:", error);
+            showToast(`Failed to open URL: ${error}`, "error");
+          }
+        }
+      );
+
+      return unlisten;
+    };
+
+    const unlistenPromise = setupListener();
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
   }, [pendingUrlAction, showToast]);
-
-  // Handle profile chooser cancel
-  const handleProfileCancel = useCallback(() => {
-    setProfileChooserOpen(false);
-    setPendingUrlAction(null);
-
-    // Remove topmost from main window (fire and forget)
-    invoke("set_main_window_topmost", { enable: false }).catch((err) => {
-      console.error("Failed to remove main window topmost:", err);
-    });
-
-    console.log("Profile chooser cancelled");
-  }, []);
 
   // Get all available actions for voice command matching
   const getAllActions = useCallback((): Array<WebhookAction | PromptAction | MainHotkeyAction> => {
@@ -1530,13 +1532,7 @@ function App() {
       <SettingsPanel />
       <RecordingIndicator />
       <Toast messages={toasts} onDismiss={dismissToast} />
-      <ProfileChooserModal
-        isOpen={profileChooserOpen}
-        profiles={chromeProfiles}
-        actionName={pendingUrlAction?.action.name ?? ""}
-        onSelect={handleProfileSelect}
-        onCancel={handleProfileCancel}
-      />
+      {/* ProfileChooserModal removed - now using separate Tauri window (profile-chooser) */}
       <VoiceCommandModal
         isOpen={voiceCommandModalOpen}
         transcribedText={voiceCommandTranscript}

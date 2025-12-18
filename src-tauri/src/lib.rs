@@ -152,6 +152,54 @@ pub fn run() {
                 }
             }
 
+            // Ensure profile-chooser window exists for Chrome profile selection
+            {
+                use tauri::Manager;
+                let profile_chooser = app.get_webview_window("profile-chooser");
+                log::info!("[aggressive-setup] Checking for profile-chooser window: {:#?}", profile_chooser.is_some());
+                if profile_chooser.is_none() {
+                    let profile_chooser_result = tauri::WebviewWindowBuilder::new(
+                        app,
+                        "profile-chooser",
+                        tauri::WebviewUrl::App("profile-chooser.html".into())
+                    )
+                    .title("Profile Chooser")
+                    .inner_size(350.0, 400.0)
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .focused(true) // Needs focus for keyboard input
+                    .skip_taskbar(true)
+                    .build();
+                    match profile_chooser_result {
+                        Ok(_) => {
+                            log::info!("[aggressive-setup] Profile chooser window created at startup.");
+                            // Apply topmost subclass immediately after creation
+                            if let Some(pc) = app.get_webview_window("profile-chooser") {
+                                if let Err(e) = window_topmost::apply_topmost_subclass(&pc) {
+                                    log::warn!("[aggressive-setup] Failed to apply topmost subclass to profile-chooser: {}", e);
+                                } else {
+                                    log::info!("[aggressive-setup] Applied topmost subclass to profile-chooser for z-order enforcement");
+                                }
+                            }
+                        }
+                        Err(e) => log::error!("[aggressive-setup] Failed to create profile-chooser window: {}", e),
+                    }
+                } else {
+                    // Window exists; ensure it's hidden and has subclass
+                    if let Some(pc) = app.get_webview_window("profile-chooser") {
+                        let _ = pc.hide();
+                        if let Err(e) = window_topmost::apply_topmost_subclass(&pc) {
+                            log::warn!("[aggressive-setup] Failed to apply topmost subclass to existing profile-chooser: {}", e);
+                        } else {
+                            log::info!("[aggressive-setup] Applied topmost subclass to existing profile-chooser window");
+                        }
+                        log::info!("[aggressive-setup] Profile chooser window exists and has been hidden.");
+                    }
+                }
+            }
+
             // Set up system tray
             let show_item = MenuItem::with_id(app, "show", "Show SpeakEasy", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
@@ -264,6 +312,10 @@ pub fn run() {
             commands::emit_voice_review_result,
             // Main window topmost control (for profile chooser modal)
             commands::set_main_window_topmost,
+            // Profile chooser window commands
+            commands::show_profile_chooser,
+            commands::hide_profile_chooser,
+            commands::emit_profile_chooser_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -54,7 +54,8 @@
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" log --oneline --all)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 --stat)",
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 3c11abb --stat)",
-      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 -- src/App.tsx)"
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 -- src/App.tsx)",
+      "SlashCommand(/wrapup)"
     ],
     "deny": [],
     "ask": []

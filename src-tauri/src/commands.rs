@@ -507,6 +507,123 @@ pub async fn set_main_window_topmost(app: AppHandle, enable: bool) -> Result<(),
     Ok(())
 }
 
+// ==================== Profile Chooser Window Commands ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProfileChooserData {
+    pub profiles: Vec<ChromeProfile>,
+    pub action_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProfileChooserResult {
+    pub profile_directory: Option<String>,
+    pub cancelled: bool,
+}
+
+#[tauri::command]
+pub async fn show_profile_chooser(
+    app: AppHandle,
+    profiles: Vec<ChromeProfile>,
+    action_name: String,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let mut pc_opt = app.get_webview_window("profile-chooser");
+    if pc_opt.is_none() {
+        log::warn!("[show_profile_chooser] Profile chooser window not found. Creating it.");
+        let create_res = tauri::WebviewWindowBuilder::new(
+            &app,
+            "profile-chooser",
+            tauri::WebviewUrl::App("profile-chooser.html".into()),
+        )
+        .title("Profile Chooser")
+        .inner_size(350.0, 400.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible(false)
+        .focused(true)
+        .skip_taskbar(true)
+        .build();
+        match create_res {
+            Ok(_) => {
+                log::info!("[show_profile_chooser] Profile chooser window created.");
+                pc_opt = app.get_webview_window("profile-chooser");
+            }
+            Err(e) => {
+                log::error!("[show_profile_chooser] Failed to create profile chooser window: {}", e);
+                return Err(format!("Could not create profile chooser window: {}", e));
+            }
+        }
+    }
+
+    if let Some(pc) = pc_opt {
+        // Center on primary monitor
+        if let Some(monitor) = app.primary_monitor().map_err(|e| e.to_string())?.as_ref() {
+            let monitor_size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let window_width = 350.0;
+            let window_height = 400.0;
+            let x = (monitor_size.width as f64 / scale_factor - window_width) / 2.0;
+            let y = (monitor_size.height as f64 / scale_factor - window_height) / 2.0;
+            pc.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)))
+                .map_err(|e| e.to_string())?;
+        }
+
+        // Apply topmost subclass BEFORE showing
+        if let Err(e) = crate::window_topmost::apply_topmost_subclass(&pc) {
+            log::warn!("[show_profile_chooser] Failed to apply topmost subclass: {}", e);
+        } else {
+            log::info!("[show_profile_chooser] Applied topmost subclass for z-order enforcement");
+        }
+
+        pc.show().map_err(|e| e.to_string())?;
+        pc.set_focus().map_err(|e| e.to_string())?;
+
+        // Emit data to the window
+        let payload = ProfileChooserData { profiles, action_name };
+        pc.emit("profile-chooser-data", payload).ok();
+        log::info!("[show_profile_chooser] Profile chooser window shown with data");
+    } else {
+        log::warn!("[show_profile_chooser] Profile chooser window not found after creation attempt");
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hide_profile_chooser(app: AppHandle) -> Result<(), String> {
+    let pc_opt = app.get_webview_window("profile-chooser");
+    if let Some(pc) = pc_opt {
+        // Remove topmost subclass before hiding
+        if let Err(e) = crate::window_topmost::remove_topmost_subclass(&pc) {
+            log::warn!("[hide_profile_chooser] Failed to remove topmost subclass: {}", e);
+        }
+
+        pc.hide().map_err(|e| e.to_string())?;
+        log::info!("[hide_profile_chooser] Profile chooser window hidden");
+    } else {
+        log::warn!("[hide_profile_chooser] Profile chooser window was not present");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn emit_profile_chooser_result(app: AppHandle, result: ProfileChooserResult) -> Result<(), String> {
+    use tauri::Emitter;
+
+    // Emit result to main window
+    app.emit("profile-chooser-result", result.clone())
+        .map_err(|e| e.to_string())?;
+
+    // Hide the profile chooser window
+    hide_profile_chooser(app).await?;
+
+    log::info!("[emit_profile_chooser_result] Emitted result: {:?}", result);
+    Ok(())
+}
+
 /// Transcription usage response (for UI)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TranscriptionUsageResponse {

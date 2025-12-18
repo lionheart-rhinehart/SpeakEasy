@@ -69,6 +69,20 @@
         "skipTaskbar": true,
         "visible": false,
         "focus": true
+      },
+      {
+        "title": "Profile Chooser",
+        "label": "profile-chooser",
+        "url": "profile-chooser.html",
+        "width": 350,
+        "height": 400,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": true
       }
     ],
     "security": {

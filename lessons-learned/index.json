@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T15:01:20.019Z",
-  "count": 28,
+  "last_updated": "2025-12-18T17:09:49.564Z",
+  "count": 29,
   "entries": [
     {
       "id": "2025-12-18__feature__voice-command-hotkeys",
@@ -93,6 +93,19 @@
       "summary": "Fixed Chrome profile chooser appearing behind other windows by applying Win32 topmost subclass to main window while modal is open",
       "problem": "",
       "fix": ""
+    },
+    {
+      "id": "2025-12-18__bugfix__fix-profile-chooser-topmost-window",
+      "file": "2025-12-18__bugfix__fix-profile-chooser-topmost-window.md",
+      "title": "fix-profile-chooser-topmost-window",
+      "date": "2025-12-18",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed Profile Chooser appearing behind other windows by creating it as a separate Tauri window with Win32 topmost subclass, following the same pattern as the working recording overlay",
+      "problem": "Profile Chooser modal was inside main window and Windows Focus Stealing Prevention blocked it from appearing on top of other applications",
+      "fix": "Created profile-chooser as independent Tauri window with alwaysOnTop and Win32 subclass applied at startup, same architecture as recording overlay"
     },
     {
       "id": "2025-12-17__feature__webhook-url-actions",
