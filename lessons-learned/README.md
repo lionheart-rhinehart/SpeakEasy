@@ -1,7 +1,7 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-18T06:46:20.549Z
+Updated: 2025-12-18T14:36:33.937Z
 
 ## Entries
 
@@ -10,6 +10,7 @@ Updated: 2025-12-18T06:46:20.549Z
 | 2025-12-18 | feature | [voice command hotkeys](2025-12-18__feature__voice-command-hotkeys.md) |
 | 2025-12-18 | feature | [fix chrome profile chooser](2025-12-18__feature__fix-chrome-profile-chooser.md) |
 | 2025-12-18 | docs | [macos port plan](2025-12-18__docs__macos-port-plan.md) |
+| 2025-12-18 | devops | [optimize wrapup workflow](2025-12-18__devops__optimize-wrapup-workflow.md) |
 | 2025-12-18 | devops | [nsis delete old shortcut](2025-12-18__devops__nsis-delete-old-shortcut.md) |
 | 2025-12-18 | bugfix | [fix voice command fuzzy match](2025-12-18__bugfix__fix-voice-command-fuzzy-match.md) |
 | 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |

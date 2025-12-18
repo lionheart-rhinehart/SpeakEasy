@@ -339,15 +339,15 @@ function preflight() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 2: Quality Gates
+// Step 3: Quality Gates
 // ─────────────────────────────────────────────────────────────────────────────
 function runQualityGates() {
   if (parsedArgs.flags.includes('skip-gates')) {
-    logStep(2, 'Quality gates (SKIPPED)');
+    logStep(3, 'Quality gates (SKIPPED)');
     return;
   }
   
-  logStep(2, 'Running quality gates');
+  logStep(3, 'Running quality gates');
   
   // Lint
   logInfo('Running lint...');
@@ -411,33 +411,37 @@ function runQualityGates() {
   }
   
   logSuccess('All quality gates passed');
+}
 
-  // Full Tauri release build (creates installer)
-  // This runs by default so the one-click installer is always up to date
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 4: Release Build
+// ─────────────────────────────────────────────────────────────────────────────
+function buildRelease() {
   if (parsedArgs.flags.includes('skip-release')) {
     logInfo('Skipping Tauri release build (--skip-release flag)');
-  } else {
-    logInfo('Building Tauri release (installer)... this may take a minute');
-    try {
-      run('npm run tauri build');
-      logSuccess('Tauri release build complete - installer ready!');
-    } catch (e) {
-      logError('Tauri release build failed');
-      throw new Error('Release build failed: tauri build');
-    }
+    return;
+  }
+
+  logInfo('Building Tauri release (installer)... this may take a minute');
+  try {
+    run('npm run tauri build');
+    logSuccess('Tauri release build complete - installer ready!');
+  } catch (e) {
+    logError('Tauri release build failed');
+    throw new Error('Release build failed: tauri build');
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 3: Secret Scan
+// Step 2: Secret Scan (fail fast - before slow operations)
 // ─────────────────────────────────────────────────────────────────────────────
 function scanForSecrets() {
   if (parsedArgs.flags.includes('skip-secrets')) {
-    logStep(3, 'Secret scan (SKIPPED)');
+    logStep(2, 'Secret scan (SKIPPED)');
     return;
   }
   
-  logStep(3, 'Scanning for secrets (safety net)');
+  logStep(2, 'Scanning for secrets (safety net)');
   
   const findings = [];
   
@@ -527,10 +531,10 @@ function scanForSecrets() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 4: Change Summary
+// Step 5: Change Summary
 // ─────────────────────────────────────────────────────────────────────────────
 function getChangeSummary() {
-  logStep(4, 'Generating change summary');
+  logStep(5, 'Generating change summary');
   
   let summary = '';
   
@@ -559,10 +563,10 @@ function getChangeSummary() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 5 & 6: Lessons Learned
+// Step 6: Lessons Learned
 // ─────────────────────────────────────────────────────────────────────────────
 async function createLessonsLearned(changeSummary) {
-  logStep(5, 'Creating lessons learned entry');
+  logStep(6, 'Creating lessons learned entry');
   
   // Ensure directory exists
   if (!existsSync(LESSONS_DIR)) {
@@ -891,13 +895,14 @@ async function handleGitHub(config) {
   }
   
   if (hasRemote) {
-    // Already has remote - just push
+    // Already has remote - push with upstream tracking
     logInfo('Pushing to remote...');
     try {
-      run('git push', { silent: true });
+      const branch = execSync('git branch --show-current', { cwd: ROOT, encoding: 'utf-8' }).trim();
+      run(`git push -u origin ${branch}`, { silent: true });
       logSuccess('Pushed to remote');
     } catch (e) {
-      logWarn('Push failed - you may need to set upstream or authenticate');
+      logWarn('Push failed - you may need to authenticate');
     }
     return;
   }
@@ -995,19 +1000,22 @@ async function main() {
   try {
     // Step 1: Preflight
     preflight();
-    
-    // Step 2: Quality gates
-    runQualityGates();
-    
-    // Step 3: Secret scan
+
+    // Step 2: Secret scan (fail fast - before slow operations)
     scanForSecrets();
-    
-    // Step 4: Change summary
+
+    // Step 3: Quality gates
+    runQualityGates();
+
+    // Step 4: Release build (slowest - do after all checks pass)
+    buildRelease();
+
+    // Step 5: Change summary
     const changeSummary = getChangeSummary();
-    
-    // Step 5 & 6: Lessons learned
+
+    // Step 6: Lessons learned
     const lessonInfo = await createLessonsLearned(changeSummary);
-    
+
     // Step 7: Version control
     await handleVersionControl(lessonInfo);
     
