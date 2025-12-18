@@ -1342,9 +1342,10 @@ function App() {
         // Reset state after auto-execute
         setGlobalBusy(false);
         voiceCommandStartTime.current = 0;
-      } else if (matches.length > 0) {
-        // Show review window - confidence is below threshold
-        console.log(`Voice Command: showing review window (best confidence: ${matches[0].confidence} < ${threshold})`);
+      } else {
+        // Show review window - confidence is below threshold OR no matches found
+        // This lets the user see what was transcribed and pick from available options
+        console.log(`Voice Command: showing review window (${matches.length} matches, best confidence: ${matches[0]?.confidence ?? 0} < ${threshold})`);
 
         // Store matches for when user selects from review window
         pendingVoiceReviewMatches.current = matches.slice(0, 5);
@@ -1369,10 +1370,6 @@ function App() {
           setGlobalBusy(false);
           voiceCommandStartTime.current = 0;
         }
-      } else {
-        showToast("No matching action found", "info");
-        setGlobalBusy(false);
-        voiceCommandStartTime.current = 0;
       }
     } catch (error) {
       console.error("Voice Command: transcription failed:", error);

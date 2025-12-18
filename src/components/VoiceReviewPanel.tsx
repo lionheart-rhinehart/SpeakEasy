@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { VoiceCommandMatch } from "../types";
@@ -11,21 +11,9 @@ interface VoiceReviewData {
 export default function VoiceReviewPanel() {
   const [data, setData] = useState<VoiceReviewData | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const timeoutRef = useRef<number | null>(null);
 
-  // Listen for voice review data from main app
-  useEffect(() => {
-    const unlisten = listen<VoiceReviewData>("voice-review-data", (event) => {
-      console.log("[VoiceReviewPanel] Received data:", event.payload);
-      setData(event.payload);
-      setSelectedIndex(0);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, []);
-
-  // Send result back to main app
+  // Send result back to main app (moved up for use in effects)
   const sendResult = useCallback((selectedIndex: number | null) => {
     const payload = selectedIndex !== null
       ? { selectedIndex, cancelled: false }
@@ -35,7 +23,55 @@ export default function VoiceReviewPanel() {
     invoke("emit_voice_review_result", { result: payload }).catch(console.error);
   }, []);
 
-  // Handle keyboard input
+  // Global Escape handler - works even when data is null (stuck Loading state)
+  useEffect(() => {
+    const handleGlobalEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        console.log("[VoiceReviewPanel] Global Escape pressed, cancelling");
+        sendResult(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalEscape);
+    return () => window.removeEventListener("keydown", handleGlobalEscape);
+  }, [sendResult]);
+
+  // Listen for voice review data from main app
+  useEffect(() => {
+    const unlisten = listen<VoiceReviewData>("voice-review-data", (event) => {
+      console.log("[VoiceReviewPanel] Received data:", event.payload);
+      setData(event.payload);
+      setSelectedIndex(0);
+
+      // Clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Auto-close timeout if data doesn't arrive in 5 seconds
+  useEffect(() => {
+    if (data === null) {
+      timeoutRef.current = window.setTimeout(() => {
+        console.log("[VoiceReviewPanel] Timeout: no data received, auto-closing");
+        sendResult(null);
+      }, 5000);
+    }
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [data, sendResult]);
+
+  // Handle keyboard input for navigation (when data is loaded)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!data || data.matches.length === 0) return;
@@ -75,8 +111,14 @@ export default function VoiceReviewPanel() {
 
   if (!data) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-white/95 rounded-xl shadow-2xl">
-        <p className="text-slate-500">Loading...</p>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-white/95 rounded-xl shadow-2xl">
+        <p className="text-slate-500 mb-4">Loading...</p>
+        <button
+          onClick={() => sendResult(null)}
+          className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors border border-slate-300"
+        >
+          Cancel (Esc)
+        </button>
       </div>
     );
   }

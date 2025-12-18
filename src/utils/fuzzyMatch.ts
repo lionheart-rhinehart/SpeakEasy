@@ -46,8 +46,8 @@ function getActionName(action: ActionType): string {
  * Matching tiers (in order of confidence):
  * 1. Exact match (case-insensitive) - confidence: 1.0
  * 2. Contains match - confidence: 0.7-0.9
- * 3. Word overlap match - confidence: 0.5-0.8
- * 4. Levenshtein distance (fuzzy) - confidence: 0.4-0.7
+ * 3. Word overlap match - confidence: 0.5-0.95
+ * 4. Levenshtein distance (fuzzy) - confidence: 0.4-0.85
  *
  * @param spokenText - The transcribed text from voice command
  * @param actions - Array of available actions to match against
@@ -112,10 +112,10 @@ export function matchVoiceCommand(
       const maxWords = Math.max(spokenWords.length, nameWords.length);
       const wordScore = matchingWords / maxWords;
 
-      // Require at least 50% word overlap
-      if (wordScore >= 0.5) {
-        // 0.5 to 0.8 range based on word overlap
-        const confidence = 0.5 + wordScore * 0.3;
+      // Require at least 25% word overlap (lowered from 50%)
+      if (wordScore >= 0.25) {
+        // 0.5 to 0.95 range based on word overlap (boosted for better threshold behavior)
+        const confidence = 0.5 + wordScore * 0.45;
         matches.push({
           action,
           confidence,
@@ -130,10 +130,10 @@ export function matchVoiceCommand(
     const maxLen = Math.max(spoken.length, name.length);
     const similarity = 1 - distance / maxLen;
 
-    // Require at least 60% similarity
-    if (similarity >= 0.6) {
-      // 0.4 to 0.7 range based on similarity
-      const confidence = similarity * 0.7;
+    // Require at least 30% similarity (lowered from 60%)
+    if (similarity >= 0.3) {
+      // 0.4 to 0.85 range based on similarity (boosted for better threshold behavior)
+      const confidence = 0.4 + similarity * 0.45;
       matches.push({
         action,
         confidence,

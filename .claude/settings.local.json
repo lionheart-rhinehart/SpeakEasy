@@ -45,7 +45,12 @@
       "Bash(cmd /c \"echo %LOCALAPPDATA%\")",
       "Bash(git log:*)",
       "Bash(cmd /c \"powershell -NoProfile -Command \"\"& { $s = New-Object -ComObject WScript.Shell; $lnk = $s.CreateShortcut(''C:\\Users\\lionh\\OneDrive\\Desktop\\SpeakEasy.lnk''); echo $lnk.TargetPath }\"\"\")",
-      "Bash(start \"\" \"D:\\Claude CODE\\SpeakEasy\\src-tauri\\target\\release\\bundle\\nsis\\SpeakEasy_1.0.0_x64-setup.exe\")"
+      "Bash(start \"\" \"D:\\Claude CODE\\SpeakEasy\\src-tauri\\target\\release\\bundle\\nsis\\SpeakEasy_1.0.0_x64-setup.exe\")",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" log --oneline -20)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show --stat 5562168)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 5562168:src-tauri/src/commands.rs)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" diff 678a5cb..5562168 -- src/App.tsx)",
+      "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" diff HEAD -- src/App.tsx)"
     ],
     "deny": [],
     "ask": []

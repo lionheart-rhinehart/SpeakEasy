@@ -12,12 +12,13 @@ export default defineConfig(async () => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // Multi-page build for main window and overlay
+  // Multi-page build for main window, overlay, and voice review
   build: {
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
         overlay: path.resolve(__dirname, "overlay.html"),
+        voiceReview: path.resolve(__dirname, "voice-review.html"),
       },
     },
   },

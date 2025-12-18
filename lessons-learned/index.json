@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T05:42:31.002Z",
-  "count": 25,
+  "last_updated": "2025-12-18T06:46:20.553Z",
+  "count": 26,
   "entries": [
     {
       "id": "2025-12-18__feature__voice-command-hotkeys",
@@ -54,6 +54,19 @@
       "summary": "Added NSIS pre-install hook to delete old desktop shortcut before reinstall creates a new one",
       "problem": "",
       "fix": ""
+    },
+    {
+      "id": "2025-12-18__bugfix__fix-voice-command-fuzzy-match",
+      "file": "2025-12-18__bugfix__fix-voice-command-fuzzy-match.md",
+      "title": "fix-voice-command-fuzzy-match",
+      "date": "2025-12-18",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed voice command review window not working and boosted fuzzy match confidence scores for reliable auto-execution",
+      "problem": "Voice review window showed Loading forever due to missing Vite build entry, and confidence scores were too low causing review window to appear when it should auto-execute",
+      "fix": "Added voice-review.html to vite.config.ts build inputs, added defensive timeout/escape handlers to VoiceReviewPanel, and boosted fuzzy match confidence ranges from 30-80% to 50-95% for word overlap and 18-60% to 40-85% for Levenshtein"
     },
     {
       "id": "2025-12-17__feature__webhook-url-actions",
