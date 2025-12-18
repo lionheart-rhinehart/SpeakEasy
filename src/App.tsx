@@ -74,6 +74,7 @@ function App() {
   const aiTransformClipboardText = useRef<string>("");
   const aiTransformStartTime = useRef<number>(0);
   const voiceCommandStartTime = useRef<number>(0);
+  const pendingVoiceReviewMatches = useRef<VoiceCommandMatch[]>([]);
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -959,9 +960,16 @@ function App() {
 
   // Register hotkey actions (webhooks, URL, SMART_URL, and prompt actions)
   useEffect(() => {
+    // Abort controller to prevent race conditions when effect re-runs
+    const abortController = new AbortController();
+
     const setupActionHotkeys = async () => {
       // Unregister any previously registered hotkeys
       for (const hotkey of registeredWebhookHotkeys.current) {
+        if (abortController.signal.aborted) {
+          console.log("Hotkey registration aborted during unregister phase");
+          return;
+        }
         try {
           const isReg = await isRegistered(hotkey);
           if (isReg) {
@@ -976,6 +984,10 @@ function App() {
 
       // Register webhook action hotkeys
       for (const action of webhookActions) {
+        if (abortController.signal.aborted) {
+          console.log("Hotkey registration aborted during webhook registration phase");
+          return;
+        }
         // Check if action should be registered:
         // - Must be enabled and have a hotkey
         // - For POST/GET/URL: must have webhookUrl
@@ -987,9 +999,11 @@ function App() {
 
         try {
           const isReg = await isRegistered(action.hotkey);
+          if (abortController.signal.aborted) return;
           if (isReg) {
             await unregister(action.hotkey);
           }
+          if (abortController.signal.aborted) return;
 
           await register(action.hotkey, async (event) => {
             // Trigger on Pressed (like AI Transform) to copy while keys are held
@@ -1018,13 +1032,19 @@ function App() {
 
       // Register prompt action hotkeys
       for (const action of promptActions) {
+        if (abortController.signal.aborted) {
+          console.log("Hotkey registration aborted during prompt registration phase");
+          return;
+        }
         if (!action.enabled || !action.hotkey || !action.prompt) continue;
 
         try {
           const isReg = await isRegistered(action.hotkey);
+          if (abortController.signal.aborted) return;
           if (isReg) {
             await unregister(action.hotkey);
           }
+          if (abortController.signal.aborted) return;
 
           await register(action.hotkey, async (event) => {
             if (event.state === "Pressed") {
@@ -1049,6 +1069,8 @@ function App() {
 
     // Cleanup on unmount or when actions change
     return () => {
+      // Abort any in-flight registration to prevent race conditions
+      abortController.abort();
       for (const hotkey of registeredWebhookHotkeys.current) {
         unregister(hotkey).catch(console.error);
       }
@@ -1298,13 +1320,14 @@ function App() {
       // Match against available actions
       const allActions = getAllActions();
       const matches = matchVoiceCommand(transcribedText, allActions);
+      const threshold = settings.voiceCommandAutoExecuteThreshold ?? 0.4;
 
-      console.log(`Voice Command: found ${matches.length} matches`);
+      console.log(`Voice Command: found ${matches.length} matches (threshold: ${threshold})`);
 
-      if (matches.length > 0) {
-        // Execute best match immediately - no modal
+      if (matches.length > 0 && matches[0].confidence >= threshold) {
+        // Auto-execute best match - confidence is above threshold
         const bestMatch = matches[0];
-        console.log(`Voice Command: executing "${bestMatch.action.name}" (confidence: ${bestMatch.confidence})`);
+        console.log(`Voice Command: auto-executing "${bestMatch.action.name}" (confidence: ${bestMatch.confidence} >= ${threshold})`);
 
         const action = bestMatch.action;
 
@@ -1315,13 +1338,42 @@ function App() {
         } else if ("prompt" in action) {
           await executePromptAction(action as PromptAction);
         }
+
+        // Reset state after auto-execute
+        setGlobalBusy(false);
+        voiceCommandStartTime.current = 0;
+      } else if (matches.length > 0) {
+        // Show review window - confidence is below threshold
+        console.log(`Voice Command: showing review window (best confidence: ${matches[0].confidence} < ${threshold})`);
+
+        // Store matches for when user selects from review window
+        pendingVoiceReviewMatches.current = matches.slice(0, 5);
+
+        // Convert matches to the format expected by the backend
+        const matchesForReview = pendingVoiceReviewMatches.current.map(m => ({
+          action: m.action,
+          confidence: m.confidence,
+          matchType: m.matchType,
+        }));
+
+        try {
+          await invoke("show_voice_review", {
+            transcribedText,
+            matches: matchesForReview,
+          });
+          // Don't reset globalBusy here - will be reset when review window closes
+        } catch (e) {
+          console.error("Voice Command: failed to show review window:", e);
+          showToast("Failed to show review window", "error");
+          pendingVoiceReviewMatches.current = [];
+          setGlobalBusy(false);
+          voiceCommandStartTime.current = 0;
+        }
       } else {
         showToast("No matching action found", "info");
+        setGlobalBusy(false);
+        voiceCommandStartTime.current = 0;
       }
-
-      // Reset state since we're not using the modal
-      setGlobalBusy(false);
-      voiceCommandStartTime.current = 0;
     } catch (error) {
       console.error("Voice Command: transcription failed:", error);
       invoke("hide_recording_overlay").catch(console.error);
@@ -1329,7 +1381,7 @@ function App() {
       setGlobalBusy(false);
       voiceCommandStartTime.current = 0;
     }
-  }, [voiceCommandListening, getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction]);
+  }, [voiceCommandListening, getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction, settings.voiceCommandAutoExecuteThreshold]);
 
   // Reset globalBusy when voice command modal closes
   useEffect(() => {
@@ -1338,6 +1390,54 @@ function App() {
       voiceCommandStartTime.current = 0;
     }
   }, [voiceCommandModalOpen, setGlobalBusy]);
+
+  // Listen for voice review result (from the review window)
+  useEffect(() => {
+    const setupListener = async () => {
+      const unlisten = await listen<{ selectedIndex: number | null; cancelled: boolean }>(
+        "voice-review-result",
+        async (event) => {
+          const { selectedIndex, cancelled } = event.payload;
+          console.log("Voice Review Result:", event.payload);
+
+          if (cancelled || selectedIndex === null) {
+            console.log("Voice Command: review cancelled");
+            pendingVoiceReviewMatches.current = [];
+            setGlobalBusy(false);
+            voiceCommandStartTime.current = 0;
+            return;
+          }
+
+          // Execute the selected match
+          const match = pendingVoiceReviewMatches.current[selectedIndex];
+          if (match) {
+            console.log(`Voice Command: executing selected "${match.action.name}"`);
+            const action = match.action;
+
+            if ("type" in action && action.type === "main") {
+              showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
+            } else if ("method" in action) {
+              await executeWebhookAction(action as WebhookAction);
+            } else if ("prompt" in action) {
+              await executePromptAction(action as PromptAction);
+            }
+          }
+
+          pendingVoiceReviewMatches.current = [];
+          setGlobalBusy(false);
+          voiceCommandStartTime.current = 0;
+        }
+      );
+
+      return unlisten;
+    };
+
+    const unlistenPromise = setupListener();
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [showToast, setGlobalBusy, executeWebhookAction, executePromptAction]);
 
   // Register voice command hotkey
   useEffect(() => {

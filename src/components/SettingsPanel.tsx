@@ -1250,18 +1250,18 @@ export default function SettingsPanel() {
                 {/* Auto-execute threshold */}
                 <div className="mb-3">
                   <label className="block text-xs text-text-secondary mb-1">
-                    Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.9) * 100)}%
+                    Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}%
                   </label>
                   <input
                     type="range"
-                    min="50"
+                    min="0"
                     max="100"
-                    value={Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.9) * 100)}
+                    value={Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}
                     onChange={(e) => updateSettings({ voiceCommandAutoExecuteThreshold: parseInt(e.target.value) / 100 })}
                     className="w-full"
                   />
                   <p className="text-xs text-text-secondary mt-1">
-                    Actions with higher confidence than this threshold execute automatically
+                    Below this threshold, a review window will appear to select the correct action
                   </p>
                 </div>
               </>

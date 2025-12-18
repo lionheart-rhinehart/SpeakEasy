@@ -55,6 +55,20 @@
         "visible": false,
         "focus": false,
         "visibleOnAllWorkspaces": true
+      },
+      {
+        "title": "Voice Review",
+        "label": "voice-review",
+        "url": "voice-review.html",
+        "width": 400,
+        "height": 300,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": true
       }
     ],
     "security": {

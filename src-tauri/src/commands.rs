@@ -316,6 +316,142 @@ pub async fn set_overlay_state(
     Ok(())
 }
 
+/// Voice review match data sent to the review window
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceReviewMatch {
+    pub action: serde_json::Value, // The action object (webhook, prompt, or main)
+    pub confidence: f64,
+    #[serde(rename = "matchType")]
+    pub match_type: String,
+}
+
+/// Data payload for voice review window
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceReviewData {
+    #[serde(rename = "transcribedText")]
+    pub transcribed_text: String,
+    pub matches: Vec<VoiceReviewMatch>,
+}
+
+/// Result from voice review window
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceReviewResult {
+    #[serde(rename = "selectedIndex")]
+    pub selected_index: Option<usize>,
+    pub cancelled: bool,
+}
+
+#[tauri::command]
+pub async fn show_voice_review(
+    app: AppHandle,
+    transcribed_text: String,
+    matches: Vec<VoiceReviewMatch>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    // Get or create the voice review window
+    let mut vr_opt = app.get_webview_window("voice-review");
+    if vr_opt.is_none() {
+        log::warn!("[show_voice_review] Voice review window not found. Creating it.");
+        let create_res = tauri::WebviewWindowBuilder::new(
+            &app,
+            "voice-review",
+            tauri::WebviewUrl::App("voice-review.html".into()),
+        )
+        .title("Voice Review")
+        .inner_size(400.0, 300.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .visible(false)
+        .focused(true)
+        .skip_taskbar(true)
+        .build();
+        match create_res {
+            Ok(_) => {
+                log::info!("[show_voice_review] Voice review window created.");
+                vr_opt = app.get_webview_window("voice-review");
+            }
+            Err(e) => {
+                log::error!("[show_voice_review] Failed to create voice review window: {}", e);
+                return Err(format!("Could not create voice review window: {}", e));
+            }
+        }
+    }
+
+    if let Some(vr) = vr_opt {
+        // Center on primary monitor
+        if let Some(monitor) = app.primary_monitor().map_err(|e| e.to_string())?.as_ref() {
+            let monitor_size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+
+            let window_width = 400.0;
+            let window_height = 300.0;
+
+            // Calculate center position
+            let x = (monitor_size.width as f64 / scale_factor - window_width) / 2.0;
+            let y = (monitor_size.height as f64 / scale_factor - window_height) / 2.0;
+
+            vr.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)))
+                .map_err(|e| e.to_string())?;
+        }
+
+        vr.show().map_err(|e| e.to_string())?;
+        vr.set_focus().map_err(|e| e.to_string())?;
+
+        // Apply Windows topmost subclass
+        if let Err(e) = crate::window_topmost::apply_topmost_subclass(&vr) {
+            log::warn!("[show_voice_review] Failed to apply topmost subclass: {}", e);
+        } else {
+            log::info!("[show_voice_review] Applied topmost subclass for z-order enforcement");
+        }
+
+        // Emit data to the review window
+        let payload = VoiceReviewData {
+            transcribed_text,
+            matches,
+        };
+        vr.emit("voice-review-data", payload).ok();
+        log::info!("[show_voice_review] Voice review window shown with data");
+    } else {
+        log::warn!("[show_voice_review] Voice review window not found");
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hide_voice_review(app: AppHandle) -> Result<(), String> {
+    let vr_opt = app.get_webview_window("voice-review");
+    if let Some(vr) = vr_opt {
+        // Remove topmost subclass before hiding
+        if let Err(e) = crate::window_topmost::remove_topmost_subclass(&vr) {
+            log::warn!("[hide_voice_review] Failed to remove topmost subclass: {}", e);
+        }
+
+        vr.hide().map_err(|e| e.to_string())?;
+        log::info!("[hide_voice_review] Voice review window hidden");
+    } else {
+        log::warn!("[hide_voice_review] Voice review window was not present");
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn emit_voice_review_result(app: AppHandle, result: VoiceReviewResult) -> Result<(), String> {
+    use tauri::Emitter;
+
+    // Emit result to main window
+    app.emit("voice-review-result", result.clone())
+        .map_err(|e| e.to_string())?;
+
+    // Hide the voice review window
+    hide_voice_review(app).await?;
+
+    log::info!("[emit_voice_review_result] Emitted result: {:?}", result);
+    Ok(())
+}
+
 /// Transcription usage response (for UI)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TranscriptionUsageResponse {

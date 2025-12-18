@@ -95,7 +95,7 @@ function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
     // Voice command settings
     hotkey_voice_command: settings.hotkeyVoiceCommand ?? "Control+Shift+Space",
     voice_command_enabled: settings.voiceCommandEnabled ?? true,
-    voice_command_auto_execute_threshold: settings.voiceCommandAutoExecuteThreshold ?? 0.9,
+    voice_command_auto_execute_threshold: settings.voiceCommandAutoExecuteThreshold ?? 0.4,
   };
 }
 
@@ -124,7 +124,7 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     // Voice command settings
     hotkeyVoiceCommand: fileSettings.hotkey_voice_command ?? "Control+Shift+Space",
     voiceCommandEnabled: fileSettings.voice_command_enabled ?? true,
-    voiceCommandAutoExecuteThreshold: fileSettings.voice_command_auto_execute_threshold ?? 0.9,
+    voiceCommandAutoExecuteThreshold: fileSettings.voice_command_auto_execute_threshold ?? 0.4,
   };
 }
 
@@ -277,7 +277,7 @@ const defaultSettings: UserSettings = {
   // Voice command settings
   hotkeyVoiceCommand: "Control+Shift+Space",
   voiceCommandEnabled: true,
-  voiceCommandAutoExecuteThreshold: 0.9,
+  voiceCommandAutoExecuteThreshold: 0.4,
 };
 
 /**

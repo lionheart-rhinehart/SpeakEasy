@@ -117,6 +117,41 @@ pub fn run() {
                 }
             }
 
+            // Ensure voice-review window exists for voice command disambiguation
+            {
+                use tauri::Manager;
+                let voice_review = app.get_webview_window("voice-review");
+                log::info!("[aggressive-setup] Checking for voice-review window: {:#?}", voice_review.is_some());
+                if voice_review.is_none() {
+                    let voice_review_result = tauri::WebviewWindowBuilder::new(
+                        app,
+                        "voice-review",
+                        tauri::WebviewUrl::App("voice-review.html".into())
+                    )
+                    .title("Voice Review")
+                    .inner_size(400.0, 300.0)
+                    .decorations(false)
+                    .transparent(true)
+                    .always_on_top(true)
+                    .visible(false)
+                    .focused(true) // Needs focus for keyboard input
+                    .skip_taskbar(true)
+                    .build();
+                    match voice_review_result {
+                        Ok(_) => {
+                            log::info!("[aggressive-setup] Voice review window created at startup.");
+                        }
+                        Err(e) => log::error!("[aggressive-setup] Failed to create voice review window: {}", e),
+                    }
+                } else {
+                    // Window exists; ensure it's hidden
+                    if let Some(vr) = app.get_webview_window("voice-review") {
+                        let _ = vr.hide();
+                        log::info!("[aggressive-setup] Voice review window exists and has been hidden.");
+                    }
+                }
+            }
+
             // Set up system tray
             let show_item = MenuItem::with_id(app, "show", "Show SpeakEasy", true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
@@ -223,6 +258,10 @@ pub fn run() {
             // User settings persistence (file-based, survives reinstalls)
             commands::load_user_settings,
             commands::save_user_settings,
+            // Voice review window commands
+            commands::show_voice_review,
+            commands::hide_voice_review,
+            commands::emit_voice_review_result,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
