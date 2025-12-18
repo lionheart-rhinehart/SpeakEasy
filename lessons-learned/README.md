@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-18T00:11:37.641Z
+Updated: 2025-12-18T00:41:43.339Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-18 | docs | [macos port plan](2025-12-18__docs__macos-port-plan.md) |
 | 2025-12-18 | devops | [nsis delete old shortcut](2025-12-18__devops__nsis-delete-old-shortcut.md) |
 | 2025-12-17 | feature | [webhook url actions](2025-12-17__feature__webhook-url-actions.md) |
 | 2025-12-17 | feature | [unify prompt action dropdown](2025-12-17__feature__unify-prompt-action-dropdown.md) |
