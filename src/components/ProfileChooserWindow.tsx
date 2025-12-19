@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { ChromeProfile } from "../types";
 
@@ -14,6 +13,7 @@ export default function ProfileChooserWindow() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const timeoutRef = useRef<number | null>(null);
+  const fetchAttempts = useRef(0);
 
   // Filter profiles by display name
   const filteredProfiles = useMemo(() =>
@@ -44,26 +44,47 @@ export default function ProfileChooserWindow() {
     return () => window.removeEventListener("keydown", handleGlobalEscape);
   }, [sendResult]);
 
-  // Listen for profile chooser data from main app
+  // Fetch profile chooser data from Tauri state (replaces event-based communication)
   useEffect(() => {
-    const unlisten = listen<ProfileChooserData>("profile-chooser-data", (event) => {
-      console.log("[ProfileChooserWindow] Received data:", event.payload);
-      setData(event.payload);
-      setFilter("");
-      setSelectedIndex(0);
+    const fetchData = async () => {
+      try {
+        fetchAttempts.current += 1;
+        console.log(`[ProfileChooserWindow] Fetching data (attempt ${fetchAttempts.current})...`);
 
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+        const result = await invoke<ProfileChooserData | null>("get_profile_chooser_data");
+
+        if (result) {
+          console.log("[ProfileChooserWindow] Got data:", result);
+          setData(result);
+          setFilter("");
+          setSelectedIndex(0);
+
+          // Clear any existing timeout
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+
+          // Focus the input when data arrives
+          setTimeout(() => inputRef.current?.focus(), 50);
+        } else {
+          console.log("[ProfileChooserWindow] No data available yet");
+          // Schedule a retry after a short delay if we haven't succeeded
+          if (fetchAttempts.current < 10) {
+            setTimeout(fetchData, 100);
+          }
+        }
+      } catch (error) {
+        console.error("[ProfileChooserWindow] Error fetching data:", error);
+        // Retry on error
+        if (fetchAttempts.current < 10) {
+          setTimeout(fetchData, 100);
+        }
       }
-
-      // Focus the input when data arrives
-      setTimeout(() => inputRef.current?.focus(), 50);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
     };
+
+    // Start fetching immediately
+    fetchData();
   }, []);
 
   // Auto-close timeout if data doesn't arrive in 5 seconds
