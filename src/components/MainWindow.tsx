@@ -243,34 +243,34 @@ export default function MainWindow() {
       </main>
 
       {/* Footer - Hotkey Quick Reference */}
-      <footer className="px-4 py-2 border-t border-slate-200 bg-surface">
-        <div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
-          <div className="text-xs text-text-secondary text-center">
-            <span className="text-text-tertiary">Voice-to-Text:</span>{" "}
-            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs font-mono">
+      <footer className="px-4 py-3 border-t border-slate-200 bg-surface">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-text-tertiary truncate mr-2">Voice-to-Text</span>
+            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs font-mono flex-shrink-0">
               {formatHotkeyDisplay(settings.hotkeyRecord || "Ctrl+Space")}
             </kbd>
           </div>
-          <div className="text-xs text-text-secondary text-center">
-            <span className="text-text-tertiary">AI Transform:</span>{" "}
-            <kbd className="px-1.5 py-0.5 bg-primary-100 rounded text-xs font-mono text-primary-700">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-text-tertiary truncate mr-2">AI Transform</span>
+            <kbd className="px-1.5 py-0.5 bg-primary-100 rounded text-xs font-mono text-primary-700 flex-shrink-0">
               {formatHotkeyDisplay(settings.hotkeyAiTransform || "Ctrl+`")}
             </kbd>
           </div>
           {/* Voice Command hotkey */}
           {settings.voiceCommandEnabled && (
-            <div className="text-xs text-text-secondary text-center">
-              <span className="text-text-tertiary">Voice Cmd:</span>{" "}
-              <kbd className="px-1.5 py-0.5 bg-purple-100 rounded text-xs font-mono text-purple-700">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-text-tertiary truncate mr-2">Voice Cmd</span>
+              <kbd className="px-1.5 py-0.5 bg-purple-100 rounded text-xs font-mono text-purple-700 flex-shrink-0">
                 {formatHotkeyDisplay(settings.hotkeyVoiceCommand || "Ctrl+Shift+Space")}
               </kbd>
             </div>
           )}
           {/* Active webhook hotkeys */}
           {settings.webhookActions?.filter(w => w.enabled).map((webhook) => (
-            <div key={webhook.id} className="text-xs text-text-secondary text-center">
-              <span className="text-text-tertiary">{webhook.name}:</span>{" "}
-              <kbd className="px-1.5 py-0.5 bg-emerald-100 rounded text-xs font-mono text-emerald-700">
+            <div key={webhook.id} className="flex justify-between items-center text-xs">
+              <span className="text-text-tertiary truncate mr-2">{webhook.name}</span>
+              <kbd className="px-1.5 py-0.5 bg-emerald-100 rounded text-xs font-mono text-emerald-700 flex-shrink-0">
                 {formatHotkeyDisplay(webhook.hotkey)}
               </kbd>
             </div>

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import type { AutoPasteMode, WebhookAction, TransformProvider, ApiKeyStatus } from "../types";
 import HotkeyInput from "./HotkeyInput";
+import CollapsibleSection from "./CollapsibleSection";
 
 // Model info from provider API
 interface ProviderModel {
@@ -433,146 +434,127 @@ export default function SettingsPanel() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* Whisper Transcription API Key Section */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-1">Whisper Transcription API Key</h3>
-            <p className="text-xs text-text-secondary mb-3">
-              For voice-to-text only. This key is separate from AI Transform settings below.
-            </p>
-            {apiKey ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono">
-                    {showApiKey ? apiKey : "sk-••••••••••••••••"}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* API Keys Section */}
+          <CollapsibleSection
+            title="API Keys"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            }
+          >
+            {/* Whisper Transcription API Key */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Whisper Transcription API Key</h4>
+              <p className="text-xs text-text-secondary mb-2">
+                For voice-to-text only. Separate from AI Transform settings.
+              </p>
+              {apiKey ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono">
+                      {showApiKey ? apiKey : "sk-••••••••••••••••"}
+                    </div>
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="p-2 text-text-secondary hover:text-text-primary"
+                      title={showApiKey ? "Hide" : "Show"}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {showApiKey ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        )}
+                      </svg>
+                    </button>
                   </div>
                   <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="p-2 text-text-secondary hover:text-text-primary"
-                    title={showApiKey ? "Hide" : "Show"}
+                    onClick={handleClearApiKey}
+                    className="text-xs text-red-500 hover:text-red-700"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      {showApiKey ? (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                      ) : (
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      )}
-                    </svg>
+                    Remove API Key
                   </button>
                 </div>
-                <button
-                  onClick={handleClearApiKey}
-                  className="text-xs text-red-500 hover:text-red-700"
-                >
-                  Remove API Key
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  type="password"
-                  value={tempApiKey}
-                  onChange={(e) => setTempApiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                />
-                <button
-                  onClick={handleSaveApiKey}
-                  disabled={!tempApiKey.trim()}
-                  className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Save API Key
-                </button>
-              </div>
-            )}
-          </section>
-
-          {/* Usage Statistics - Placeholder for future API integration */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Usage Statistics</h3>
-            <div className="p-4 bg-slate-50 rounded-lg text-center">
-              <svg className="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p className="text-sm text-text-secondary mb-1">Coming Soon</p>
-              <p className="text-xs text-text-secondary">
-                Live usage data requires Admin API access.
-                <br />
-                View your usage at{" "}
-                <a 
-                  href="https://platform.openai.com/usage" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-primary-500 hover:text-primary-700 underline"
-                >
-                  platform.openai.com/usage
-                </a>
-              </p>
-            </div>
-          </section>
-
-          {/* Microphone Selection */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Microphone</h3>
-            {loadingDevices ? (
-              <div className="text-sm text-text-secondary">Loading devices...</div>
-            ) : (
-              <div className="space-y-2">
-                <select
-                  value={settings.selectedMicrophone || ""}
-                  onChange={(e) => handleMicrophoneChange(e.target.value || null)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">System Default</option>
-                  {audioDevices.map((device) => (
-                    <option key={device.name} value={device.name}>
-                      {device.name} {device.is_default ? "(Default)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={loadAudioDevices}
-                  className="text-xs text-primary-500 hover:text-primary-700"
-                >
-                  Refresh device list
-                </button>
-              </div>
-            )}
-          </section>
-
-          {/* Auto-Paste Mode */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Auto-Paste Mode</h3>
-            <div className="space-y-2">
-              {(["always", "smart", "never"] as AutoPasteMode[]).map((mode) => (
-                <label
-                  key={mode}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
-                >
+              ) : (
+                <div className="space-y-2">
                   <input
-                    type="radio"
-                    name="autoPasteMode"
-                    value={mode}
-                    checked={settings.autoPasteMode === mode}
-                    onChange={() => updateSettings({ autoPasteMode: mode })}
-                    className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                    type="password"
+                    value={tempApiKey}
+                    onChange={(e) => setTempApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
-                  <div>
-                    <p className="text-sm font-medium text-text-primary capitalize">{mode}</p>
-                    <p className="text-xs text-text-secondary">
-                      {mode === "always" && "Always paste transcription automatically"}
-                      {mode === "smart" && "Paste when a text field is focused"}
-                      {mode === "never" && "Only copy to clipboard, don't paste"}
-                    </p>
-                  </div>
-                </label>
-              ))}
+                  <button
+                    onClick={handleSaveApiKey}
+                    disabled={!tempApiKey.trim()}
+                    className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Save API Key
+                  </button>
+                </div>
+              )}
             </div>
-          </section>
 
-          {/* Audio Feedback */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Audio Feedback</h3>
+            {/* Usage Statistics */}
+            <div className="pt-3 border-t border-slate-100">
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Usage Statistics</h4>
+              <div className="p-3 bg-slate-50 rounded-lg text-center">
+                <p className="text-xs text-text-secondary">
+                  Coming Soon — View usage at{" "}
+                  <a
+                    href="https://platform.openai.com/usage"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-500 hover:text-primary-700 underline"
+                  >
+                    platform.openai.com
+                  </a>
+                </p>
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          {/* Audio & Input Section */}
+          <CollapsibleSection
+            title="Audio & Input"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+            }
+          >
+            {/* Microphone Selection */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Microphone</h4>
+              {loadingDevices ? (
+                <div className="text-sm text-text-secondary">Loading devices...</div>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={settings.selectedMicrophone || ""}
+                    onChange={(e) => handleMicrophoneChange(e.target.value || null)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">System Default</option>
+                    {audioDevices.map((device) => (
+                      <option key={device.name} value={device.name}>
+                        {device.name} {device.is_default ? "(Default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={loadAudioDevices}
+                    className="text-xs text-primary-500 hover:text-primary-700"
+                  >
+                    Refresh device list
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Audio Feedback */}
             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
               <div>
                 <p className="text-sm font-medium text-text-primary">Sound effects</p>
@@ -585,53 +567,43 @@ export default function SettingsPanel() {
                 className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
               />
             </label>
-          </section>
+          </CollapsibleSection>
 
-          {/* Startup */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Startup</h3>
-            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
-              <div>
-                <p className="text-sm font-medium text-text-primary">Start on boot</p>
-                <p className="text-xs text-text-secondary">Launch SpeakEasy when you log in</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={autostart}
-                onChange={(e) => handleAutostartChange(e.target.checked)}
-                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
-              />
-            </label>
-          </section>
+          {/* Transcription Section */}
+          <CollapsibleSection
+            title="Transcription"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+              </svg>
+            }
+          >
+            {/* Language */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Language</h4>
+              <select
+                value={settings.language}
+                onChange={(e) => updateSettings({ language: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="auto">Auto-detect</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="nl">Dutch</option>
+                <option value="pl">Polish</option>
+                <option value="ru">Russian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="zh">Chinese</option>
+                <option value="tl">Tagalog (Filipino)</option>
+              </select>
+            </div>
 
-          {/* Language */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Transcription Language</h3>
-            <select
-              value={settings.language}
-              onChange={(e) => updateSettings({ language: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="auto">Auto-detect</option>
-              <option value="en">English</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="it">Italian</option>
-              <option value="pt">Portuguese</option>
-              <option value="nl">Dutch</option>
-              <option value="pl">Polish</option>
-              <option value="ru">Russian</option>
-              <option value="ja">Japanese</option>
-              <option value="ko">Korean</option>
-              <option value="zh">Chinese</option>
-              <option value="tl">Tagalog (Filipino)</option>
-            </select>
-          </section>
-
-          {/* Translate to English */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Translation</h3>
+            {/* Translate to English */}
             <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
               <div>
                 <p className="text-sm font-medium text-text-primary">Translate to English</p>
@@ -645,15 +617,22 @@ export default function SettingsPanel() {
               />
             </label>
             {settings.translateToEnglish && (
-              <p className="text-xs text-primary-600 mt-2 p-2 bg-primary-50 rounded-lg">
+              <p className="text-xs text-primary-600 p-2 bg-primary-50 rounded-lg">
                 Translation mode enabled: Your speech will be automatically translated to English.
               </p>
             )}
-          </section>
+          </CollapsibleSection>
 
-          {/* AI Transform Provider Settings */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">AI Transform Settings</h3>
+          {/* AI Transform Section */}
+          <CollapsibleSection
+            title="AI Transform"
+            defaultExpanded={true}
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            }
+          >
             <p className="text-xs text-text-secondary mb-3">
               Configure the LLM provider and model for the AI Transform hotkey ({formatHotkeyDisplay(settings.hotkeyAiTransform || "Ctrl+`")}).
             </p>
@@ -899,12 +878,19 @@ export default function SettingsPanel() {
                 </div>
               )}
             </div>
-          </section>
+          </CollapsibleSection>
 
-          {/* Hotkey Actions */}
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-text-primary">Hotkey Actions</h3>
+          {/* Hotkey Actions Section */}
+          <CollapsibleSection
+            title="Hotkey Actions"
+            defaultExpanded={true}
+            badge={webhookActions.length > 0 ? webhookActions.length : undefined}
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            }
+            headerAction={
               <button
                 onClick={() => {
                   setIsAddingWebhook(true);
@@ -921,92 +907,11 @@ export default function SettingsPanel() {
               >
                 + Add Action
               </button>
-            </div>
-            <p className="text-xs text-text-secondary mb-3">
-              Connect hotkeys to webhooks, URLs, or smart URL/search actions
-            </p>
-
-            {/* Hotkey Actions List */}
-            {webhookActions.length === 0 && !isAddingWebhook ? (
-              <div className="p-4 bg-slate-50 rounded-lg text-center">
-                <p className="text-sm text-text-secondary">No hotkey actions configured</p>
-                <p className="text-xs text-text-secondary mt-1">
-                  Add an action to connect a hotkey to a webhook, URL, or search
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {webhookActions.map((webhook) => (
-                  <div
-                    key={webhook.id}
-                    className={`p-3 rounded-lg border ${
-                      webhook.enabled
-                        ? "bg-white border-slate-200"
-                        : "bg-slate-50 border-slate-200 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={webhook.enabled}
-                          onChange={() => toggleWebhookEnabled(webhook.id)}
-                          className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">{webhook.name}</p>
-                          <div className="flex items-center gap-2">
-                            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
-                              {webhook.hotkey.replace("Control", "Ctrl")}
-                            </kbd>
-                            <span className="text-xs text-slate-400 font-mono">
-                              {webhook.method === "POST" && "POST"}
-                              {webhook.method === "GET" && "GET"}
-                              {webhook.method === "URL" && "URL"}
-                              {webhook.method === "SMART_URL" && "Smart"}
-                            </span>
-                            {webhook.method !== "SMART_URL" && (
-                              <span className="text-xs text-text-secondary truncate max-w-[120px]">
-                                {webhook.webhookUrl}
-                              </span>
-                            )}
-                            {webhook.method === "SMART_URL" && (
-                              <span className="text-xs text-text-secondary italic">
-                                Selection → URL or Search
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setEditingWebhook(webhook)}
-                          className="p-1 text-text-secondary hover:text-text-primary"
-                          title="Edit"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => deleteWebhookAction(webhook.id)}
-                          className="p-1 text-text-secondary hover:text-red-500"
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Add/Edit Hotkey Action Form */}
+            }
+          >
+            {/* Add/Edit Hotkey Action Form - NOW AT TOP */}
             {(isAddingWebhook || editingWebhook) && editingWebhook && (
-              <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <h4 className="text-sm font-medium text-text-primary mb-3">
                   {isAddingWebhook ? "Add Hotkey Action" : "Edit Hotkey Action"}
                 </h4>
@@ -1135,33 +1040,101 @@ export default function SettingsPanel() {
               </div>
             )}
 
+            {/* Hotkey Actions List */}
+            {webhookActions.length === 0 && !isAddingWebhook ? (
+              <div className="p-4 bg-slate-50 rounded-lg text-center">
+                <p className="text-sm text-text-secondary">No hotkey actions configured</p>
+                <p className="text-xs text-text-secondary mt-1">
+                  Click "+ Add Action" above to create your first action
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {webhookActions.map((webhook) => (
+                  <div
+                    key={webhook.id}
+                    className={`p-3 rounded-lg border ${
+                      webhook.enabled
+                        ? "bg-white border-slate-200"
+                        : "bg-slate-50 border-slate-200 opacity-60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={webhook.enabled}
+                          onChange={() => toggleWebhookEnabled(webhook.id)}
+                          className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">{webhook.name}</p>
+                          <div className="flex items-center gap-2">
+                            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
+                              {webhook.hotkey.replace("Control", "Ctrl")}
+                            </kbd>
+                            <span className="text-xs text-slate-400 font-mono">
+                              {webhook.method === "POST" && "POST"}
+                              {webhook.method === "GET" && "GET"}
+                              {webhook.method === "URL" && "URL"}
+                              {webhook.method === "SMART_URL" && "Smart"}
+                            </span>
+                            {webhook.method !== "SMART_URL" && (
+                              <span className="text-xs text-text-secondary truncate max-w-[120px]">
+                                {webhook.webhookUrl}
+                              </span>
+                            )}
+                            {webhook.method === "SMART_URL" && (
+                              <span className="text-xs text-text-secondary italic">
+                                Selection → URL or Search
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingWebhook(webhook)}
+                          className="p-1 text-text-secondary hover:text-text-primary"
+                          title="Edit"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => deleteWebhookAction(webhook.id)}
+                          className="p-1 text-text-secondary hover:text-red-500"
+                          title="Delete"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <p className="text-xs text-text-secondary mt-3">
               <strong>Webhook:</strong> Highlight text → press hotkey → response replaces selection.<br />
               <strong>URL:</strong> Press hotkey → opens preset URL in Chrome.<br />
               <strong>Smart URL:</strong> Highlight text → press hotkey → opens as URL or Google searches it.<br />
               <strong>Prompt:</strong> Highlight text → press hotkey → AI transforms text using your prompt.
             </p>
-          </section>
+          </CollapsibleSection>
 
-          {/* History Limit */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">History Storage Limit</h3>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min="1"
-                max="50"
-                value={settings.historyLimitMb}
-                onChange={(e) => updateSettings({ historyLimitMb: parseInt(e.target.value) })}
-                className="flex-1"
-              />
-              <span className="text-sm text-text-secondary w-12">{settings.historyLimitMb} MB</span>
-            </div>
-          </section>
-
-          {/* Keyboard Shortcuts */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Keyboard Shortcuts</h3>
+          {/* Keyboard Shortcuts Section */}
+          <CollapsibleSection
+            title="Keyboard Shortcuts"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              </svg>
+            }
+          >
             <p className="text-xs text-text-secondary mb-3">
               Click a hotkey to change it. Press Escape to cancel.
             </p>
@@ -1202,20 +1175,26 @@ export default function SettingsPanel() {
 
               {/* Webhook Actions info */}
               <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                <span className="text-text-secondary">Webhook Actions</span>
+                <span className="text-text-secondary">Hotkey Actions</span>
                 <kbd className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono">
-                  Configurable above
+                  See Hotkey Actions above
                 </kbd>
               </div>
             </div>
             <p className="text-xs text-text-secondary mt-2">
               AI Transform: Copy text, hold hotkey, speak instruction, release
             </p>
-          </section>
+          </CollapsibleSection>
 
-          {/* Voice Command Settings */}
-          <section>
-            <h3 className="text-sm font-medium text-text-primary mb-3">Voice Commands</h3>
+          {/* Voice Commands Section */}
+          <CollapsibleSection
+            title="Voice Commands"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            }
+          >
             <p className="text-xs text-text-secondary mb-3">
               Speak the name of any action to execute it instantly.
             </p>
@@ -1248,7 +1227,7 @@ export default function SettingsPanel() {
                 </div>
 
                 {/* Auto-execute threshold */}
-                <div className="mb-3">
+                <div>
                   <label className="block text-xs text-text-secondary mb-1">
                     Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}%
                   </label>
@@ -1266,7 +1245,78 @@ export default function SettingsPanel() {
                 </div>
               </>
             )}
-          </section>
+          </CollapsibleSection>
+
+          {/* Behavior & Storage Section */}
+          <CollapsibleSection
+            title="Behavior & Storage"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            }
+          >
+            {/* Auto-Paste Mode */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Auto-Paste Mode</h4>
+              <div className="space-y-1">
+                {(["always", "smart", "never"] as AutoPasteMode[]).map((mode) => (
+                  <label
+                    key={mode}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="autoPasteMode"
+                      value={mode}
+                      checked={settings.autoPasteMode === mode}
+                      onChange={() => updateSettings({ autoPasteMode: mode })}
+                      className="w-4 h-4 text-primary-500 focus:ring-primary-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-text-primary capitalize">{mode}</p>
+                      <p className="text-xs text-text-secondary">
+                        {mode === "always" && "Always paste transcription automatically"}
+                        {mode === "smart" && "Paste when a text field is focused"}
+                        {mode === "never" && "Only copy to clipboard, don't paste"}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Startup */}
+            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Start on boot</p>
+                <p className="text-xs text-text-secondary">Launch SpeakEasy when you log in</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={autostart}
+                onChange={(e) => handleAutostartChange(e.target.checked)}
+                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
+              />
+            </label>
+
+            {/* History Limit */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">History Storage Limit</h4>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="1"
+                  max="50"
+                  value={settings.historyLimitMb}
+                  onChange={(e) => updateSettings({ historyLimitMb: parseInt(e.target.value) })}
+                  className="flex-1"
+                />
+                <span className="text-sm text-text-secondary w-12">{settings.historyLimitMb} MB</span>
+              </div>
+            </div>
+          </CollapsibleSection>
         </div>
 
         {/* Footer */}

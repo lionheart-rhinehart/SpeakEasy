@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-19T21:19:29.539Z
+Updated: 2025-12-19T21:59:54.328Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-19 | frontend | [settings ui cleanup collapsible sections](2025-12-19__frontend__settings-ui-cleanup-collapsible-sections.md) |
 | 2025-12-19 | bugfix | [fix profile chooser minimize and cancel](2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel.md) |
 | 2025-12-18 | feature | [voice command hotkeys](2025-12-18__feature__voice-command-hotkeys.md) |
 | 2025-12-18 | feature | [fix chrome profile chooser](2025-12-18__feature__fix-chrome-profile-chooser.md) |

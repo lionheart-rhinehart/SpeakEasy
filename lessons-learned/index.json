@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-19T21:19:29.546Z",
-  "count": 31,
+  "last_updated": "2025-12-19T21:59:54.335Z",
+  "count": 32,
   "entries": [
+    {
+      "id": "2025-12-19__frontend__settings-ui-cleanup-collapsible-sections",
+      "file": "2025-12-19__frontend__settings-ui-cleanup-collapsible-sections.md",
+      "title": "settings-ui-cleanup-collapsible-sections",
+      "date": "2025-12-19",
+      "area": "frontend",
+      "tags": [
+        "frontend"
+      ],
+      "summary": "Reorganized Settings panel with collapsible sections, moved Add Action form to top, added 2-column hotkey grid layout with right-aligned badges, and increased default window size",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel",
       "file": "2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel.md",
