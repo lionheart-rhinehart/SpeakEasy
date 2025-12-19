@@ -514,6 +514,12 @@ pub async fn set_main_window_topmost(app: AppHandle, enable: bool) -> Result<(),
 #[tauri::command]
 pub async fn bring_main_to_front(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
+        // First, unminimize if window is minimized
+        if window.is_minimized().map_err(|e| e.to_string())? {
+            log::info!("[bring_main_to_front] Window is minimized, unminimizing...");
+            window.unminimize().map_err(|e| e.to_string())?;
+        }
+
         // Show and focus the window
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;

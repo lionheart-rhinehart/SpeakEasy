@@ -57,7 +57,12 @@
       "Bash(git -C \"d:\\Claude CODE\\SpeakEasy\" show 192c4c9 -- src/App.tsx)",
       "SlashCommand(/wrapup)",
       "Bash(node --check:*)",
-      "Bash(cmd /c \"del \\\\?\\\\D:\\\\Claude CODE\\\\SpeakEasy\\\\nul\")"
+      "Bash(cmd /c \"del \\\\?\\\\D:\\\\Claude CODE\\\\SpeakEasy\\\\nul\")",
+      "SlashCommand(/test-protocol)",
+      "Bash(git fetch:*)",
+      "Bash(git push:*)",
+      "Skill(test-protocol)",
+      "Skill(test-protocol:*)"
     ],
     "deny": [],
     "ask": []

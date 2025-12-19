@@ -670,6 +670,9 @@ function App() {
           // Bring main window to front with topmost so modal is visible
           try {
             await invoke("bring_main_to_front");
+            // Wait for Windows to complete window operations before showing modal
+            // (unminimize + topmost subclass need time to process in Windows message queue)
+            await new Promise(resolve => setTimeout(resolve, 100));
             console.log("Main window brought to front");
           } catch (err) {
             console.error("Failed to bring main window to front:", err);
@@ -1130,17 +1133,37 @@ function App() {
       console.error("URL action error:", error);
       showToast(`Failed to open URL: ${error}`, "error");
     }
-  }, [pendingUrlAction, showToast]);
+
+    // Reset global busy state after profile selection completes
+    setGlobalBusy(false);
+    setVoiceCommandListening(false);
+    voiceCommandStartTime.current = 0;
+  }, [pendingUrlAction, showToast, setGlobalBusy, setVoiceCommandListening]);
 
   // Handle profile chooser cancel (in-window modal)
   const handleProfileCancel = useCallback(() => {
     console.log("Profile chooser cancelled");
     setProfileChooserOpen(false);
     setPendingUrlAction(null);
-
-    // Remove topmost from main window
-    invoke("remove_main_topmost").catch(console.error);
+    // Note: globalBusy and other state resets are handled by the cleanup useEffect below
   }, []);
+
+  // Reset globalBusy when profile chooser modal closes (cleanup effect)
+  // This mirrors the pattern used for voiceCommandModalOpen (lines 1407-1412)
+  useEffect(() => {
+    if (!profileChooserOpen) {
+      // Ensure all voice command state is reset when modal closes
+      setGlobalBusy(false);
+      setVoiceCommandListening(false);
+      voiceCommandStartTime.current = 0;
+
+      // CRITICAL: Reset recordingState to idle (fixes spinner stuck in "processing")
+      useAppStore.getState().setRecordingState("idle");
+
+      // Remove topmost from main window
+      invoke("remove_main_topmost").catch(console.error);
+    }
+  }, [profileChooserOpen, setGlobalBusy, setVoiceCommandListening]);
 
   // Get all available actions for voice command matching
   const getAllActions = useCallback((): Array<WebhookAction | PromptAction | MainHotkeyAction> => {

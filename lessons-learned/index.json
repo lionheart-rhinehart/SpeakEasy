@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-18T18:45:09.601Z",
-  "count": 30,
+  "last_updated": "2025-12-19T21:19:29.546Z",
+  "count": 31,
   "entries": [
+    {
+      "id": "2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel",
+      "file": "2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel.md",
+      "title": "fix-profile-chooser-minimize-and-cancel",
+      "date": "2025-12-19",
+      "area": "bugfix",
+      "tags": [
+        "bugfix"
+      ],
+      "summary": "Fixed profile chooser not appearing when minimized and cancel button leaving app in loading state",
+      "problem": "Profile chooser failed to show when window minimized; clicking cancel left spinner running because recordingState was not reset",
+      "fix": "Added window.unminimize() call, 100ms timing delay for Windows message queue, and setRecordingState(idle) in cleanup useEffect"
+    },
     {
       "id": "2025-12-18__feature__voice-command-hotkeys",
       "file": "2025-12-18__feature__voice-command-hotkeys.md",
