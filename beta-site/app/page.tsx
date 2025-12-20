@@ -1,4 +1,5 @@
 import SignupForm from '@/components/SignupForm';
+import Link from 'next/link';
 
 export default function HomePage() {
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
@@ -39,6 +40,13 @@ export default function HomePage() {
         {/* Beta notice */}
         <div className="mt-8 text-center text-xs text-gray-400">
           <p>This is beta software. By signing up, you agree to help test new features.</p>
+        </div>
+
+        {/* Admin link - subtle at bottom */}
+        <div className="mt-4 text-center">
+          <Link href="/login" className="text-xs text-gray-300 hover:text-gray-500 transition-colors">
+            Admin
+          </Link>
         </div>
       </div>
     </main>
