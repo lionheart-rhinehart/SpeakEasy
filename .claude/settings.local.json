@@ -77,7 +77,9 @@
       "Bash(start \"\" \"C:\\\\Users\\\\lionh\\\\AppData\\\\Local\\\\SpeakEasy\\\\SpeakEasy.exe\")",
       "Bash(cmd /c \"dir %APPDATA%\\\\SpeakEasy\\\\ 2>nul || echo Directory empty or missing\")",
       "Bash(cmd /c \"taskkill /F /IM speakeasy.exe\")",
-      "Bash(cmd /c \"start \"\"\"\" \"\"C:\\\\Users\\\\lionh\\\\AppData\\\\Local\\\\SpeakEasy\\\\SpeakEasy.exe\"\"\")"
+      "Bash(cmd /c \"start \"\"\"\" \"\"C:\\\\Users\\\\lionh\\\\AppData\\\\Local\\\\SpeakEasy\\\\SpeakEasy.exe\"\"\")",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" add -A)",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" commit -m \"$\\(cat <<''EOF''\nfeat: add in-app feedback system and beta admin panel\n\n- Add feedback.rs module for submitting feedback to Supabase\n- Add FeedbackPanel.tsx component in Settings\n- Add support links to LicenseActivation screen\n- Add beta-site Next.js app with admin panel for managing:\n  - Beta signups and licenses\n  - Feedback inbox with reply functionality\n  - Dashboard with stats\n- Add Supabase migrations for feedback schema\n- Add Edge Functions for beta registration and license resend\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ],
     "deny": [],
     "ask": []

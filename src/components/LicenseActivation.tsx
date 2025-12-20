@@ -287,16 +287,26 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 space-y-2">
             <p className="text-xs text-text-secondary text-center">
               Don't have a license key?{" "}
               <a
-                href="mailto:support@speakeasy.app"
+                href="https://speakeasy-beta.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="text-primary-600 hover:text-primary-700 font-medium"
               >
-                Contact us
-              </a>{" "}
-              to request beta access.
+                Sign up for beta access
+              </a>
+            </p>
+            <p className="text-xs text-text-secondary text-center">
+              Having trouble activating?{" "}
+              <a
+                href="mailto:hello@lionelhill.com?subject=SpeakEasy%20Activation%20Help"
+                className="text-primary-600 hover:text-primary-700 font-medium"
+              >
+                Contact support
+              </a>
             </p>
           </div>
         </div>

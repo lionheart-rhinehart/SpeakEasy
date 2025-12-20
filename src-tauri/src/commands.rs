@@ -1802,3 +1802,40 @@ pub async fn deactivate_license() -> Result<(), String> {
 pub fn get_machine_id() -> String {
     license::get_machine_id()
 }
+
+// ============================================================================
+// FEEDBACK SUBMISSION (Beta Testing)
+// ============================================================================
+
+use crate::feedback;
+
+/// Submit feedback to the server
+#[tauri::command]
+pub async fn submit_feedback(
+    category: String,
+    message: String,
+    video_url: Option<String>,
+) -> Result<feedback::FeedbackResponse, String> {
+    let submission = feedback::FeedbackSubmission {
+        category,
+        message,
+        video_url,
+    };
+
+    feedback::submit_feedback(submission)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Upload a feedback attachment to storage
+/// Returns the public URL of the uploaded file
+#[tauri::command]
+pub async fn upload_feedback_attachment(
+    file_name: String,
+    file_data: Vec<u8>,
+    content_type: String,
+) -> Result<String, String> {
+    feedback::upload_attachment(file_name, file_data, content_type)
+        .await
+        .map_err(|e| e.to_string())
+}

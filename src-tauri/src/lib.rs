@@ -2,6 +2,7 @@ mod audio;
 mod clipboard;
 mod commands;
 mod config;
+mod feedback;
 mod hotkeys;
 mod license;
 mod llm;
@@ -276,6 +277,9 @@ pub fn run() {
             commands::get_license_info,
             commands::deactivate_license,
             commands::get_machine_id,
+            // Feedback submission
+            commands::submit_feedback,
+            commands::upload_feedback_attachment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
