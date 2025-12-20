@@ -15,47 +15,54 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Send reply email
+    // Send reply email (if Resend is configured)
     const resendApiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.FROM_EMAIL || 'beta@speakeasy.app';
+    const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
     const adminEmail = process.env.ADMIN_EMAIL;
 
     if (resendApiKey) {
-      const resend = new Resend(resendApiKey);
+      try {
+        const resend = new Resend(resendApiKey);
 
-      await resend.emails.send({
-        from: fromEmail,
-        to: email,
-        subject: 'Re: Your SpeakEasy Feedback',
-        reply_to: adminEmail || fromEmail,
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <p>Hi ${name},</p>
-            <p>Thank you for your feedback! Here's our response:</p>
-            <div style="background: #f8fafc; border-left: 4px solid #0ea5e9; padding: 16px; margin: 20px 0;">
-              ${message.replace(/\n/g, '<br>')}
+        await resend.emails.send({
+          from: fromEmail,
+          to: email,
+          subject: 'Re: Your SpeakEasy Feedback',
+          reply_to: adminEmail || fromEmail,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <p>Hi ${name},</p>
+              <p>Thank you for your feedback! Here's our response:</p>
+              <div style="background: #f8fafc; border-left: 4px solid #0ea5e9; padding: 16px; margin: 20px 0;">
+                ${message.replace(/\n/g, '<br>')}
+              </div>
+              <p>If you have any more questions or feedback, just reply to this email.</p>
+              <p>Thanks for being a beta tester!</p>
+              <p style="color: #64748b; font-size: 14px; margin-top: 40px;">
+                — The SpeakEasy Team
+              </p>
             </div>
-            <p>If you have any more questions or feedback, just reply to this email.</p>
-            <p>Thanks for being a beta tester!</p>
-            <p style="color: #64748b; font-size: 14px; margin-top: 40px;">
-              — The SpeakEasy Team
-            </p>
-          </div>
-        `,
-      });
+          `,
+        });
+      } catch (emailError) {
+        console.error('Failed to send email (continuing anyway):', emailError);
+      }
     }
 
-    // Update feedback status
+    // Update feedback status AND save the reply for in-app viewing
     const { error: updateError } = await supabase
       .from('feedback')
       .update({
         status: 'replied',
         replied_at: new Date().toISOString(),
+        admin_reply: message,
+        admin_reply_at: new Date().toISOString(),
       })
       .eq('id', feedbackId);
 
     if (updateError) {
       console.error('Failed to update feedback:', updateError);
+      throw updateError;
     }
 
     return NextResponse.json({ success: true });
