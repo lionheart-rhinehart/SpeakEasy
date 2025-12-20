@@ -499,63 +499,9 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {/* Audio & Input Section */}
-          <CollapsibleSection
-            title="Audio & Input"
-            onToggle={(expanded) => setAudioSectionExpanded(expanded)}
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            }
-          >
-            {/* Microphone Selection */}
-            <div>
-              <h4 className="text-xs font-medium text-text-secondary mb-2">Microphone</h4>
-              {loadingDevices ? (
-                <div className="text-sm text-text-secondary">Loading devices...</div>
-              ) : (
-                <div className="space-y-2">
-                  <select
-                    value={settings.selectedMicrophone || ""}
-                    onChange={(e) => handleMicrophoneChange(e.target.value || null)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  >
-                    <option value="">System Default</option>
-                    {audioDevices.map((device) => (
-                      <option key={device.name} value={device.name}>
-                        {device.name} {device.is_default ? "(Default)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={loadAudioDevices}
-                    className="text-xs text-primary-500 hover:text-primary-700"
-                  >
-                    Refresh device list
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Audio Feedback */}
-            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
-              <div>
-                <p className="text-sm font-medium text-text-primary">Sound effects</p>
-                <p className="text-xs text-text-secondary">Play sounds for recording start/stop</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.audioEnabled}
-                onChange={(e) => updateSettings({ audioEnabled: e.target.checked })}
-                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
-              />
-            </label>
-          </CollapsibleSection>
-
           {/* Transcription Section */}
           <CollapsibleSection
-            title="Transcription"
+            title={apiKey ? "Transcription" : "Transcription (Setup Required)"}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
@@ -678,260 +624,115 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
             </div>
           </CollapsibleSection>
 
-          {/* AI Transform Section */}
+          {/* Master Commands Section */}
           <CollapsibleSection
-            title="AI Transform"
-            defaultExpanded={false}
-            onToggle={(expanded) => setAiTransformExpanded(expanded)}
+            title="Master Commands"
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
               </svg>
             }
           >
             <p className="text-xs text-text-secondary mb-3">
-              Configure the LLM provider and model for the AI Transform hotkey ({formatHotkeyDisplay(settings.hotkeyAiTransform || "Ctrl+`")}).
+              Click a hotkey to change it. Press Escape to cancel.
             </p>
 
-            {/* Provider Selection */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-text-secondary mb-1">Provider</label>
-                <select
-                  value={settings.transformProvider}
-                  onChange={(e) => {
-                    const newProvider = e.target.value as TransformProvider;
-                    // Clear models - they'll be fetched via useEffect when provider changes
-                    setProviderModels([]);
-                    setModelsError(null);
-                    updateSettings({
-                      transformProvider: newProvider,
-                      // Keep current model - will be validated/updated when new models load
-                    });
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            {/* Hotkeys */}
+            <div className="space-y-2 text-sm">
+              {/* Voice to Text hotkey */}
+              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                <span className="text-text-secondary">Voice to Text</span>
+                <button
+                  onClick={() => setCapturingHotkeyState("record")}
+                  className={`px-2 py-1 border rounded text-xs font-mono transition-colors ${
+                    capturingHotkeyState === "record"
+                      ? "bg-primary-100 border-primary-400 text-primary-700 animate-pulse"
+                      : "bg-white border-slate-200 hover:border-primary-300 hover:bg-primary-50"
+                  }`}
                 >
-                  {(Object.keys(PROVIDER_INFO) as TransformProvider[]).map((provider) => (
-                    <option key={provider} value={provider}>
-                      {PROVIDER_INFO[provider].name} — {PROVIDER_INFO[provider].description}
-                    </option>
-                  ))}
-                </select>
+                  {capturingHotkeyState === "record"
+                    ? "Press keys..."
+                    : formatHotkeyDisplay(settings.hotkeyRecord || "Control+Space")}
+                </button>
               </div>
 
-              {/* API Key for selected provider */}
-              <div>
-                <label className="block text-xs text-text-secondary mb-1">
-                  {PROVIDER_INFO[settings.transformProvider].name} API Key
-                  {settings.transformProvider === "openai" && (
-                    <span className="text-text-secondary font-normal"> (separate from Whisper above)</span>
-                  )}
-                </label>
-                {(() => {
-                  const keyStatus = getCurrentProviderKeyStatus();
-                  if (keyStatus?.is_set) {
-                    return (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm font-mono text-green-700">
-                          {keyStatus.preview || "••••••••"}
-                        </div>
-                        <button
-                          onClick={handleClearTransformApiKey}
-                          className="px-3 py-2 text-red-500 hover:text-red-700 text-sm"
-                          title="Remove API Key"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="space-y-2">
-                      <input
-                        type="password"
-                        value={tempTransformApiKey}
-                        onChange={(e) => setTempTransformApiKey(e.target.value)}
-                        placeholder={settings.transformProvider === "anthropic" ? "sk-ant-..." : "sk-..."}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                      <button
-                        onClick={handleSetTransformApiKey}
-                        disabled={!tempTransformApiKey.trim() || isSettingTransformKey}
-                        className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isSettingTransformKey ? "Saving..." : "Save API Key"}
-                      </button>
-                    </div>
-                  );
-                })()}
-                <p className="text-xs text-text-secondary mt-1">
-                  {settings.transformProvider === "openrouter" && (
-                    <>Get your key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">openrouter.ai/keys</a></>
-                  )}
-                  {settings.transformProvider === "openai" && (
-                    <>Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">platform.openai.com/api-keys</a> (can be same key as Whisper)</>
-                  )}
-                  {settings.transformProvider === "anthropic" && (
-                    <>Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">console.anthropic.com</a></>
-                  )}
-                </p>
-                <p className="text-xs text-slate-400 mt-1 italic">
-                  This key is for AI Transform only. Does not affect Whisper transcription.
-                </p>
+              {/* AI Transform hotkey */}
+              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                <span className="text-text-secondary">AI Transform</span>
+                <button
+                  onClick={() => setCapturingHotkeyState("aiTransform")}
+                  className={`px-2 py-1 border rounded text-xs font-mono transition-colors ${
+                    capturingHotkeyState === "aiTransform"
+                      ? "bg-primary-100 border-primary-400 text-primary-700 animate-pulse"
+                      : "bg-white border-slate-200 hover:border-primary-300 hover:bg-primary-50"
+                  }`}
+                >
+                  {capturingHotkeyState === "aiTransform"
+                    ? "Press keys..."
+                    : formatHotkeyDisplay(settings.hotkeyAiTransform || "Control+Backquote")}
+                </button>
               </div>
+            </div>
 
-              {/* Model Selection */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs text-text-secondary">Model</label>
-                  {getCurrentProviderKeyStatus()?.is_set && (
-                    <button
-                      onClick={() => fetchModelsForProvider(true)}
-                      disabled={isLoadingModels}
-                      className="text-xs text-primary-500 hover:text-primary-700 disabled:opacity-50"
-                    >
-                      {isLoadingModels ? "Loading..." : "Refresh"}
-                    </button>
-                  )}
+            <p className="text-xs text-text-secondary mt-2 mb-4">
+              AI Transform: Copy text, hold hotkey, speak instruction, release
+            </p>
+
+            {/* Divider */}
+            <div className="border-t border-slate-200 my-4" />
+
+            {/* Voice Commands */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Voice Commands</h4>
+              <p className="text-xs text-text-secondary mb-3">
+                Speak the name of any action to execute it instantly.
+              </p>
+
+              {/* Enable/Disable toggle */}
+              <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer mb-3">
+                <input
+                  type="checkbox"
+                  checked={settings.voiceCommandEnabled ?? true}
+                  onChange={(e) => updateSettings({ voiceCommandEnabled: e.target.checked })}
+                  className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Enable voice commands</p>
+                  <p className="text-xs text-text-secondary">Say action names to execute them</p>
                 </div>
-                
-                {!getCurrentProviderKeyStatus()?.is_set ? (
-                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
-                    Add API key above to see available models
-                  </div>
-                ) : isLoadingModels ? (
-                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
-                    Loading available models...
-                  </div>
-                ) : modelsError ? (
-                  <div className="space-y-2">
-                    <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                      {modelsError}
-                    </div>
-                    {/* Fallback to custom model input */}
-                    <input
-                      type="text"
-                      value={settings.transformModel}
-                      onChange={(e) => updateSettings({ transformModel: e.target.value })}
-                      placeholder="Enter model ID manually"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+              </label>
+
+              {/* Voice command hotkey and threshold - only shown when enabled */}
+              {settings.voiceCommandEnabled && (
+                <>
+                  <div className="mb-3">
+                    <label className="block text-xs text-text-secondary mb-1">Voice Command Hotkey</label>
+                    <HotkeyInput
+                      value={settings.hotkeyVoiceCommand || "Control+Shift+Space"}
+                      onChange={(hotkey) => updateSettings({ hotkeyVoiceCommand: hotkey })}
+                      excludeActionName="Voice Command"
+                      showPresetToggle={false}
                     />
                   </div>
-                ) : providerModels.length === 0 ? (
-                  <div className="space-y-2">
-                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
-                      No models found. Enter model ID manually:
-                    </div>
-                    <input
-                      type="text"
-                      value={settings.transformModel}
-                      onChange={(e) => updateSettings({ transformModel: e.target.value })}
-                      placeholder="Enter model ID"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
-                    />
-                  </div>
-                ) : (
-                  <>
-                    <select
-                      value={providerModels.some(m => m.id === settings.transformModel) ? settings.transformModel : "__custom__"}
-                      onFocus={handleModelDropdownFocus}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setCustomModel(settings.transformModel);
-                        } else {
-                          updateSettings({ transformModel: e.target.value });
-                          setCustomModel("");
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    >
-                      {providerModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.name} {model.description && `— ${model.description}`}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom model ID...</option>
-                    </select>
-                    
-                    {/* Custom model input */}
-                    {(!providerModels.some(m => m.id === settings.transformModel) || customModel !== "") && (
-                      <div className="mt-2 space-y-2">
-                        <input
-                          type="text"
-                          value={customModel || settings.transformModel}
-                          onChange={(e) => setCustomModel(e.target.value)}
-                          placeholder="e.g., gpt-4-turbo"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
-                        />
-                        <button
-                          onClick={() => {
-                            if (customModel.trim()) {
-                              updateSettings({ transformModel: customModel.trim() });
-                              setCustomModel("");
-                            }
-                          }}
-                          disabled={!customModel.trim()}
-                          className="px-3 py-1.5 bg-slate-200 text-text-primary text-sm rounded-lg hover:bg-slate-300 disabled:opacity-50 transition-colors"
-                        >
-                          Use Custom Model
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
 
-              {/* Advanced Settings Toggle */}
-              <button
-                onClick={() => setShowAdvancedTransform(!showAdvancedTransform)}
-                className="text-xs text-primary-500 hover:text-primary-700 flex items-center gap-1"
-              >
-                {showAdvancedTransform ? "Hide" : "Show"} advanced settings
-                <svg
-                  className={`w-3 h-3 transition-transform ${showAdvancedTransform ? "rotate-180" : ""}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Advanced Settings */}
-              {showAdvancedTransform && (
-                <div className="p-3 bg-slate-50 rounded-lg space-y-3">
+                  {/* Auto-execute threshold */}
                   <div>
                     <label className="block text-xs text-text-secondary mb-1">
-                      Temperature: {settings.transformTemperature?.toFixed(1) ?? 0.7}
+                      Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}%
                     </label>
                     <input
                       type="range"
                       min="0"
-                      max="2"
-                      step="0.1"
-                      value={settings.transformTemperature ?? 0.7}
-                      onChange={(e) => updateSettings({ transformTemperature: parseFloat(e.target.value) })}
+                      max="100"
+                      value={Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}
+                      onChange={(e) => updateSettings({ voiceCommandAutoExecuteThreshold: parseInt(e.target.value) / 100 })}
                       className="w-full"
                     />
-                    <p className="text-xs text-text-secondary">
-                      Lower = more focused, Higher = more creative
+                    <p className="text-xs text-text-secondary mt-1">
+                      Below this threshold, a review window will appear to select the correct action
                     </p>
                   </div>
-                  <div>
-                    <label className="block text-xs text-text-secondary mb-1">
-                      Max Output Tokens: {settings.transformMaxTokens ?? 4096}
-                    </label>
-                    <input
-                      type="range"
-                      min="256"
-                      max="8192"
-                      step="256"
-                      value={settings.transformMaxTokens ?? 4096}
-                      onChange={(e) => updateSettings({ transformMaxTokens: parseInt(e.target.value) })}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </CollapsibleSection>
@@ -1300,125 +1101,316 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
             </p>
           </CollapsibleSection>
 
-          {/* Keyboard Shortcuts Section */}
+          {/* AI Transform Section */}
           <CollapsibleSection
-            title="Keyboard Shortcuts"
+            title="AI Transform"
+            defaultExpanded={false}
+            onToggle={(expanded) => setAiTransformExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             }
           >
             <p className="text-xs text-text-secondary mb-3">
-              Click a hotkey to change it. Press Escape to cancel.
+              Configure the LLM provider and model for the AI Transform hotkey ({formatHotkeyDisplay(settings.hotkeyAiTransform || "Ctrl+`")}).
             </p>
-            <div className="space-y-2 text-sm">
-              {/* Voice to Text hotkey */}
-              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                <span className="text-text-secondary">Voice to Text</span>
-                <button
-                  onClick={() => setCapturingHotkeyState("record")}
-                  className={`px-2 py-1 border rounded text-xs font-mono transition-colors ${
-                    capturingHotkeyState === "record"
-                      ? "bg-primary-100 border-primary-400 text-primary-700 animate-pulse"
-                      : "bg-white border-slate-200 hover:border-primary-300 hover:bg-primary-50"
-                  }`}
+
+            {/* Provider Selection */}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">Provider</label>
+                <select
+                  value={settings.transformProvider}
+                  onChange={(e) => {
+                    const newProvider = e.target.value as TransformProvider;
+                    // Clear models - they'll be fetched via useEffect when provider changes
+                    setProviderModels([]);
+                    setModelsError(null);
+                    updateSettings({
+                      transformProvider: newProvider,
+                      // Keep current model - will be validated/updated when new models load
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  {capturingHotkeyState === "record"
-                    ? "Press keys..."
-                    : formatHotkeyDisplay(settings.hotkeyRecord || "Control+Space")}
-                </button>
+                  {(Object.keys(PROVIDER_INFO) as TransformProvider[]).map((provider) => (
+                    <option key={provider} value={provider}>
+                      {PROVIDER_INFO[provider].name} — {PROVIDER_INFO[provider].description}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* AI Transform hotkey */}
-              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                <span className="text-text-secondary">AI Transform</span>
-                <button
-                  onClick={() => setCapturingHotkeyState("aiTransform")}
-                  className={`px-2 py-1 border rounded text-xs font-mono transition-colors ${
-                    capturingHotkeyState === "aiTransform"
-                      ? "bg-primary-100 border-primary-400 text-primary-700 animate-pulse"
-                      : "bg-white border-slate-200 hover:border-primary-300 hover:bg-primary-50"
-                  }`}
-                >
-                  {capturingHotkeyState === "aiTransform"
-                    ? "Press keys..."
-                    : formatHotkeyDisplay(settings.hotkeyAiTransform || "Control+Backquote")}
-                </button>
+              {/* API Key for selected provider */}
+              <div>
+                <label className="block text-xs text-text-secondary mb-1">
+                  {PROVIDER_INFO[settings.transformProvider].name} API Key
+                  {settings.transformProvider === "openai" && (
+                    <span className="text-text-secondary font-normal"> (separate from Whisper above)</span>
+                  )}
+                </label>
+                {(() => {
+                  const keyStatus = getCurrentProviderKeyStatus();
+                  if (keyStatus?.is_set) {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm font-mono text-green-700">
+                          {keyStatus.preview || "••••••••"}
+                        </div>
+                        <button
+                          onClick={handleClearTransformApiKey}
+                          className="px-3 py-2 text-red-500 hover:text-red-700 text-sm"
+                          title="Remove API Key"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      <input
+                        type="password"
+                        value={tempTransformApiKey}
+                        onChange={(e) => setTempTransformApiKey(e.target.value)}
+                        placeholder={settings.transformProvider === "anthropic" ? "sk-ant-..." : "sk-..."}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                      <button
+                        onClick={handleSetTransformApiKey}
+                        disabled={!tempTransformApiKey.trim() || isSettingTransformKey}
+                        className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSettingTransformKey ? "Saving..." : "Save API Key"}
+                      </button>
+                    </div>
+                  );
+                })()}
+                <p className="text-xs text-text-secondary mt-1">
+                  {settings.transformProvider === "openrouter" && (
+                    <>Get your key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">openrouter.ai/keys</a></>
+                  )}
+                  {settings.transformProvider === "openai" && (
+                    <>Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">platform.openai.com/api-keys</a> (can be same key as Whisper)</>
+                  )}
+                  {settings.transformProvider === "anthropic" && (
+                    <>Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">console.anthropic.com</a></>
+                  )}
+                </p>
+                <p className="text-xs text-slate-400 mt-1 italic">
+                  This key is for AI Transform only. Does not affect Whisper transcription.
+                </p>
               </div>
 
-              {/* Webhook Actions info */}
-              <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                <span className="text-text-secondary">Hotkey Actions</span>
-                <kbd className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-mono">
-                  See Hotkey Actions above
-                </kbd>
+              {/* Model Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs text-text-secondary">Model</label>
+                  {getCurrentProviderKeyStatus()?.is_set && (
+                    <button
+                      onClick={() => fetchModelsForProvider(true)}
+                      disabled={isLoadingModels}
+                      className="text-xs text-primary-500 hover:text-primary-700 disabled:opacity-50"
+                    >
+                      {isLoadingModels ? "Loading..." : "Refresh"}
+                    </button>
+                  )}
+                </div>
+                
+                {!getCurrentProviderKeyStatus()?.is_set ? (
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
+                    Add API key above to see available models
+                  </div>
+                ) : isLoadingModels ? (
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
+                    Loading available models...
+                  </div>
+                ) : modelsError ? (
+                  <div className="space-y-2">
+                    <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                      {modelsError}
+                    </div>
+                    {/* Fallback to custom model input */}
+                    <input
+                      type="text"
+                      value={settings.transformModel}
+                      onChange={(e) => updateSettings({ transformModel: e.target.value })}
+                      placeholder="Enter model ID manually"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                    />
+                  </div>
+                ) : providerModels.length === 0 ? (
+                  <div className="space-y-2">
+                    <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-text-secondary">
+                      No models found. Enter model ID manually:
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.transformModel}
+                      onChange={(e) => updateSettings({ transformModel: e.target.value })}
+                      placeholder="Enter model ID"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={providerModels.some(m => m.id === settings.transformModel) ? settings.transformModel : "__custom__"}
+                      onFocus={handleModelDropdownFocus}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setCustomModel(settings.transformModel);
+                        } else {
+                          updateSettings({ transformModel: e.target.value });
+                          setCustomModel("");
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      {providerModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} {model.description && `— ${model.description}`}
+                        </option>
+                      ))}
+                      <option value="__custom__">Custom model ID...</option>
+                    </select>
+                    
+                    {/* Custom model input */}
+                    {(!providerModels.some(m => m.id === settings.transformModel) || customModel !== "") && (
+                      <div className="mt-2 space-y-2">
+                        <input
+                          type="text"
+                          value={customModel || settings.transformModel}
+                          onChange={(e) => setCustomModel(e.target.value)}
+                          placeholder="e.g., gpt-4-turbo"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                        />
+                        <button
+                          onClick={() => {
+                            if (customModel.trim()) {
+                              updateSettings({ transformModel: customModel.trim() });
+                              setCustomModel("");
+                            }
+                          }}
+                          disabled={!customModel.trim()}
+                          className="px-3 py-1.5 bg-slate-200 text-text-primary text-sm rounded-lg hover:bg-slate-300 disabled:opacity-50 transition-colors"
+                        >
+                          Use Custom Model
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
+
+              {/* Advanced Settings Toggle */}
+              <button
+                onClick={() => setShowAdvancedTransform(!showAdvancedTransform)}
+                className="text-xs text-primary-500 hover:text-primary-700 flex items-center gap-1"
+              >
+                {showAdvancedTransform ? "Hide" : "Show"} advanced settings
+                <svg
+                  className={`w-3 h-3 transition-transform ${showAdvancedTransform ? "rotate-180" : ""}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Advanced Settings */}
+              {showAdvancedTransform && (
+                <div className="p-3 bg-slate-50 rounded-lg space-y-3">
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Temperature: {settings.transformTemperature?.toFixed(1) ?? 0.7}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={settings.transformTemperature ?? 0.7}
+                      onChange={(e) => updateSettings({ transformTemperature: parseFloat(e.target.value) })}
+                      className="w-full"
+                    />
+                    <p className="text-xs text-text-secondary">
+                      Lower = more focused, Higher = more creative
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">
+                      Max Output Tokens: {settings.transformMaxTokens ?? 4096}
+                    </label>
+                    <input
+                      type="range"
+                      min="256"
+                      max="8192"
+                      step="256"
+                      value={settings.transformMaxTokens ?? 4096}
+                      onChange={(e) => updateSettings({ transformMaxTokens: parseInt(e.target.value) })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-text-secondary mt-2">
-              AI Transform: Copy text, hold hotkey, speak instruction, release
-            </p>
           </CollapsibleSection>
 
-          {/* Voice Commands Section */}
+          {/* Audio & Input Section */}
           <CollapsibleSection
-            title="Voice Commands"
+            title="Audio & Input"
+            onToggle={(expanded) => setAudioSectionExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
             }
           >
-            <p className="text-xs text-text-secondary mb-3">
-              Speak the name of any action to execute it instantly.
-            </p>
+            {/* Microphone Selection */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Microphone</h4>
+              {loadingDevices ? (
+                <div className="text-sm text-text-secondary">Loading devices...</div>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={settings.selectedMicrophone || ""}
+                    onChange={(e) => handleMicrophoneChange(e.target.value || null)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">System Default</option>
+                    {audioDevices.map((device) => (
+                      <option key={device.name} value={device.name}>
+                        {device.name} {device.is_default ? "(Default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={loadAudioDevices}
+                    className="text-xs text-primary-500 hover:text-primary-700"
+                  >
+                    Refresh device list
+                  </button>
+                </div>
+              )}
+            </div>
 
-            {/* Enable/Disable toggle */}
-            <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer mb-3">
+            {/* Audio Feedback */}
+            <label className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-text-primary">Sound effects</p>
+                <p className="text-xs text-text-secondary">Play sounds for recording start/stop</p>
+              </div>
               <input
                 type="checkbox"
-                checked={settings.voiceCommandEnabled ?? true}
-                onChange={(e) => updateSettings({ voiceCommandEnabled: e.target.checked })}
-                className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+                checked={settings.audioEnabled}
+                onChange={(e) => updateSettings({ audioEnabled: e.target.checked })}
+                className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
               />
-              <div>
-                <p className="text-sm font-medium text-text-primary">Enable voice commands</p>
-                <p className="text-xs text-text-secondary">Say action names to execute them</p>
-              </div>
             </label>
-
-            {/* Voice command hotkey */}
-            {settings.voiceCommandEnabled && (
-              <>
-                <div className="mb-3">
-                  <label className="block text-xs text-text-secondary mb-1">Voice Command Hotkey</label>
-                  <HotkeyInput
-                    value={settings.hotkeyVoiceCommand || "Control+Shift+Space"}
-                    onChange={(hotkey) => updateSettings({ hotkeyVoiceCommand: hotkey })}
-                    excludeActionName="Voice Command"
-                    showPresetToggle={false}
-                  />
-                </div>
-
-                {/* Auto-execute threshold */}
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1">
-                    Auto-execute threshold: {Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round((settings.voiceCommandAutoExecuteThreshold ?? 0.4) * 100)}
-                    onChange={(e) => updateSettings({ voiceCommandAutoExecuteThreshold: parseInt(e.target.value) / 100 })}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-text-secondary mt-1">
-                    Below this threshold, a review window will appear to select the correct action
-                  </p>
-                </div>
-              </>
-            )}
           </CollapsibleSection>
 
           {/* Behavior & Storage Section */}

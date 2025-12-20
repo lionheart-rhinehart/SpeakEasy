@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T18:25:58.499Z",
-  "count": 37,
+  "last_updated": "2025-12-20T19:57:19.533Z",
+  "count": 38,
   "entries": [
     {
       "id": "2025-12-20__frontend__settings-panel-ux-improvements",
@@ -13,6 +13,19 @@
         "frontend"
       ],
       "summary": "Improved Settings panel UX: collapsed sections by default, deferred model API loading until section expanded, consolidated transcription settings, and inline hotkey editing",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-20__frontend__settings-panel-reorganization",
+      "file": "2025-12-20__frontend__settings-panel-reorganization.md",
+      "title": "settings-panel-reorganization",
+      "date": "2025-12-20",
+      "area": "frontend",
+      "tags": [
+        "frontend"
+      ],
+      "summary": "Reorganized Settings panel: Transcription first with dynamic Setup Required indicator, combined Keyboard Shortcuts and Voice Commands into new Master Commands section, reordered sections for better UX",
       "problem": "",
       "fix": ""
     },
