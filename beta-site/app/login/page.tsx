@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function LoginPage() {
+function LoginForm() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,6 @@ export default function LoginPage() {
         throw new Error(data.error || 'Invalid password');
       }
 
-      // Redirect to admin dashboard
       router.push(redirect);
       router.refresh();
     } catch (err) {
@@ -45,6 +44,44 @@ export default function LoginPage() {
     }
   };
 
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-8">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            Password
+          </label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
+            placeholder="Enter admin password"
+            disabled={isLoading}
+            autoFocus
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full bg-gray-800 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isLoading ? 'Logging in...' : 'Login'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function LoginPage() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 py-12 bg-gray-100">
       <div className="max-w-md w-full">
@@ -58,39 +95,9 @@ export default function LoginPage() {
           <p className="text-gray-600 mt-2">Enter the admin password to continue</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 transition-colors"
-                placeholder="Enter admin password"
-                disabled={isLoading}
-                autoFocus
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-gray-800 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading ? 'Logging in...' : 'Login'}
-            </button>
-          </form>
-        </div>
+        <Suspense fallback={<div className="bg-white rounded-xl shadow-lg p-8 animate-pulse h-48" />}>
+          <LoginForm />
+        </Suspense>
 
         <p className="text-center text-sm text-gray-500 mt-6">
           <a href="/" className="text-gray-600 hover:text-gray-800">
