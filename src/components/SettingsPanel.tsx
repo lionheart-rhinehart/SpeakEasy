@@ -151,25 +151,45 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [aiTransformExpanded, setAiTransformExpanded] = useState(false);
+  const [audioSectionExpanded, setAudioSectionExpanded] = useState(false);
+  const [behaviorSectionExpanded, setBehaviorSectionExpanded] = useState(false);
+  const [licenseSectionExpanded, setLicenseSectionExpanded] = useState(false);
 
   // Refs to prevent infinite refetch loops (these don't trigger re-renders)
   const inFlightRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
   const cachedModelsRef = useRef<ProviderModel[]>([]);
 
-  // Load audio devices, autostart state, transform key statuses, and machine ID when panel opens
+  // Reset all section expansion states when settings closes
   useEffect(() => {
-    if (isSettingsOpen) {
-      loadAudioDevices();
-      loadAutostartState();
-      loadTransformKeyStatuses();
-      // Fetch machine ID for license section
-      invoke<string>("get_machine_id").then(setMachineId).catch(console.error);
-    } else {
-      // Reset section expansion state when settings closes
+    if (!isSettingsOpen) {
       setAiTransformExpanded(false);
+      setAudioSectionExpanded(false);
+      setBehaviorSectionExpanded(false);
+      setLicenseSectionExpanded(false);
     }
   }, [isSettingsOpen]);
+
+  // Load audio devices when Audio section is expanded
+  useEffect(() => {
+    if (audioSectionExpanded) {
+      loadAudioDevices();
+    }
+  }, [audioSectionExpanded]);
+
+  // Load autostart state when Behavior section is expanded
+  useEffect(() => {
+    if (behaviorSectionExpanded) {
+      loadAutostartState();
+    }
+  }, [behaviorSectionExpanded]);
+
+  // Load machine ID when License section is expanded
+  useEffect(() => {
+    if (licenseSectionExpanded) {
+      invoke<string>("get_machine_id").then(setMachineId).catch(console.error);
+    }
+  }, [licenseSectionExpanded]);
 
   // Load transform API key statuses
   const loadTransformKeyStatuses = async () => {
@@ -249,7 +269,17 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
     fetchModelsForProvider(false); // Don't force, respect the 30-second cache
   }, [fetchModelsForProvider]);
 
-  // Fetch models when AI Transform section is expanded and key is set
+  // Load transform key statuses and fetch models when AI Transform section is expanded
+  useEffect(() => {
+    if (aiTransformExpanded) {
+      // First load the key statuses, then fetch models if key is set
+      loadTransformKeyStatuses().then(() => {
+        // Models will be fetched by the other useEffect that depends on transformKeyStatuses
+      });
+    }
+  }, [aiTransformExpanded]);
+
+  // Fetch models when key status changes (after loadTransformKeyStatuses completes)
   useEffect(() => {
     if (aiTransformExpanded) {
       const keyStatus = transformKeyStatuses.find(s => s.provider === settings.transformProvider);
@@ -472,6 +502,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
           {/* Audio & Input Section */}
           <CollapsibleSection
             title="Audio & Input"
+            onToggle={(expanded) => setAudioSectionExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -1393,6 +1424,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
           {/* Behavior & Storage Section */}
           <CollapsibleSection
             title="Behavior & Storage"
+            onToggle={(expanded) => setBehaviorSectionExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -1479,6 +1511,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
           {/* License Management Section */}
           <CollapsibleSection
             title="License Management"
+            onToggle={(expanded) => setLicenseSectionExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />

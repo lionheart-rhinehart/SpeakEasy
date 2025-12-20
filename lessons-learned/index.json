@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T18:12:46.174Z",
-  "count": 36,
+  "last_updated": "2025-12-20T18:25:58.499Z",
+  "count": 37,
   "entries": [
     {
       "id": "2025-12-20__frontend__settings-panel-ux-improvements",
@@ -13,6 +13,19 @@
         "frontend"
       ],
       "summary": "Improved Settings panel UX: collapsed sections by default, deferred model API loading until section expanded, consolidated transcription settings, and inline hotkey editing",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2025-12-20__frontend__defer-settings-api-calls",
+      "file": "2025-12-20__frontend__defer-settings-api-calls.md",
+      "title": "defer-settings-api-calls",
+      "date": "2025-12-20",
+      "area": "frontend",
+      "tags": [
+        "frontend"
+      ],
+      "summary": "Deferred all Settings API calls to load on-demand when each section is expanded, making Settings open instantly with zero blocking calls",
       "problem": "",
       "fix": ""
     },
