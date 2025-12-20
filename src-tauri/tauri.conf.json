@@ -112,6 +112,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/lionheart-rhinehart/SpeakEasy/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
     }
   }
 }

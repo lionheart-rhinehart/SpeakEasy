@@ -62,7 +62,12 @@
       "Bash(git fetch:*)",
       "Bash(git push:*)",
       "Skill(test-protocol)",
-      "Skill(test-protocol:*)"
+      "Skill(test-protocol:*)",
+      "Bash(xargs cat:*)",
+      "Bash(ls:*)",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" remote -v)",
+      "Skill(wrapup)",
+      "Skill(wrapup:*)"
     ],
     "deny": [],
     "ask": []

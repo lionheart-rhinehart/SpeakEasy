@@ -3,6 +3,7 @@ mod clipboard;
 mod commands;
 mod config;
 mod hotkeys;
+mod license;
 mod llm;
 mod secrets;
 mod state;
@@ -49,6 +50,8 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Initialize application state
             let state = AppState::new();
@@ -267,6 +270,12 @@ pub fn run() {
             // Profile chooser: bring main window to front when showing modal
             commands::bring_main_to_front,
             commands::remove_main_topmost,
+            // License management
+            commands::activate_license,
+            commands::validate_license,
+            commands::get_license_info,
+            commands::deactivate_license,
+            commands::get_machine_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

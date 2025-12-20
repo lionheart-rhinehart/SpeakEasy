@@ -1,6 +1,7 @@
 use crate::audio;
 use crate::clipboard;
 use crate::config;
+use crate::license;
 use crate::state::AppState;
 use crate::transcription;
 use serde::{Deserialize, Serialize};
@@ -1756,4 +1757,44 @@ pub fn load_user_settings() -> config::UserSettings {
 #[tauri::command]
 pub fn save_user_settings(settings: config::UserSettings) -> Result<(), String> {
     config::save_user_settings(&settings).map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// LICENSE MANAGEMENT (Beta Testing)
+// ============================================================================
+
+/// Activate a license key
+#[tauri::command]
+pub async fn activate_license(license_key: String) -> Result<license::LicenseInfo, String> {
+    license::activate_license(&license_key)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Validate the current license (call on startup)
+#[tauri::command]
+pub async fn validate_license() -> Result<license::LicenseInfo, String> {
+    license::validate_license()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get current license info without server validation
+#[tauri::command]
+pub fn get_license_info() -> license::LicenseInfo {
+    license::get_license_info()
+}
+
+/// Deactivate the current license (to transfer to another device)
+#[tauri::command]
+pub async fn deactivate_license() -> Result<(), String> {
+    license::deactivate_license()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get the machine ID for this device
+#[tauri::command]
+pub fn get_machine_id() -> String {
+    license::get_machine_id()
 }

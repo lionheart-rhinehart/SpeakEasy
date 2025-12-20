@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { register, unregister, isRegistered } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { useAppStore } from "./stores/appStore";
 import MainWindow from "./components/MainWindow";
 import HistoryPanel from "./components/HistoryPanel";
@@ -10,8 +12,30 @@ import RecordingIndicator from "./components/RecordingIndicator";
 import Toast, { ToastMessage } from "./components/Toast";
 import ProfileChooserModal from "./components/ProfileChooserModal";
 import VoiceCommandModal from "./components/VoiceCommandModal";
+import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
+
+// License status types matching Rust backend
+type LicenseStatusTag = "valid" | "needs_validation" | "grace_period" | "invalid" | "not_activated";
+
+interface LicenseInfo {
+  status: Record<string, unknown>;
+  license_key_preview: string | null;
+  machine_id: string | null;
+  activated_at: string | null;
+  last_validated_at: string | null;
+  grace_period_until: string | null;
+}
+
+// Helper to get the status tag from the status object
+function getLicenseStatusTag(status: Record<string, unknown>): LicenseStatusTag {
+  if ("valid" in status) return "valid";
+  if ("needs_validation" in status) return "needs_validation";
+  if ("grace_period" in status) return "grace_period";
+  if ("invalid" in status) return "invalid";
+  return "not_activated";
+}
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
 // These are now just fallbacks - actual hotkeys come from settings
@@ -61,6 +85,15 @@ function App() {
   const initialize = useAppStore((state) => state.initialize);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const settings = useAppStore((state) => state.settings);
+
+  // License state
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatusTag | null>(null);
+  const [licenseChecked, setLicenseChecked] = useState(false);
+
+  // Update state
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
   const webhookActions = useMemo(() => settings.webhookActions ?? [], [settings.webhookActions]);
   const promptActions = useMemo(() => settings.promptActions ?? [], [settings.promptActions]);
   const hotkeyRecord = settings.hotkeyRecord || DEFAULT_RECORD_HOTKEY;
@@ -107,6 +140,90 @@ function App() {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Validate license on startup
+  useEffect(() => {
+    const validateLicense = async () => {
+      try {
+        console.log("Validating license...");
+        const result = await invoke<LicenseInfo>("validate_license");
+        const status = getLicenseStatusTag(result.status);
+        console.log("License status:", status, result);
+        setLicenseStatus(status);
+
+        // Log invalid reason for debugging
+        if (status === "invalid" && "invalid" in result.status) {
+          const invalidStatus = result.status.invalid as { reason: string };
+          console.log("License invalid:", invalidStatus.reason);
+        }
+      } catch (err) {
+        console.error("License validation error:", err);
+        // On error, check if we have a locally cached valid state
+        try {
+          const localInfo = await invoke<LicenseInfo>("get_license_info");
+          const localStatus = getLicenseStatusTag(localInfo.status);
+          if (localStatus === "valid" || localStatus === "grace_period") {
+            setLicenseStatus(localStatus);
+          } else {
+            setLicenseStatus("not_activated");
+          }
+        } catch {
+          setLicenseStatus("not_activated");
+        }
+      } finally {
+        setLicenseChecked(true);
+      }
+    };
+
+    validateLicense();
+  }, []);
+
+  // Handle successful license activation
+  const handleLicenseActivated = useCallback(() => {
+    setLicenseStatus("valid");
+  }, []);
+
+  // Check for updates on startup (only if licensed)
+  useEffect(() => {
+    if (licenseStatus !== "valid" && licenseStatus !== "grace_period") return;
+
+    const checkForUpdates = async () => {
+      try {
+        console.log("Checking for updates...");
+        const update = await check();
+        if (update) {
+          console.log("Update available:", update.version);
+          setUpdateAvailable(true);
+          setUpdateVersion(update.version);
+        } else {
+          console.log("No updates available");
+        }
+      } catch (err) {
+        console.error("Update check failed:", err);
+      }
+    };
+
+    // Check after a short delay to not block startup
+    const timer = setTimeout(checkForUpdates, 3000);
+    return () => clearTimeout(timer);
+  }, [licenseStatus]);
+
+  // Handle update installation
+  const handleInstallUpdate = useCallback(async () => {
+    setIsUpdating(true);
+    try {
+      const update = await check();
+      if (update) {
+        console.log("Downloading update...");
+        await update.downloadAndInstall();
+        console.log("Update installed, relaunching...");
+        await relaunch();
+      }
+    } catch (err) {
+      console.error("Update installation failed:", err);
+      setIsUpdating(false);
+    }
+  }, []);
 
   // Listen for tray menu events
   useEffect(() => {
@@ -1541,8 +1658,69 @@ function App() {
     };
   }, [voiceCommandListening, startVoiceCommandRecording, stopVoiceCommandRecording]);
 
+  // Show loading state while checking license
+  if (!licenseChecked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+              />
+            </svg>
+          </div>
+          <p className="text-text-secondary">Checking license...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show license activation if not licensed
+  if (licenseStatus === "not_activated" || licenseStatus === "invalid") {
+    return <LicenseActivation onActivated={handleLicenseActivated} />;
+  }
+
+  // Show grace period warning if applicable
+  const showGracePeriodWarning = licenseStatus === "grace_period";
+
   return (
     <div className="min-h-screen bg-background">
+      {/* Update available banner */}
+      {updateAvailable && (
+        <div className="fixed top-0 left-0 right-0 bg-primary-600 text-white text-sm py-2 px-4 text-center z-50 flex items-center justify-center gap-3">
+          <span>
+            <strong>Update available:</strong> Version {updateVersion} is ready to install
+          </span>
+          <button
+            onClick={handleInstallUpdate}
+            disabled={isUpdating}
+            className="px-3 py-1 bg-white text-primary-600 rounded font-medium hover:bg-primary-50 disabled:opacity-50"
+          >
+            {isUpdating ? "Installing..." : "Install & Restart"}
+          </button>
+          <button
+            onClick={() => setUpdateAvailable(false)}
+            className="text-white/80 hover:text-white"
+          >
+            Later
+          </button>
+        </div>
+      )}
+      {/* Grace period warning banner */}
+      {showGracePeriodWarning && !updateAvailable && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white text-sm py-2 px-4 text-center z-50">
+          <strong>Offline Mode:</strong> Please connect to the internet to validate your license.
+        </div>
+      )}
       <MainWindow />
       <HistoryPanel />
       <SettingsPanel />
