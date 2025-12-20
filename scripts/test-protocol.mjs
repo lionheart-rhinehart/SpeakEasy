@@ -5,17 +5,20 @@
  * Usage: npm run test-protocol -- [options]
  *
  * Control flags:
+ *   --skip-backup    Skip creating backup before running
  *   --skip-gates     Skip quality gates (lint/typecheck/build)
  *   --skip-rust      Skip Rust checking (cargo check)
  *   --no-restart     Skip dev server auto-restart
  *
- * This script writes a state file (.test-protocol-result.json) that wrapup.mjs
- * can read to incorporate any issues into the lessons learned documentation.
+ * This script:
+ * - Creates a timestamped backup before each run (in .backups/)
+ * - Writes a state file (.test-protocol-result.json) that wrapup.mjs can read
+ * - Appends to history log (.test-protocol-history.json) for tracking across sessions
  */
 
 import { execSync, spawn } from 'child_process';
-import { existsSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync, mkdirSync, rmSync, copyFileSync } from 'fs';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +28,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = join(__dirname, '..');
 const STATE_FILE = join(ROOT, '.test-protocol-result.json');
+const BACKUP_DIR = join(ROOT, '.backups');
+const HISTORY_FILE = join(ROOT, '.test-protocol-history.json');
+const MAX_BACKUPS = 5;
+const MAX_HISTORY_ENTRIES = 50;
+
+// Directories to exclude from backups (these are large/generated)
+const BACKUP_EXCLUDE_DIRS = [
+  'node_modules',
+  '.git',
+  'target',
+  'dist',
+  '.backups',
+  '.next'
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Argument Parsing
@@ -173,6 +190,127 @@ function recordStep(name, displayName, fn) {
   step.duration_ms = Date.now() - stepStart;
   state.steps.push(step);
   saveState();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backup System
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recursively copy directory, excluding specified directories
+ */
+function copyDirRecursive(src, dest, excludeDirs) {
+  if (!existsSync(dest)) {
+    mkdirSync(dest, { recursive: true });
+  }
+
+  const entries = readdirSync(src, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+
+    // Skip excluded directories
+    if (entry.isDirectory() && excludeDirs.includes(entry.name)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath, excludeDirs);
+    } else {
+      try {
+        copyFileSync(srcPath, destPath);
+      } catch (e) {
+        // Skip files we can't copy (permissions, etc.)
+      }
+    }
+  }
+}
+
+/**
+ * Create a timestamped backup of the working directory
+ */
+function createBackup(step) {
+  if (parsedArgs.flags.includes('skip-backup')) {
+    logInfo('Skipped via --skip-backup flag');
+    return { details: 'Skipped via --skip-backup flag' };
+  }
+
+  // Ensure backup directory exists
+  if (!existsSync(BACKUP_DIR)) {
+    mkdirSync(BACKUP_DIR, { recursive: true });
+  }
+
+  // Create timestamped backup folder
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const backupPath = join(BACKUP_DIR, `backup-${timestamp}`);
+
+  logInfo(`Creating backup at .backups/backup-${timestamp}`);
+
+  try {
+    copyDirRecursive(ROOT, backupPath, BACKUP_EXCLUDE_DIRS);
+    logSuccess('Backup created');
+
+    // Rotate old backups - keep only MAX_BACKUPS
+    const backups = readdirSync(BACKUP_DIR)
+      .filter(f => f.startsWith('backup-'))
+      .sort()
+      .reverse();
+
+    if (backups.length > MAX_BACKUPS) {
+      const toDelete = backups.slice(MAX_BACKUPS);
+      for (const old of toDelete) {
+        try {
+          rmSync(join(BACKUP_DIR, old), { recursive: true, force: true });
+          logInfo(`Rotated out old backup: ${old}`);
+        } catch (e) {
+          logWarn(`Failed to delete old backup ${old}: ${e.message}`);
+        }
+      }
+    }
+
+    return { details: `Backup created at ${backupPath}` };
+  } catch (e) {
+    // Backup failure is a warning, not a fatal error
+    return {
+      details: 'Backup failed (continuing anyway)',
+      warnings: [`Backup failed: ${e.message}`]
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// History Log
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Append the current run to the history log
+ */
+function appendToHistory() {
+  try {
+    let history = [];
+    if (existsSync(HISTORY_FILE)) {
+      history = JSON.parse(readFileSync(HISTORY_FILE, 'utf-8'));
+    }
+
+    history.push({
+      timestamp: state.timestamp,
+      status: state.overall_status,
+      duration_seconds: state.duration_seconds,
+      build_info: state.build_info,
+      step_summary: state.steps.map(s => `${s.name}:${s.status}`)
+    });
+
+    // Keep only last MAX_HISTORY_ENTRIES entries
+    if (history.length > MAX_HISTORY_ENTRIES) {
+      history = history.slice(-MAX_HISTORY_ENTRIES);
+    }
+
+    writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+    logInfo(`Appended to history log (${history.length} entries)`);
+  } catch (e) {
+    logWarn(`Failed to update history log: ${e.message}`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -490,6 +628,9 @@ async function main() {
   log('═'.repeat(60), colors.cyan);
 
   try {
+    // Step 0: Create backup (safety net)
+    recordStep('backup', 'Create backup', createBackup);
+
     // Step 1: Preflight
     recordStep('preflight', 'Preflight checks', preflight);
 
@@ -516,6 +657,9 @@ async function main() {
     state.notes = 'App is now running. Test manually, then run /wrapup when ready to commit.';
     saveState();
 
+    // Append to history log for tracking across sessions
+    appendToHistory();
+
     log('\n' + '═'.repeat(60), colors.green);
     log('  TEST PROTOCOL COMPLETE', colors.green + colors.bold);
     log('═'.repeat(60), colors.green);
@@ -523,6 +667,9 @@ async function main() {
     log('  When ready to commit, run: /wrapup\n', colors.dim);
 
   } catch (e) {
+    // Append to history log even on failure
+    appendToHistory();
+
     log('\n' + '═'.repeat(60), colors.red);
     log('  TEST PROTOCOL FAILED', colors.red + colors.bold);
     log('═'.repeat(60), colors.red);

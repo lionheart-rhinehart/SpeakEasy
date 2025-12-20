@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T01:43:25.849Z",
-  "count": 34,
+  "last_updated": "2025-12-20T17:45:53.950Z",
+  "count": 35,
   "entries": [
     {
       "id": "2025-12-20__feature__beta-readiness-licensing-updates-docs",
@@ -28,6 +28,19 @@
       "summary": "Added license validation system with Supabase, auto-update infrastructure with GitHub Actions, and user documentation for beta testing",
       "problem": "",
       "fix": ""
+    },
+    {
+      "id": "2025-12-20__devops__fix-corrupted-commands-add-claude-md",
+      "file": "2025-12-20__devops__fix-corrupted-commands-add-claude-md.md",
+      "title": "fix-corrupted-commands-add-claude-md",
+      "date": "2025-12-20",
+      "area": "devops",
+      "tags": [
+        "devops"
+      ],
+      "summary": "Fixed corrupted .claude/commands folder and created CLAUDE.md with enforceable git safety rules",
+      "problem": "Filesystem corruption of .claude/commands caused by ad-hoc git commands, plus safety rules in SOP docs were not being read by Claude",
+      "fix": "Used chkdsk to repair filesystem corruption on reboot, recreated command files, and created CLAUDE.md which Claude reads at session start"
     },
     {
       "id": "2025-12-19__frontend__settings-ui-cleanup-collapsible-sections",

@@ -17,10 +17,16 @@
  *   --tags "tag1,tag2"        Comma-separated tags (optional)
  *
  * Control flags:
+ *   --skip-integrity Skip repository integrity check (not recommended)
  *   --skip-secrets   Skip secret scanning
  *   --no-git         Skip git operations
  *   --github         Create public GitHub repo (automated, no prompt)
  *   --github-private Create private GitHub repo (automated, no prompt)
+ *
+ * Safety features:
+ * - Step 0: Verifies no unexpected file deletions vs origin/master
+ * - Step 0: Checks branch and remote sync status
+ * - Shows test-protocol run history for context
  *
  * Example (fully automated, no prompts):
  *   npm run wrapup -- --github-private --area "devops" --title "add-wrapup-sop" --summary "Added automated end-of-task workflow"
@@ -74,6 +80,7 @@ const LESSONS_JSON_INDEX = join(LESSONS_DIR, 'index.json');
 const LESSONS_TEMPLATE = join(LESSONS_DIR, '_template.md');
 const TEST_PROTOCOL_STATE_FILE = join(ROOT, '.test-protocol-result.json');
 const TEST_PROTOCOL_ARCHIVED_FILE = join(ROOT, '.test-protocol-result.archived.json');
+const TEST_PROTOCOL_HISTORY_FILE = join(ROOT, '.test-protocol-history.json');
 
 // Secret patterns to scan for (safety net)
 // These are tuned to minimize false positives while catching real secrets
@@ -263,6 +270,123 @@ function archiveTestProtocolResult() {
     } catch (e) {
       logWarn(`Failed to archive test-protocol result: ${e.message}`);
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 0: Verify Integrity (prevent accidental deletions)
+// ─────────────────────────────────────────────────────────────────────────────
+function verifyIntegrity() {
+  if (parsedArgs.flags.includes('skip-integrity')) {
+    logStep(0, 'Integrity check (SKIPPED)');
+    return;
+  }
+
+  logStep(0, 'Verifying repository integrity');
+
+  // Check if we're in a git repo
+  if (!existsSync(join(ROOT, '.git'))) {
+    logInfo('Not a git repository - skipping integrity check');
+    return;
+  }
+
+  try {
+    // Check for unexpected file deletions compared to origin/master
+    logInfo('Checking for unexpected deletions vs origin/master...');
+    try {
+      const deleted = execSync('git diff --name-status origin/master HEAD 2>/dev/null | grep "^D" || true', {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        stdio: 'pipe'
+      }).trim();
+
+      if (deleted) {
+        const deletedFiles = deleted.split('\n').map(line => line.replace(/^D\s+/, ''));
+        logError('Files would be deleted compared to origin/master:');
+        for (const file of deletedFiles.slice(0, 10)) {
+          logError(`  - ${file}`);
+        }
+        if (deletedFiles.length > 10) {
+          logError(`  ... and ${deletedFiles.length - 10} more`);
+        }
+        throw new Error('Unexpected file deletions detected. Use --skip-integrity to bypass (not recommended).');
+      }
+      logSuccess('No unexpected deletions');
+    } catch (e) {
+      if (e.message.includes('Unexpected file deletions')) throw e;
+      // origin/master might not exist yet - that's okay
+      logInfo('Could not compare with origin/master (may not exist yet)');
+    }
+
+    // Verify we're on master branch
+    logInfo('Checking current branch...');
+    const branch = execSync('git branch --show-current', {
+      cwd: ROOT,
+      encoding: 'utf-8',
+      stdio: 'pipe'
+    }).trim();
+
+    if (branch !== 'master' && branch !== 'main') {
+      logWarn(`On branch "${branch}" instead of master/main`);
+    } else {
+      logSuccess(`On branch: ${branch}`);
+    }
+
+    // Check if we're behind remote
+    logInfo('Checking sync with remote...');
+    try {
+      execSync('git fetch origin --quiet 2>/dev/null || true', { cwd: ROOT, stdio: 'pipe' });
+      const behind = execSync('git rev-list HEAD..origin/master --count 2>/dev/null || echo 0', {
+        cwd: ROOT,
+        encoding: 'utf-8',
+        stdio: 'pipe'
+      }).trim();
+
+      if (parseInt(behind) > 0) {
+        logWarn(`Local is ${behind} commit(s) behind origin/master`);
+      } else {
+        logSuccess('In sync with remote');
+      }
+    } catch (e) {
+      logInfo('Could not check remote sync');
+    }
+
+  } catch (e) {
+    if (e.message.includes('Unexpected file deletions')) {
+      throw e;
+    }
+    logWarn(`Integrity check warning: ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// History Summary (show test-protocol run history)
+// ─────────────────────────────────────────────────────────────────────────────
+function showHistorySummary() {
+  if (!existsSync(TEST_PROTOCOL_HISTORY_FILE)) {
+    return null;
+  }
+
+  try {
+    const history = JSON.parse(readFileSync(TEST_PROTOCOL_HISTORY_FILE, 'utf-8'));
+    if (history.length === 0) return null;
+
+    // Get runs since last wrapup (or last 10, whichever is smaller)
+    const recentRuns = history.slice(-10);
+    const successCount = recentRuns.filter(r => r.status === 'success').length;
+    const failureCount = recentRuns.filter(r => r.status === 'failure').length;
+
+    logInfo(`Test protocol history: ${recentRuns.length} recent run(s) - ${successCount} success, ${failureCount} failure`);
+
+    return {
+      total_runs: recentRuns.length,
+      success_count: successCount,
+      failure_count: failureCount,
+      runs: recentRuns
+    };
+  } catch (e) {
+    logWarn(`Could not read history: ${e.message}`);
+    return null;
   }
 }
 
@@ -873,8 +997,14 @@ async function main() {
   log('═'.repeat(60), colors.cyan);
 
   try {
+    // Step 0: Verify repository integrity (prevent accidental deletions)
+    verifyIntegrity();
+
     // Read test-protocol results if available
     const testProtocolResult = readTestProtocolResult();
+
+    // Show history summary (how many test-protocol runs since last wrapup)
+    showHistorySummary();
 
     // Step 1: Secret scan (safety net before git push)
     scanForSecrets();

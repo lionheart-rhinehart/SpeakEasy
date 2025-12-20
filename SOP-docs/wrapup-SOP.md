@@ -13,12 +13,14 @@ Run `/wrapup` after:
 
 ## What It Does
 
+0. **Verify Integrity** - Checks for unexpected file deletions, correct branch, and remote sync
 1. **Read Test Protocol Results** - Loads results from prior `/test-protocol` run (if available)
-2. **Secret Scan** - Scans codebase for accidentally committed API keys, tokens, etc.
-3. **Change Summary** - Generates git diff statistics
-4. **Lessons Learned** - Creates a documentation entry with test results incorporated
-5. **Git Commit & Push** - Stages all changes, commits with structured message, pushes to remote
-6. **Archive Results** - Moves test-protocol state file to archive
+2. **Show History Summary** - Displays test-protocol run history for context
+3. **Secret Scan** - Scans codebase for accidentally committed API keys, tokens, etc.
+4. **Change Summary** - Generates git diff statistics
+5. **Lessons Learned** - Creates a documentation entry with test results incorporated
+6. **Git Commit & Push** - Stages all changes, commits with structured message, pushes to remote
+7. **Archive Results** - Moves test-protocol state file to archive
 
 ## How to Run
 
@@ -45,9 +47,17 @@ npm run wrapup -- \
 
 ### Flags
 ```bash
+npm run wrapup -- --skip-integrity # Skip integrity check (not recommended)
 npm run wrapup -- --skip-secrets   # Skip secret scanning
 npm run wrapup -- --no-git         # Skip git operations (just create docs)
 ```
+
+## Safety Features
+
+The integrity check (Step 0) prevents common issues:
+- **No Unexpected Deletions**: Blocks commit if files would be deleted compared to origin/master
+- **Branch Verification**: Warns if not on master/main branch
+- **Remote Sync Check**: Warns if local is behind remote
 
 ## Area Categories
 
@@ -100,14 +110,45 @@ Make changes → /test-protocol → Manual testing → /wrapup
 
 | Issue | Solution |
 |-------|----------|
+| Integrity check fails | Files may have been accidentally deleted - investigate before using --skip-integrity |
 | Secret scan fails | Remove or gitignore the flagged file |
 | No changes to commit | All changes already committed, or nothing modified |
 | Push fails | Check git remote configuration and authentication |
 | Interactive prompts | Provide --area, --title, --summary to skip prompts |
+| Behind remote | Run `git fetch && git pull` to sync before wrapup |
 
 ## Related Files
 
 - Script: `scripts/wrapup.mjs`
-- Slash Command: `.claude/commands/wrapup.md`
+- Slash Command: `~/.claude/commands/wrapup.md` (global)
 - Config: `.wrapup.json` (gitignored, stores preferences)
 - Output: `lessons-learned/` directory
+- History: `.test-protocol-history.json` (shows test run history)
+
+## Git Safety Rules for Claude
+
+**FORBIDDEN** - Claude should NEVER run these git commands directly:
+- `git reset` (any form)
+- `git stash` (any form)
+- `git checkout` on whole directories or `.claude/`
+- `git rebase`
+- `git branch -D` (delete branches)
+
+**ALLOWED** - Only these git commands outside of scripts:
+- `git status` (read-only)
+- `git diff` (read-only)
+- `git log` (read-only)
+- `git branch` (read-only, no -D)
+- `git checkout origin/master -- <single-file>` (targeted recovery only)
+
+All commits and pushes should go through `/wrapup`.
+
+## Recovery Procedures
+
+| Issue | Recovery Steps |
+|-------|---------------|
+| Files missing | `git checkout origin/master -- <path>` |
+| Branch desynced | `git fetch && git reset --hard origin/master` |
+| Corrupted folder | Restart computer, delete folder, restore from git |
+| Lost work | Check `.backups/` for recent timestamped backups |
+| Need to rollback | `git log` to find commit, `git revert <hash>` |

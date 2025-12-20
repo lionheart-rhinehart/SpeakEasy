@@ -35,5 +35,11 @@ src-tauri/target/
 .test-protocol-result.json
 .test-protocol-result.archived.json
 
+# Test protocol backups (local safety net, not for version control)
+.backups/
+
+# Test protocol history (local append-only log)
+.test-protocol-history.json
+
 # Windows reserved filename (accidentally created)
 nul
