@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-20T17:45:53.913Z
+Updated: 2025-12-20T18:12:46.170Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-20 | frontend | [settings panel ux improvements](2025-12-20__frontend__settings-panel-ux-improvements.md) |
 | 2025-12-20 | feature | [beta readiness licensing updates docs](2025-12-20__feature__beta-readiness-licensing-updates-docs.md) |
 | 2025-12-20 | feature | [beta readiness license updates docs](2025-12-20__feature__beta-readiness-license-updates-docs.md) |
 | 2025-12-20 | devops | [fix corrupted commands add claude md](2025-12-20__devops__fix-corrupted-commands-add-claude-md.md) |

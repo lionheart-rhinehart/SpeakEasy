@@ -150,7 +150,8 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  
+  const [aiTransformExpanded, setAiTransformExpanded] = useState(false);
+
   // Refs to prevent infinite refetch loops (these don't trigger re-renders)
   const inFlightRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
@@ -164,6 +165,9 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
       loadTransformKeyStatuses();
       // Fetch machine ID for license section
       invoke<string>("get_machine_id").then(setMachineId).catch(console.error);
+    } else {
+      // Reset section expansion state when settings closes
+      setAiTransformExpanded(false);
     }
   }, [isSettingsOpen]);
 
@@ -245,17 +249,17 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
     fetchModelsForProvider(false); // Don't force, respect the 30-second cache
   }, [fetchModelsForProvider]);
 
-  // Fetch models when provider changes or key is set
+  // Fetch models when AI Transform section is expanded and key is set
   useEffect(() => {
-    if (isSettingsOpen) {
+    if (aiTransformExpanded) {
       const keyStatus = transformKeyStatuses.find(s => s.provider === settings.transformProvider);
       if (keyStatus?.is_set) {
-        fetchModelsForProvider(true); // Force refresh when settings open or provider changes
+        fetchModelsForProvider(true); // Force refresh when section expanded or provider changes
       }
     }
   // Only depend on primitive values to avoid infinite loops
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSettingsOpen, settings.transformProvider, transformKeyStatuses.find(s => s.provider === settings.transformProvider)?.is_set]);
+  }, [aiTransformExpanded, settings.transformProvider, transformKeyStatuses.find(s => s.provider === settings.transformProvider)?.is_set]);
 
   // Set transform API key for current provider
   const handleSetTransformApiKey = async () => {
@@ -465,87 +469,6 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {/* API Keys Section */}
-          <CollapsibleSection
-            title="API Keys"
-            icon={
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-            }
-          >
-            {/* Whisper Transcription API Key */}
-            <div>
-              <h4 className="text-xs font-medium text-text-secondary mb-2">Whisper Transcription API Key</h4>
-              <p className="text-xs text-text-secondary mb-2">
-                For voice-to-text only. Separate from AI Transform settings.
-              </p>
-              {apiKey ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono">
-                      {showApiKey ? apiKey : "sk-••••••••••••••••"}
-                    </div>
-                    <button
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="p-2 text-text-secondary hover:text-text-primary"
-                      title={showApiKey ? "Hide" : "Show"}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {showApiKey ? (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        )}
-                      </svg>
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleClearApiKey}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    Remove API Key
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    type="password"
-                    value={tempApiKey}
-                    onChange={(e) => setTempApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
-                  <button
-                    onClick={handleSaveApiKey}
-                    disabled={!tempApiKey.trim()}
-                    className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Save API Key
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Usage Statistics */}
-            <div className="pt-3 border-t border-slate-100">
-              <h4 className="text-xs font-medium text-text-secondary mb-2">Usage Statistics</h4>
-              <div className="p-3 bg-slate-50 rounded-lg text-center">
-                <p className="text-xs text-text-secondary">
-                  Coming Soon — View usage at{" "}
-                  <a
-                    href="https://platform.openai.com/usage"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary-500 hover:text-primary-700 underline"
-                  >
-                    platform.openai.com
-                  </a>
-                </p>
-              </div>
-            </div>
-          </CollapsibleSection>
-
           {/* Audio & Input Section */}
           <CollapsibleSection
             title="Audio & Input"
@@ -608,8 +531,61 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
               </svg>
             }
           >
-            {/* Language */}
+            {/* OpenAI API Key for Whisper */}
             <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">OpenAI API Key</h4>
+              <p className="text-xs text-text-secondary mb-2">
+                Required for Whisper transcription (voice-to-text).
+              </p>
+              {apiKey ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono">
+                      {showApiKey ? apiKey : "sk-••••••••••••••••"}
+                    </div>
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="p-2 text-text-secondary hover:text-text-primary"
+                      title={showApiKey ? "Hide" : "Show"}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {showApiKey ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleClearApiKey}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    Remove API Key
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={tempApiKey}
+                    onChange={(e) => setTempApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleSaveApiKey}
+                    disabled={!tempApiKey.trim()}
+                    className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Save API Key
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Language */}
+            <div className="pt-3 border-t border-slate-100">
               <h4 className="text-xs font-medium text-text-secondary mb-2">Language</h4>
               <select
                 value={settings.language}
@@ -651,12 +627,31 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                 Translation mode enabled: Your speech will be automatically translated to English.
               </p>
             )}
+
+            {/* Usage Statistics */}
+            <div className="pt-3 border-t border-slate-100">
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Usage Statistics</h4>
+              <div className="p-3 bg-slate-50 rounded-lg text-center">
+                <p className="text-xs text-text-secondary">
+                  Coming Soon — View usage at{" "}
+                  <a
+                    href="https://platform.openai.com/usage"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-500 hover:text-primary-700 underline"
+                  >
+                    platform.openai.com
+                  </a>
+                </p>
+              </div>
+            </div>
           </CollapsibleSection>
 
           {/* AI Transform Section */}
           <CollapsibleSection
             title="AI Transform"
-            defaultExpanded={true}
+            defaultExpanded={false}
+            onToggle={(expanded) => setAiTransformExpanded(expanded)}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -913,7 +908,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
           {/* Hotkey Actions Section */}
           <CollapsibleSection
             title="Hotkey Actions"
-            defaultExpanded={true}
+            defaultExpanded={false}
             badge={webhookActions.length > 0 ? webhookActions.length : undefined}
             icon={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -939,11 +934,11 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
               </button>
             }
           >
-            {/* Add/Edit Hotkey Action Form - NOW AT TOP */}
-            {(isAddingWebhook || editingWebhook) && editingWebhook && (
+            {/* Add Hotkey Action Form - Only for NEW webhooks */}
+            {isAddingWebhook && editingWebhook && (
               <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <h4 className="text-sm font-medium text-text-primary mb-3">
-                  {isAddingWebhook ? "Add Hotkey Action" : "Edit Hotkey Action"}
+                  Add Hotkey Action
                 </h4>
                 <div className="space-y-3">
                   <div>
@@ -1040,13 +1035,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                   )}
                   <div className="flex gap-2 pt-2">
                     <button
-                      onClick={() => {
-                        if (isAddingWebhook) {
-                          addWebhookAction(editingWebhook);
-                        } else {
-                          updateWebhookAction(editingWebhook);
-                        }
-                      }}
+                      onClick={() => addWebhookAction(editingWebhook)}
                       disabled={
                         !editingWebhook.name ||
                         (editingWebhook.method !== "SMART_URL" && editingWebhook.method !== "PROMPT" && !editingWebhook.webhookUrl) ||
@@ -1054,7 +1043,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                       }
                       className="flex-1 px-3 py-1.5 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      {isAddingWebhook ? "Add" : "Save"}
+                      Add
                     </button>
                     <button
                       onClick={() => {
@@ -1081,68 +1070,192 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
             ) : (
               <div className="space-y-2">
                 {webhookActions.map((webhook) => (
-                  <div
-                    key={webhook.id}
-                    className={`p-3 rounded-lg border ${
-                      webhook.enabled
-                        ? "bg-white border-slate-200"
-                        : "bg-slate-50 border-slate-200 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={webhook.enabled}
-                          onChange={() => toggleWebhookEnabled(webhook.id)}
-                          className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">{webhook.name}</p>
-                          <div className="flex items-center gap-2">
-                            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
-                              {webhook.hotkey.replace("Control", "Ctrl")}
-                            </kbd>
-                            <span className="text-xs text-slate-400 font-mono">
-                              {webhook.method === "POST" && "POST"}
-                              {webhook.method === "GET" && "GET"}
-                              {webhook.method === "URL" && "URL"}
-                              {webhook.method === "SMART_URL" && "Smart"}
-                            </span>
-                            {webhook.method !== "SMART_URL" && (
-                              <span className="text-xs text-text-secondary truncate max-w-[120px]">
-                                {webhook.webhookUrl}
-                              </span>
-                            )}
-                            {webhook.method === "SMART_URL" && (
-                              <span className="text-xs text-text-secondary italic">
-                                Selection → URL or Search
-                              </span>
-                            )}
+                  <div key={webhook.id}>
+                    {/* Inline Edit Form - shown when editing this webhook */}
+                    {!isAddingWebhook && editingWebhook?.id === webhook.id ? (
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <h4 className="text-sm font-medium text-text-primary mb-3">
+                          Edit Hotkey Action
+                        </h4>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs text-text-secondary mb-1">Name</label>
+                            <input
+                              type="text"
+                              value={editingWebhook.name}
+                              onChange={(e) => setEditingWebhook({ ...editingWebhook, name: e.target.value })}
+                              placeholder="e.g., Claude API, Open Docs, Quick Search"
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-text-secondary mb-1">Hotkey</label>
+                            <HotkeyInput
+                              value={editingWebhook.hotkey}
+                              onChange={(hotkey) => setEditingWebhook({ ...editingWebhook, hotkey })}
+                              excludeActionName={editingWebhook.name}
+                              showPresetToggle={true}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-text-secondary mb-1">Action Type</label>
+                            <select
+                              value={editingWebhook.method}
+                              onChange={(e) => setEditingWebhook({ ...editingWebhook, method: e.target.value as "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT" })}
+                              className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            >
+                              <option value="POST">POST (webhook)</option>
+                              <option value="GET">GET (webhook)</option>
+                              <option value="URL">URL (open in Chrome)</option>
+                              <option value="SMART_URL">Selection → URL or Google search</option>
+                              <option value="PROMPT">Prompt (AI Transform)</option>
+                            </select>
+                            <p className="text-xs text-text-secondary mt-1">
+                              {editingWebhook.method === "POST" && "Send selected text to a webhook, paste the response"}
+                              {editingWebhook.method === "GET" && "Send selected text as query param, paste the response"}
+                              {editingWebhook.method === "URL" && "Open a preset URL in Chrome when hotkey is pressed"}
+                              {editingWebhook.method === "SMART_URL" && "Highlight text → opens it as URL, or Googles it"}
+                              {editingWebhook.method === "PROMPT" && "Apply a stored prompt to selected text via AI Transform"}
+                            </p>
+                          </div>
+                          {/* URL input - shown for POST, GET, URL but not SMART_URL or PROMPT */}
+                          {editingWebhook.method !== "SMART_URL" && editingWebhook.method !== "PROMPT" && (
+                            <div>
+                              <label className="block text-xs text-text-secondary mb-1">
+                                {editingWebhook.method === "URL" ? "Website URL" : "Webhook URL"}
+                              </label>
+                              <input
+                                type="url"
+                                value={editingWebhook.webhookUrl}
+                                onChange={(e) => setEditingWebhook({ ...editingWebhook, webhookUrl: e.target.value })}
+                                placeholder={
+                                  editingWebhook.method === "URL"
+                                    ? "https://example.com or docs.google.com/..."
+                                    : "https://your-webhook-url.com/endpoint"
+                                }
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              />
+                            </div>
+                          )}
+                          {/* Prompt textarea - shown only for PROMPT method */}
+                          {editingWebhook.method === "PROMPT" && (
+                            <div>
+                              <label className="block text-xs text-text-secondary mb-1">
+                                Prompt (use {"{{text}}"} for selected text)
+                              </label>
+                              <textarea
+                                value={editingWebhook.prompt || ""}
+                                onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
+                                placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
+                                rows={4}
+                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                              />
+                              <p className="text-xs text-text-secondary mt-1">
+                                {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
+                              </p>
+                            </div>
+                          )}
+                          {/* Chrome profile chooser option - only for URL method */}
+                          {editingWebhook.method === "URL" && (
+                            <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editingWebhook.askChromeProfile ?? false}
+                                onChange={(e) => setEditingWebhook({ ...editingWebhook, askChromeProfile: e.target.checked })}
+                                className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                              />
+                              <div>
+                                <p className="text-sm font-medium text-text-primary">Ask which Chrome profile</p>
+                                <p className="text-xs text-text-secondary">Show profile chooser when hotkey is pressed (e.g., Work/Personal Gmail)</p>
+                              </div>
+                            </label>
+                          )}
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              onClick={() => updateWebhookAction(editingWebhook)}
+                              disabled={
+                                !editingWebhook.name ||
+                                (editingWebhook.method !== "SMART_URL" && editingWebhook.method !== "PROMPT" && !editingWebhook.webhookUrl) ||
+                                (editingWebhook.method === "PROMPT" && !editingWebhook.prompt)
+                              }
+                              className="flex-1 px-3 py-1.5 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingWebhook(null)}
+                              className="px-3 py-1.5 bg-slate-200 text-text-secondary text-sm rounded hover:bg-slate-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setEditingWebhook(webhook)}
-                          className="p-1 text-text-secondary hover:text-text-primary"
-                          title="Edit"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => deleteWebhookAction(webhook.id)}
-                          className="p-1 text-text-secondary hover:text-red-500"
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                    ) : (
+                      /* Normal Item View */
+                      <div
+                        className={`p-3 rounded-lg border ${
+                          webhook.enabled
+                            ? "bg-white border-slate-200"
+                            : "bg-slate-50 border-slate-200 opacity-60"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={webhook.enabled}
+                              onChange={() => toggleWebhookEnabled(webhook.id)}
+                              className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-text-primary">{webhook.name}</p>
+                              <div className="flex items-center gap-2">
+                                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
+                                  {webhook.hotkey.replace("Control", "Ctrl")}
+                                </kbd>
+                                <span className="text-xs text-slate-400 font-mono">
+                                  {webhook.method === "POST" && "POST"}
+                                  {webhook.method === "GET" && "GET"}
+                                  {webhook.method === "URL" && "URL"}
+                                  {webhook.method === "SMART_URL" && "Smart"}
+                                </span>
+                                {webhook.method !== "SMART_URL" && (
+                                  <span className="text-xs text-text-secondary truncate max-w-[120px]">
+                                    {webhook.webhookUrl}
+                                  </span>
+                                )}
+                                {webhook.method === "SMART_URL" && (
+                                  <span className="text-xs text-text-secondary italic">
+                                    Selection → URL or Search
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setEditingWebhook(webhook)}
+                              className="p-1 text-text-secondary hover:text-text-primary"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => deleteWebhookAction(webhook.id)}
+                              className="p-1 text-text-secondary hover:text-red-500"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>

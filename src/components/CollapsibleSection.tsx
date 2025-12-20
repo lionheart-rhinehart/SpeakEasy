@@ -7,6 +7,7 @@ interface CollapsibleSectionProps {
   children: ReactNode;
   badge?: string | number;
   headerAction?: ReactNode;
+  onToggle?: (expanded: boolean) => void;
 }
 
 export default function CollapsibleSection({
@@ -16,15 +17,22 @@ export default function CollapsibleSection({
   children,
   badge,
   headerAction,
+  onToggle,
 }: CollapsibleSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  const handleToggle = () => {
+    const newState = !isExpanded;
+    setIsExpanded(newState);
+    onToggle?.(newState);
+  };
 
   return (
     <section className="border-b border-slate-200 last:border-b-0">
       {/* Header - clickable to expand/collapse */}
       <button
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggle}
         className="w-full flex items-center justify-between py-3 text-left hover:bg-slate-50 transition-colors rounded"
       >
         <div className="flex items-center gap-2">

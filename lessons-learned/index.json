@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T17:45:53.950Z",
-  "count": 35,
+  "last_updated": "2025-12-20T18:12:46.174Z",
+  "count": 36,
   "entries": [
+    {
+      "id": "2025-12-20__frontend__settings-panel-ux-improvements",
+      "file": "2025-12-20__frontend__settings-panel-ux-improvements.md",
+      "title": "settings-panel-ux-improvements",
+      "date": "2025-12-20",
+      "area": "frontend",
+      "tags": [
+        "frontend"
+      ],
+      "summary": "Improved Settings panel UX: collapsed sections by default, deferred model API loading until section expanded, consolidated transcription settings, and inline hotkey editing",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-20__feature__beta-readiness-licensing-updates-docs",
       "file": "2025-12-20__feature__beta-readiness-licensing-updates-docs.md",
