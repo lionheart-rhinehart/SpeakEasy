@@ -67,7 +67,17 @@
       "Bash(ls:*)",
       "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" remote -v)",
       "Skill(wrapup)",
-      "Skill(wrapup:*)"
+      "Skill(wrapup:*)",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" status)",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" status --porcelain)",
+      "Bash(git -C \"d:\\\\Claude CODE\\\\SpeakEasy\" log --oneline -10)",
+      "Bash(cmdkey /list:*)",
+      "Bash(cmdkey /delete:*)",
+      "Bash(timeout /t)",
+      "Bash(start \"\" \"C:\\\\Users\\\\lionh\\\\AppData\\\\Local\\\\SpeakEasy\\\\SpeakEasy.exe\")",
+      "Bash(cmd /c \"dir %APPDATA%\\\\SpeakEasy\\\\ 2>nul || echo Directory empty or missing\")",
+      "Bash(cmd /c \"taskkill /F /IM speakeasy.exe\")",
+      "Bash(cmd /c \"start \"\"\"\" \"\"C:\\\\Users\\\\lionh\\\\AppData\\\\Local\\\\SpeakEasy\\\\SpeakEasy.exe\"\"\")"
     ],
     "deny": [],
     "ask": []

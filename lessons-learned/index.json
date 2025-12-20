@@ -1,8 +1,21 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T00:35:31.811Z",
-  "count": 33,
+  "last_updated": "2025-12-20T01:43:25.849Z",
+  "count": 34,
   "entries": [
+    {
+      "id": "2025-12-20__feature__beta-readiness-licensing-updates-docs",
+      "file": "2025-12-20__feature__beta-readiness-licensing-updates-docs.md",
+      "title": "beta-readiness-licensing-updates-docs",
+      "date": "2025-12-20",
+      "area": "feature",
+      "tags": [
+        "feature"
+      ],
+      "summary": "Implemented server-validated licensing with Supabase, auto-update system, user documentation, and deactivate license UI for beta testing",
+      "problem": "License data stored in 3 locations (keyring, JSON, Supabase) caused testing issues; serde serialization format mismatch between Rust and TypeScript",
+      "fix": "Added deactivate license button to clear all locations; fixed serde to use adjacently tagged format matching frontend types"
+    },
     {
       "id": "2025-12-20__feature__beta-readiness-license-updates-docs",
       "file": "2025-12-20__feature__beta-readiness-license-updates-docs.md",

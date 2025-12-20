@@ -1765,8 +1765,12 @@ pub fn save_user_settings(settings: config::UserSettings) -> Result<(), String> 
 
 /// Activate a license key
 #[tauri::command]
-pub async fn activate_license(license_key: String) -> Result<license::LicenseInfo, String> {
-    license::activate_license(&license_key)
+pub async fn activate_license(
+    license_key: String,
+    user_name: String,
+    user_email: String,
+) -> Result<license::LicenseInfo, String> {
+    license::activate_license(&license_key, &user_name, &user_email)
         .await
         .map_err(|e| e.to_string())
 }

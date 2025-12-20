@@ -19,14 +19,14 @@ const GRACE_PERIOD_HOURS: i64 = 168;
 /// Validation interval in hours (check server every 24 hours)
 const VALIDATION_INTERVAL_HOURS: i64 = 24;
 
-/// Supabase configuration - these will be set from environment or config
-/// TODO: Move to a config file or environment variables for production
-const SUPABASE_URL: &str = "YOUR_SUPABASE_URL"; // e.g., https://xxxxx.supabase.co
-const SUPABASE_ANON_KEY: &str = "YOUR_SUPABASE_ANON_KEY"; // The anon/public key
+/// Supabase configuration
+const SUPABASE_URL: &str = "https://bzhxcinrsgcnmktouqdw.supabase.co";
+const SUPABASE_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6aHhjaW5yc2djbm1rdG91cWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxODk4NzAsImV4cCI6MjA4MTc2NTg3MH0.SMdO6nd7wgUjS9__LzaPwFibKcAacjkHY6wFNWKGCxM";
 
 /// License status returned to the frontend
+/// Uses externally tagged format so "Valid" becomes {"valid": {}} not just "valid"
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "type", content = "data")]
 pub enum LicenseStatus {
     /// License is valid and active
     Valid,
@@ -58,6 +58,7 @@ pub struct LicenseState {
 }
 
 /// Response from Supabase activation
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ActivationResponse {
     success: bool,
@@ -68,6 +69,7 @@ struct ActivationResponse {
 }
 
 /// Response from Supabase validation
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct ValidationResponse {
     valid: bool,
@@ -264,11 +266,11 @@ fn mask_license_key(key: &str) -> String {
 }
 
 /// Activate a license key with the server
-pub async fn activate_license(license_key: &str) -> Result<LicenseInfo> {
+pub async fn activate_license(license_key: &str, user_name: &str, user_email: &str) -> Result<LicenseInfo> {
     let machine_id = get_machine_id();
     let app_version = env!("CARGO_PKG_VERSION").to_string();
 
-    log::info!("Attempting to activate license for machine: {}", machine_id);
+    log::info!("Attempting to activate license for machine: {} (user: {})", machine_id, user_email);
 
     // Build the activation request
     let client = reqwest::Client::new();
@@ -399,7 +401,9 @@ pub async fn activate_license(license_key: &str) -> Result<LicenseInfo> {
             .json(&serde_json::json!({
                 "last_validated_at": now_str,
                 "app_version": app_version,
-                "is_active": true
+                "is_active": true,
+                "user_name": user_name,
+                "user_email": user_email
             }))
             .send()
             .await?;
@@ -426,7 +430,9 @@ pub async fn activate_license(license_key: &str) -> Result<LicenseInfo> {
                 "app_version": app_version,
                 "os_type": os_type,
                 "is_active": true,
-                "last_validated_at": now_str
+                "last_validated_at": now_str,
+                "user_name": user_name,
+                "user_email": user_email
             }))
             .send()
             .await?;
@@ -478,8 +484,8 @@ pub async fn validate_license() -> Result<LicenseInfo> {
     let state = match load_license_state() {
         Some(s) => s,
         None => {
-            // Have key but no state - try to activate
-            return activate_license(&license_key).await;
+            // Have key but no state - try to activate (internal re-validation, no name/email)
+            return activate_license(&license_key, "", "").await;
         }
     };
 
@@ -489,7 +495,7 @@ pub async fn validate_license() -> Result<LicenseInfo> {
     // Check if machine ID matches
     if state.machine_id != machine_id {
         log::warn!("Machine ID mismatch - re-activating");
-        return activate_license(&license_key).await;
+        return activate_license(&license_key, "", "").await;
     }
 
     // Check if we need to validate with server

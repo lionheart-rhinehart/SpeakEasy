@@ -120,7 +120,11 @@ interface AudioDevice {
   is_default: boolean;
 }
 
-export default function SettingsPanel() {
+interface SettingsPanelProps {
+  onLicenseDeactivated?: () => void;
+}
+
+export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelProps) {
   const { settings, isSettingsOpen, setSettingsOpen, updateSettings, apiKey, setApiKey, setCapturingHotkey } = useAppStore();
   const [tempApiKey, setTempApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -130,7 +134,12 @@ export default function SettingsPanel() {
   const [isAddingWebhook, setIsAddingWebhook] = useState(false);
   const [capturingHotkeyState, setCapturingHotkeyState] = useState<"record" | "aiTransform" | null>(null);
   const [autostart, setAutostart] = useState(false);
-  
+
+  // License management state
+  const [machineId, setMachineId] = useState<string | null>(null);
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+
   // Transform provider settings
   const [transformKeyStatuses, setTransformKeyStatuses] = useState<ApiKeyStatus[]>([]);
   const [tempTransformApiKey, setTempTransformApiKey] = useState("");
@@ -146,12 +155,14 @@ export default function SettingsPanel() {
   const lastFetchTimeRef = useRef(0);
   const cachedModelsRef = useRef<ProviderModel[]>([]);
 
-  // Load audio devices, autostart state, and transform key statuses when panel opens
+  // Load audio devices, autostart state, transform key statuses, and machine ID when panel opens
   useEffect(() => {
     if (isSettingsOpen) {
       loadAudioDevices();
       loadAutostartState();
       loadTransformKeyStatuses();
+      // Fetch machine ID for license section
+      invoke<string>("get_machine_id").then(setMachineId).catch(console.error);
     }
   }, [isSettingsOpen]);
 
@@ -295,6 +306,24 @@ export default function SettingsPanel() {
       updateSettings({ startOnBoot: result });
     } catch (error) {
       console.error("Failed to set autostart:", error);
+    }
+  };
+
+  // Handle license deactivation
+  const handleDeactivateLicense = async () => {
+    setIsDeactivating(true);
+    try {
+      await invoke("deactivate_license");
+      console.log("License deactivated successfully");
+      setShowDeactivateConfirm(false);
+      setSettingsOpen(false);
+      // Notify parent to show license activation screen
+      onLicenseDeactivated?.();
+    } catch (error) {
+      console.error("Failed to deactivate license:", error);
+      alert(`Failed to deactivate license: ${error}`);
+    } finally {
+      setIsDeactivating(false);
     }
   };
 
@@ -1315,6 +1344,76 @@ export default function SettingsPanel() {
                 />
                 <span className="text-sm text-text-secondary w-12">{settings.historyLimitMb} MB</span>
               </div>
+            </div>
+          </CollapsibleSection>
+
+          {/* License Management Section */}
+          <CollapsibleSection
+            title="License Management"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            }
+          >
+            {/* Machine ID display */}
+            {machineId && (
+              <div className="mb-3">
+                <p className="text-xs text-text-secondary mb-1">Machine ID</p>
+                <code className="block px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 break-all">
+                  {machineId}
+                </code>
+              </div>
+            )}
+
+            {/* Deactivate button */}
+            <div className="pt-2 border-t border-slate-100">
+              {!showDeactivateConfirm ? (
+                <button
+                  onClick={() => setShowDeactivateConfirm(true)}
+                  className="w-full px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 border border-red-200 transition-colors"
+                >
+                  Deactivate License
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm font-medium text-red-800 mb-1">Deactivate License?</p>
+                    <p className="text-xs text-red-600">
+                      This will remove your license from this device. You'll need to re-enter your license key to use the app.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowDeactivateConfirm(false)}
+                      disabled={isDeactivating}
+                      className="flex-1 px-3 py-2 bg-slate-100 text-text-secondary text-sm rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeactivateLicense}
+                      disabled={isDeactivating}
+                      className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isDeactivating ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Deactivating...
+                        </>
+                      ) : (
+                        "Deactivate"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-text-secondary mt-3">
+                Deactivating will allow you to activate this license on another device.
+              </p>
             </div>
           </CollapsibleSection>
         </div>

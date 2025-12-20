@@ -19,8 +19,14 @@ import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, Mai
 // License status types matching Rust backend
 type LicenseStatusTag = "valid" | "needs_validation" | "grace_period" | "invalid" | "not_activated";
 
+// License status from Rust uses adjacently tagged format: { type: "valid" } or { type: "invalid", data: { reason: "..." } }
+interface LicenseStatusObject {
+  type: LicenseStatusTag;
+  data?: { reason?: string; hours_remaining?: number };
+}
+
 interface LicenseInfo {
-  status: Record<string, unknown>;
+  status: LicenseStatusObject;
   license_key_preview: string | null;
   machine_id: string | null;
   activated_at: string | null;
@@ -29,12 +35,8 @@ interface LicenseInfo {
 }
 
 // Helper to get the status tag from the status object
-function getLicenseStatusTag(status: Record<string, unknown>): LicenseStatusTag {
-  if ("valid" in status) return "valid";
-  if ("needs_validation" in status) return "needs_validation";
-  if ("grace_period" in status) return "grace_period";
-  if ("invalid" in status) return "invalid";
-  return "not_activated";
+function getLicenseStatusTag(status: LicenseStatusObject): LicenseStatusTag {
+  return status.type;
 }
 
 // Tauri format: use "Control" not "Ctrl", use "+" as separator
@@ -152,9 +154,8 @@ function App() {
         setLicenseStatus(status);
 
         // Log invalid reason for debugging
-        if (status === "invalid" && "invalid" in result.status) {
-          const invalidStatus = result.status.invalid as { reason: string };
-          console.log("License invalid:", invalidStatus.reason);
+        if (status === "invalid" && result.status.data?.reason) {
+          console.log("License invalid:", result.status.data.reason);
         }
       } catch (err) {
         console.error("License validation error:", err);
@@ -181,6 +182,11 @@ function App() {
   // Handle successful license activation
   const handleLicenseActivated = useCallback(() => {
     setLicenseStatus("valid");
+  }, []);
+
+  // Handle license deactivation from settings
+  const handleLicenseDeactivated = useCallback(() => {
+    setLicenseStatus("not_activated");
   }, []);
 
   // Check for updates on startup (only if licensed)
@@ -1684,8 +1690,8 @@ function App() {
     );
   }
 
-  // Show license activation if not licensed
-  if (licenseStatus === "not_activated" || licenseStatus === "invalid") {
+  // Show license activation if not licensed (or any status that isn't valid/grace_period)
+  if (licenseStatus !== "valid" && licenseStatus !== "grace_period") {
     return <LicenseActivation onActivated={handleLicenseActivated} />;
   }
 
@@ -1723,7 +1729,7 @@ function App() {
       )}
       <MainWindow />
       <HistoryPanel />
-      <SettingsPanel />
+      <SettingsPanel onLicenseDeactivated={handleLicenseDeactivated} />
       <RecordingIndicator />
       <Toast messages={toasts} onDismiss={dismissToast} />
       <ProfileChooserModal

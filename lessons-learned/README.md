@@ -1,12 +1,13 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-20T00:35:31.807Z
+Updated: 2025-12-20T01:43:25.844Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2025-12-20 | feature | [beta readiness licensing updates docs](2025-12-20__feature__beta-readiness-licensing-updates-docs.md) |
 | 2025-12-20 | feature | [beta readiness license updates docs](2025-12-20__feature__beta-readiness-license-updates-docs.md) |
 | 2025-12-19 | frontend | [settings ui cleanup collapsible sections](2025-12-19__frontend__settings-ui-cleanup-collapsible-sections.md) |
 | 2025-12-19 | bugfix | [fix profile chooser minimize and cancel](2025-12-19__bugfix__fix-profile-chooser-minimize-and-cancel.md) |

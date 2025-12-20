@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-// License status types matching Rust backend
-type LicenseStatus =
-  | { valid: null }
-  | { needs_validation: null }
-  | { grace_period: { hours_remaining: number } }
-  | { invalid: { reason: string } }
-  | { not_activated: null };
+// License status from Rust uses adjacently tagged format: { type: "valid" } or { type: "invalid", data: { reason: "..." } }
+interface LicenseStatusObject {
+  type: "valid" | "needs_validation" | "grace_period" | "invalid" | "not_activated";
+  data?: { reason?: string; hours_remaining?: number };
+}
 
 interface LicenseInfo {
-  status: LicenseStatus;
+  status: LicenseStatusObject;
   license_key_preview: string | null;
   machine_id: string | null;
   activated_at: string | null;
@@ -24,21 +22,43 @@ interface LicenseActivationProps {
 
 export default function LicenseActivation({ onActivated }: LicenseActivationProps) {
   const [licenseKey, setLicenseKey] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [machineId, setMachineId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Get machine ID on mount
   useEffect(() => {
     invoke<string>("get_machine_id").then(setMachineId).catch(console.error);
-    // Focus input on mount
-    setTimeout(() => inputRef.current?.focus(), 100);
+    // Focus name input on mount
+    setTimeout(() => nameInputRef.current?.focus(), 100);
   }, []);
 
   // Handle license activation
   const handleActivate = async () => {
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
     const trimmedKey = licenseKey.trim();
+
+    if (!trimmedName) {
+      setError("Please enter your name");
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setError("Please enter your email");
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
     if (!trimmedKey) {
       setError("Please enter a license key");
       return;
@@ -57,13 +77,15 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
     try {
       const result = await invoke<LicenseInfo>("activate_license", {
         licenseKey: trimmedKey,
+        userName: trimmedName,
+        userEmail: trimmedEmail,
       });
 
       // Check the status
-      if ("valid" in result.status) {
+      if (result.status.type === "valid") {
         onActivated();
-      } else if ("invalid" in result.status) {
-        setError(result.status.invalid.reason);
+      } else if (result.status.type === "invalid") {
+        setError(result.status.data?.reason || "License is invalid");
       } else {
         setError("Activation failed. Please try again.");
       }
@@ -144,13 +166,47 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
 
           {/* Content */}
           <div className="p-6 space-y-4">
+            {/* Name input */}
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">
+                Your Name
+              </label>
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); setError(null); }}
+                onKeyDown={handleKeyDown}
+                placeholder="John Doe"
+                className="w-full px-4 py-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-slate-300 bg-white"
+                disabled={isLoading}
+                autoComplete="name"
+              />
+            </div>
+
+            {/* Email input */}
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                onKeyDown={handleKeyDown}
+                placeholder="you@example.com"
+                className="w-full px-4 py-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-slate-300 bg-white"
+                disabled={isLoading}
+                autoComplete="email"
+              />
+            </div>
+
             {/* License key input */}
             <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">
                 License Key
               </label>
               <input
-                ref={inputRef}
                 type="text"
                 value={licenseKey}
                 onChange={handleKeyChange}
@@ -186,7 +242,7 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
             {/* Activate button */}
             <button
               onClick={handleActivate}
-              disabled={isLoading || !licenseKey.trim()}
+              disabled={isLoading || !name.trim() || !email.trim() || !licenseKey.trim()}
               className="w-full py-3 px-4 bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
             >
               {isLoading ? (
