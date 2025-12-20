@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
         from: fromEmail,
         to: email,
         subject: 'Re: Your SpeakEasy Feedback',
-        replyTo: adminEmail || fromEmail,
+        reply_to: adminEmail || fromEmail,
         html: `
           <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <p>Hi ${name},</p>
