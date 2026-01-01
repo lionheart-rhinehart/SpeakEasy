@@ -2,13 +2,48 @@
 
 > **Last Updated:** 2026-01-01
 > **Status:** Awaiting Approval
-> **Branch:** `claude/mac-compatibility-analysis-VhUy2`
+> **Branch:** `feature/macos-support` (to be created)
 
 ---
 
 ## Executive Summary
 
 Port SpeakEasy to macOS. The frontend is platform-agnostic. The Rust backend requires targeted changes for 6 areas. One **build blocker** must be fixed before any macOS compilation will succeed.
+
+---
+
+## Repository Strategy
+
+**Decision:** Single repo with CI gate (Option 3)
+
+### Why This Approach
+
+- **Single codebase** - Both platforms build from the same repo
+- **CI protection** - Every PR must build on BOTH Windows and macOS before merge
+- **Shared code stays shared** - ~85% of code is platform-agnostic
+- **Platform code is isolated** - Uses `#[cfg(target_os = "...")]` conditional compilation
+- **Can't accidentally break the other platform** - CI blocks bad merges
+
+### Branch Strategy
+
+```
+main (stable, both platforms work)
+  └── feature/macos-support (initial macOS development)
+        └── merge to main when macOS is working
+
+After merge: main builds both platforms, CI guards everything
+```
+
+### The Safety Net
+
+```yaml
+# On every PR:
+- Build Windows → must pass
+- Build macOS  → must pass
+- Either fails → PR blocked → can't merge
+```
+
+This is how Tauri, Electron, Flutter, and React Native projects all work. The CI is your protection.
 
 ---
 
@@ -73,7 +108,85 @@ clipboard-win = "5"  # ADD THIS LINE
 
 ---
 
-#### Task 0.2: Add macOS Info.plist Permission Strings
+#### Task 0.2: Create CI Workflow for Cross-Platform Protection
+
+**File:** `.github/workflows/ci.yml` (new file)
+**Priority:** P0 - FOUNDATIONAL SAFETY
+**Complexity:** Low (15 min)
+
+**Purpose:** This is the safety net that prevents Windows changes from breaking macOS and vice versa. Every PR must pass builds on BOTH platforms before merge.
+
+**Create `.github/workflows/ci.yml`:**
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, feature/macos-support]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false  # Don't cancel other builds if one fails
+      matrix:
+        include:
+          - platform: windows-latest
+            target: ''
+          - platform: macos-latest
+            target: 'aarch64-apple-darwin'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Rust code
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+**Why `fail-fast: false`:** If Windows fails, we still want to see if macOS passes (and vice versa). Helps diagnose platform-specific issues.
+
+**Verification:**
+1. Push a PR
+2. See both Windows and macOS builds run
+3. Both must be green to merge
+
+---
+
+#### Task 0.3: Add macOS Info.plist Permission Strings
 
 **File:** `src-tauri/tauri.conf.json`
 **Priority:** P0 - BLOCKING
@@ -617,16 +730,17 @@ The `--target universal-apple-darwin` flag creates a fat binary that runs native
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Phase 0: Build Blockers (MUST DO FIRST)                     │
+│ Phase 0: Build Blockers & Safety (MUST DO FIRST)            │
 │ ├── 0.1 Fix clipboard-win dependency        [5 min]         │
-│ └── 0.2 Add Info.plist permissions          [10 min]        │
+│ ├── 0.2 Create CI workflow (SAFETY NET)     [15 min]        │
+│ └── 0.3 Add Info.plist permissions          [10 min]        │
 ├─────────────────────────────────────────────────────────────┤
 │ Phase 1: Core Functionality                                  │
 │ ├── 1.1 Implement Cmd+V/C simulation        [30 min]        │
 │ └── 1.2 Implement Chrome paths              [45 min]        │
 ├─────────────────────────────────────────────────────────────┤
 │ Phase 2: Build & Distribution                                │
-│ ├── 2.1 Enable CI builds                    [5 min]         │
+│ ├── 2.1 Enable release CI for macOS         [5 min]         │
 │ └── 2.2 Verify icons                        [10 min]        │
 ├─────────────────────────────────────────────────────────────┤
 │ Phase 3: Polish (Optional for MVP)                           │
@@ -635,8 +749,10 @@ The `--target universal-apple-darwin` flag creates a fat binary that runs native
 │ └── 3.3 Document hotkey conventions         [15 min]        │
 └─────────────────────────────────────────────────────────────┘
 
-Estimated Total: ~2.5 hours (excluding testing)
+Estimated Total: ~2.75 hours (excluding testing)
 ```
+
+**Critical:** Task 0.2 (CI workflow) is your ongoing protection. Once this is in place, you cannot accidentally merge code that breaks either platform.
 
 ---
 
@@ -645,6 +761,7 @@ Estimated Total: ~2.5 hours (excluding testing)
 | File | Changes | Phase |
 |------|---------|-------|
 | `src-tauri/Cargo.toml` | Move clipboard-win to conditional | 0 |
+| `.github/workflows/ci.yml` | **NEW** - Cross-platform CI safety net | 0 |
 | `src-tauri/tauri.conf.json` | Add macOS bundle config + permissions | 0 |
 | `src-tauri/src/clipboard.rs` | Add Cmd+V/C functions (~80 lines) | 1 |
 | `src-tauri/src/commands.rs` | Add macOS Chrome paths (~60 lines) | 1 |
@@ -673,7 +790,9 @@ These were previously listed as "needs implementation" in the old plan but are a
 
 Before beginning implementation, please confirm:
 
-- [ ] Branch `claude/mac-compatibility-analysis-VhUy2` is correct for development
+- [ ] **Repository strategy approved:** Single repo with CI gate (Option 3)
+- [ ] **Branch:** Will create `feature/macos-support` from main for development
+- [ ] **CI protection:** Task 0.2 (cross-platform CI) is understood as the safety net
 - [ ] Phase 0-2 implementation order is acceptable
 - [ ] Phase 3 (Polish) can be deferred for MVP if needed
 - [ ] Testing will eventually be done on real Mac hardware
