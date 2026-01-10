@@ -21,12 +21,13 @@ struct WhisperResponse {
 const MAX_WHISPER_FILE_SIZE: usize = 25 * 1024 * 1024;
 // Chunk size for splitting long audio (10 minutes at 16kHz mono 16-bit = ~19MB)
 const CHUNK_DURATION_SECONDS: u32 = 600; // 10 minutes per chunk
-                                         // Retry configuration
+
+// Retry configuration
 const MAX_RETRIES: u32 = 5;
 const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 const MAX_RETRY_DELAY_MS: u64 = 30000;
 
-/// Create a reqwest client with generous timeouts and keep-alive
+/// Create a reqwest client with reasonable timeouts and keep-alive
 fn create_client() -> reqwest::Client {
     reqwest::Client::builder()
         // Very generous timeout for large files - 15 minutes per request

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { VoiceCommandMatch } from "../types";
 
@@ -12,6 +11,7 @@ export default function VoiceReviewPanel() {
   const [data, setData] = useState<VoiceReviewData | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const timeoutRef = useRef<number | null>(null);
+  const pollIntervalRef = useRef<number | null>(null);
 
   // Send result back to main app (moved up for use in effects)
   const sendResult = useCallback((selectedIndex: number | null) => {
@@ -20,6 +20,8 @@ export default function VoiceReviewPanel() {
       : { selectedIndex: null, cancelled: true };
 
     console.log("[VoiceReviewPanel] Sending result:", payload);
+    // Clear voice review data when closing
+    invoke("clear_voice_review_data").catch(console.error);
     invoke("emit_voice_review_result", { result: payload }).catch(console.error);
   }, []);
 
@@ -37,21 +39,40 @@ export default function VoiceReviewPanel() {
     return () => window.removeEventListener("keydown", handleGlobalEscape);
   }, [sendResult]);
 
-  // Listen for voice review data from main app
+  // Poll for voice review data from backend (avoids race condition with events)
   useEffect(() => {
-    const unlisten = listen<VoiceReviewData>("voice-review-data", (event) => {
-      console.log("[VoiceReviewPanel] Received data:", event.payload);
-      setData(event.payload);
-      setSelectedIndex(0);
+    const fetchData = async () => {
+      try {
+        const result = await invoke<VoiceReviewData | null>("get_voice_review_data");
+        if (result) {
+          console.log("[VoiceReviewPanel] Received data via polling:", result);
+          setData(result);
+          setSelectedIndex(0);
 
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+          // Stop polling once we have data
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          // Clear timeout since we got data
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        }
+      } catch (error) {
+        console.error("[VoiceReviewPanel] Error fetching data:", error);
       }
-    });
+    };
+
+    // Start polling immediately and every 100ms
+    fetchData();
+    pollIntervalRef.current = window.setInterval(fetchData, 100);
 
     return () => {
-      unlisten.then((fn) => fn());
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
     };
   }, []);
 

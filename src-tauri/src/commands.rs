@@ -334,6 +334,14 @@ pub struct VoiceReviewData {
     pub matches: Vec<VoiceReviewMatch>,
 }
 
+// Static storage for voice review data (avoids race condition with events)
+use std::sync::OnceLock;
+static VOICE_REVIEW_DATA: OnceLock<Mutex<Option<VoiceReviewData>>> = OnceLock::new();
+
+fn get_voice_review_storage() -> &'static Mutex<Option<VoiceReviewData>> {
+    VOICE_REVIEW_DATA.get_or_init(|| Mutex::new(None))
+}
+
 /// Result from voice review window
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceReviewResult {
@@ -342,13 +350,39 @@ pub struct VoiceReviewResult {
     pub cancelled: bool,
 }
 
+/// Get voice review data (called by VoiceReviewPanel via polling)
+#[tauri::command]
+pub async fn get_voice_review_data() -> Result<Option<VoiceReviewData>, String> {
+    let storage = get_voice_review_storage();
+    let data = storage.lock().map_err(|e| e.to_string())?;
+    Ok(data.clone())
+}
+
+/// Clear voice review data (called when window closes)
+#[tauri::command]
+pub async fn clear_voice_review_data() -> Result<(), String> {
+    let storage = get_voice_review_storage();
+    let mut data = storage.lock().map_err(|e| e.to_string())?;
+    *data = None;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn show_voice_review(
     app: AppHandle,
     transcribed_text: String,
     matches: Vec<VoiceReviewMatch>,
 ) -> Result<(), String> {
-    use tauri::Emitter;
+    // Store data for polling (avoids race condition with events)
+    {
+        let storage = get_voice_review_storage();
+        let mut data = storage.lock().map_err(|e| e.to_string())?;
+        *data = Some(VoiceReviewData {
+            transcribed_text,
+            matches,
+        });
+        log::info!("[show_voice_review] Stored voice review data for polling");
+    }
 
     // Get or create the voice review window
     let mut vr_opt = app.get_webview_window("voice-review");
@@ -407,13 +441,7 @@ pub async fn show_voice_review(
             log::info!("[show_voice_review] Applied topmost subclass for z-order enforcement");
         }
 
-        // Emit data to the review window
-        let payload = VoiceReviewData {
-            transcribed_text,
-            matches,
-        };
-        vr.emit("voice-review-data", payload).ok();
-        log::info!("[show_voice_review] Voice review window shown with data");
+        log::info!("[show_voice_review] Voice review window shown");
     } else {
         log::warn!("[show_voice_review] Voice review window not found");
     }

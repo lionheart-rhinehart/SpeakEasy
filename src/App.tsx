@@ -320,6 +320,8 @@ function App() {
               try {
                 const currentApiKey = useAppStore.getState().apiKey;
                 if (!currentApiKey) {
+                  showToast("Please set your OpenAI API key first", "error");
+                  useAppStore.getState().setRecordingState("idle");
                   useAppStore.getState().addTranscription({
                     id: crypto.randomUUID(),
                     text: "Please set your OpenAI API key first.",
@@ -335,7 +337,11 @@ function App() {
                 const currentSettings = useAppStore.getState().settings;
                 const lang = currentSettings.language === "auto" ? null : currentSettings.language;
 
-                const result = await invoke<{
+                console.log("[Transcription] Starting transcribe_audio invoke...");
+                const startTime = Date.now();
+
+                // Wrap invoke with 30-second timeout
+                const transcriptionPromise = invoke<{
                   text: string;
                   language: string;
                   duration_ms: number;
@@ -344,6 +350,15 @@ function App() {
                   language: lang,
                   translateToEnglish: currentSettings.translateToEnglish,
                 });
+
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                  setTimeout(() => {
+                    reject(new Error("Transcription timed out after 15 minutes. Check your network connection and API key."));
+                  }, 900000); // 15 minutes for long recordings
+                });
+
+                const result = await Promise.race([transcriptionPromise, timeoutPromise]);
+                console.log(`[Transcription] Completed in ${Date.now() - startTime}ms`);
 
                 // Hide overlay after successful transcription
                 invoke("hide_recording_overlay").catch(console.error);
@@ -375,6 +390,10 @@ function App() {
                 console.error("Failed to transcribe:", error);
                 // Hide overlay on error too
                 invoke("hide_recording_overlay").catch(console.error);
+                // Show visible error to user
+                showToast(`Transcription failed: ${error}`, "error");
+                // Reset state so user can try again
+                useAppStore.getState().setRecordingState("idle");
                 useAppStore.getState().addTranscription({
                   id: crypto.randomUUID(),
                   text: `Error: ${error}`,
@@ -403,7 +422,7 @@ function App() {
         registeredRecordHotkey.current = "";
       }
     };
-  }, [hotkeyRecord]);
+  }, [hotkeyRecord, showToast]);
 
   // Register AI Transform hotkey (configurable, default Ctrl+`)
   // Flow: Press = grab clipboard + start recording, Release = transcribe instruction + GPT transform + paste
@@ -519,9 +538,9 @@ function App() {
                 return;
               }
 
-              // Transcribe the voice instruction
+              // Transcribe the voice instruction with timeout
               console.log("AI Transform: transcribing voice instruction...");
-              const transcriptionResult = await invoke<{
+              const aiTranscriptionPromise = invoke<{
                 text: string;
                 language: string;
                 duration_ms: number;
@@ -530,6 +549,14 @@ function App() {
                 language: "en",
                 translateToEnglish: false,
               });
+
+              const aiTimeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => {
+                  reject(new Error("AI Transform transcription timed out after 30 seconds"));
+                }, 30000);
+              });
+
+              const transcriptionResult = await Promise.race([aiTranscriptionPromise, aiTimeoutPromise]);
 
               const instruction = transcriptionResult.text;
               console.log(`AI Transform instruction: "${instruction}"`);
@@ -1448,9 +1475,9 @@ function App() {
         return;
       }
 
-      // Transcribe the voice command
+      // Transcribe the voice command with timeout
       console.log("Voice Command: transcribing...");
-      const result = await invoke<{
+      const transcriptionPromise = invoke<{
         text: string;
         language: string;
         duration_ms: number;
@@ -1459,6 +1486,14 @@ function App() {
         language: "en", // Voice commands always in English
         translateToEnglish: false,
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Voice command transcription timed out after 30 seconds"));
+        }, 30000);
+      });
+
+      const result = await Promise.race([transcriptionPromise, timeoutPromise]);
 
       invoke("hide_recording_overlay").catch(console.error);
 

@@ -266,6 +266,8 @@ pub fn run() {
             commands::show_voice_review,
             commands::hide_voice_review,
             commands::emit_voice_review_result,
+            commands::get_voice_review_data,
+            commands::clear_voice_review_data,
             // Main window topmost control (for profile chooser modal)
             commands::set_main_window_topmost,
             // Profile chooser: bring main window to front when showing modal

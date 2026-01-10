@@ -1,0 +1,253 @@
+{
+  "version": "2.0.0",
+  "updated": "2025-12-27",
+  "source": "D:\\Claude CODE\\High Level Vibing",
+  "source_type": "local",
+  "git_url": "",
+  "description": "Project bootstrapping and development workflow framework",
+
+  "sync_architecture": {
+    "single_source_of_truth": "High Level Vibing",
+    "commands": {
+      "source": "HLV/.claude/commands/",
+      "destinations": [
+        "~/.claude/commands/",
+        "[project]/.claude/commands/"
+      ],
+      "filter": "all",
+      "note": "All commands synced everywhere. Project-specific go in commands/project/"
+    },
+    "skills": {
+      "source": "HLV/.claude/skills/",
+      "destination": "[project]/.claude/skills/",
+      "filter": "tech_stack_match",
+      "note": "Only skills matching project's tech_stack in framework-manifest.json"
+    },
+    "rules": {
+      "source": "HLV/.claude/rules/",
+      "destination": "[project]/.claude/rules/",
+      "filter": "all"
+    }
+  },
+
+  "available_skills": [
+    "next-js",
+    "supabase",
+    "tailwind-css"
+  ],
+
+  "syncable_files": {
+    "CHEAT-SHEET.md": {
+      "checksum": "5C6E5E2CE082DF9FD643ABBCA559695C",
+      "priority": "recommended",
+      "description": "Command reference guide"
+    },
+    "docs/images/data-flow-diagram.png": {
+      "checksum": "92E6C452EDC3DEB7D20D1829ED0364C6",
+      "priority": "recommended",
+      "description": "Data flow diagram for CHEAT-SHEET"
+    },
+    "docs/images/workflow-diagram.png": {
+      "checksum": "6A3F914BE1DF5539F16FC4A3A8C09FFA",
+      "priority": "recommended",
+      "description": "Workflow diagram for CHEAT-SHEET"
+    },
+    "rules/visuals.md": {
+      "checksum": "2F5C501652BA5BAA521265273DE594DD",
+      "priority": "recommended",
+      "description": "Rule: Use Nano Banana for diagrams instead of ASCII art"
+    },
+    "skills/next-js/next.js - SKILL.md": {
+      "checksum": "2E776249FF812F2C4B9D69D751753402",
+      "priority": "recommended",
+      "description": "Next.js 14+ core patterns and App Router usage"
+    },
+    "skills/next-js/next.js - patterns.md": {
+      "checksum": "600A6781CF8F9B8868902871DCD2DC9D",
+      "priority": "recommended",
+      "description": "Next.js architectural patterns and best practices"
+    },
+    "skills/next-js/next.js - troubleshooting.md": {
+      "checksum": "B20D776B8D01C1B3B71CC4B92CAA991A",
+      "priority": "optional",
+      "description": "Common Next.js issues and solutions"
+    },
+    "skills/next-js/next.js - reference.md": {
+      "checksum": "BD4607AC9454EB66D86F1ECF4E56B5B4",
+      "priority": "optional",
+      "description": "Next.js API reference and configuration"
+    },
+    "skills/supabase/supabase - SKILL.md": {
+      "checksum": "4BD283B0EE8D206E90D47718EEBEC5BE",
+      "priority": "recommended",
+      "description": "Supabase core patterns for auth and database"
+    },
+    "skills/supabase/supabase - patterns.md": {
+      "checksum": "A7924F99F3A0409D49E1B63D468F11C8",
+      "priority": "recommended",
+      "description": "Supabase architectural patterns"
+    },
+    "skills/supabase/supabase - troubleshooting.md": {
+      "checksum": "DAB6B7CA12152BEADFE6C86D31AD9043",
+      "priority": "optional",
+      "description": "Common Supabase issues and solutions"
+    },
+    "skills/supabase/supabase - reference.md": {
+      "checksum": "E6835931486182E3326E8A5AB4D1737C",
+      "priority": "optional",
+      "description": "Supabase API reference"
+    },
+    "skills/tailwind-css/tailwind-css - SKILL.md": {
+      "checksum": "98327CCA175D5A01D12CD03B24AF8E4B",
+      "priority": "recommended",
+      "description": "TailwindCSS core patterns and utilities"
+    },
+    "skills/tailwind-css/tailwind-css - patterns.md": {
+      "checksum": "2921EBF9844A19E409606FFD31BA7142",
+      "priority": "recommended",
+      "description": "TailwindCSS component patterns"
+    },
+    "skills/tailwind-css/tailwind-css - troubleshooting.md": {
+      "checksum": "004D5019574751D616F5EAE67F397A88",
+      "priority": "optional",
+      "description": "Common TailwindCSS issues"
+    },
+    "skills/tailwind-css/tailwind-css - reference.md": {
+      "checksum": "D769CE10D9DCB53B70C426235EFE813B",
+      "priority": "optional",
+      "description": "TailwindCSS class reference"
+    },
+    "framework-manifest.json": {
+      "checksum": "self",
+      "priority": "critical",
+      "description": "Framework version and file tracking"
+    }
+  },
+
+  "template_files": {
+    "docs/_SKILL-GENERATION-PROMPT.md": {
+      "checksum": "2D5E5D5C2F6C13F5F7F87576CD02AE42",
+      "priority": "critical",
+      "description": "Template prompt for generating new skills"
+    },
+    "docs/_SKILL-FRESHNESS-CHECK.md": {
+      "checksum": "78B45494294CF133149B7EBEBCEFED64",
+      "priority": "critical",
+      "description": "Process for checking if skills are outdated"
+    }
+  },
+
+  "protected_paths": [
+    "settings.json",
+    "settings.local.json",
+    "skills/project/",
+    "commands/project/"
+  ],
+
+  "changelog": [
+    {
+      "version": "2.0.0",
+      "date": "2025-12-27",
+      "changes": [
+        "MAJOR: Consolidated all repos into HLV as single source of truth",
+        "MAJOR: Archived claude-workflow-commands and claude-skills repos",
+        "Added auto-sync to /wrapup - commands/skills pushed to HLV automatically",
+        "Added interactive category selection to /system-upgrade-pull",
+        "Added smart skill filtering by project tech_stack",
+        "Deprecated /skills-push (merged into /wrapup)",
+        "Deprecated /skills-pull (merged into /system-upgrade-pull)",
+        "Made /system-upgrade-push fully automated (no copy step)",
+        "Added sync_architecture section to framework-manifest.json",
+        "Added commands/project/ to protected_paths",
+        "Updated ~/.claude/system-config.json to point to HLV"
+      ]
+    },
+    {
+      "version": "1.6.1",
+      "date": "2025-12-26",
+      "changes": [
+        "Added visuals.md rule - use Nano Banana for diagrams instead of ASCII art",
+        "Generated actual image diagrams for CHEAT-SHEET (data-flow, workflow)",
+        "Added docs/images/ to syncable files"
+      ]
+    },
+    {
+      "version": "1.6.0",
+      "date": "2025-12-26",
+      "changes": [
+        "Consolidated 6 initial setup steps to 4 (merged analyze+skills, checkpoint+build-order)",
+        "Created /skills-pull command for pulling tech skills from central repository",
+        "Created /skills-push command for pushing tech skills to central repository",
+        "Improved CHEAT-SHEET with detailed explanations and data flow diagram",
+        "Added 'What it does NOT do' sections to clarify command boundaries",
+        "Updated CLAUDE.md with new 4-step workflow and skills management section"
+      ]
+    },
+    {
+      "version": "1.5.0",
+      "date": "2025-12-26",
+      "changes": [
+        "Protected settings.json from sync - each project keeps its own MCP permissions",
+        "Added CHEAT-SHEET.md to syncable_files - can now update command reference in old projects",
+        "Renamed /system-upgrade to /system-upgrade-pull for clarity",
+        "Renamed /system-note to /system-upgrade-push with enhanced context scanning",
+        "Added git init to /new-project - projects now start with git repository",
+        "Added workflow-log creation to /new-project",
+        "Added structure verification to /pre-flight-check and /wrapup",
+        "Fixed stale command references across all documentation"
+      ]
+    },
+    {
+      "version": "1.4.0",
+      "date": "2025-12-25",
+      "changes": [
+        "Split /audit-workflow into two separate commands",
+        "Added /codebase-workflow-audit for technical consistency checks",
+        "Added /customer-journey-workflow-audit for user experience validation",
+        "Updated CHEAT-SHEET.md, CLAUDE.md, and _SYSTEM-AUDIT-PROMPT.md"
+      ]
+    },
+    {
+      "version": "1.3.0",
+      "date": "2025-12-24",
+      "changes": [
+        "Renamed /initiate-system to /pre-flight-check",
+        "Implemented real MD5 checksums for all syncable files",
+        "Enable /system-upgrade to detect actual file changes"
+      ]
+    },
+    {
+      "version": "1.2.0",
+      "date": "2025-12-24",
+      "changes": [
+        "Audit: Deleted orphan initial-setup-step5-project-start.md",
+        "Audit: Updated all /update-log references to /wrapup",
+        "Audit: Added /audit-workflow to CHEAT-SHEET.md",
+        "Audit: Updated Complete Workflow Reference to 6-step process",
+        "Fixed: Changelog now correctly documents command renames"
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "date": "2025-12-24",
+      "changes": [
+        "Added git_url and source_type fields for git-based sync",
+        "Renamed /sync-framework and /skill-sync to /system-upgrade",
+        "Added /slash-command-upgrade for command updates from repo",
+        "Added template_files section for docs/_*.md files"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2025-12-24",
+      "changes": [
+        "Initial framework release",
+        "Added Next.js 14+ skills",
+        "Added Supabase skills",
+        "Added TailwindCSS skills",
+        "MCP support for Meta Ads and nano-banana",
+        "Added syncable_files and protected_paths for safe syncing"
+      ]
+    }
+  ]
+}

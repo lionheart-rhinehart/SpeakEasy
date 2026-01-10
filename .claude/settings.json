@@ -1,13 +1,6 @@
 {
   "permissions": {
-    "deny": [
-      "Read(node_modules/**)",
-      "Read(.git/**)",
-      "Read(dist/**)",
-      "Read(build/**)",
-      "Read(src-tauri/target/**)",
-      "Read(target/**)",
-      "Read(**/*.log)"
-    ]
-  }
+    "allow": []
+  },
+  "enableAllProjectMcpServers": true
 }
