@@ -1032,40 +1032,46 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                             : "bg-slate-50 border-slate-200 opacity-60"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={webhook.enabled}
                               onChange={() => toggleWebhookEnabled(webhook.id)}
-                              className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                              className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500 flex-shrink-0"
                             />
-                            <div>
-                              <p className="text-sm font-medium text-text-primary">{webhook.name}</p>
-                              <div className="flex items-center gap-2">
-                                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-text-primary truncate">{webhook.name}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-xs font-mono flex-shrink-0">
                                   {webhook.hotkey.replace("Control", "Ctrl")}
                                 </kbd>
-                                <span className="text-xs text-slate-400 font-mono">
+                                <span className="text-xs text-slate-400 font-mono flex-shrink-0">
                                   {webhook.method === "POST" && "POST"}
                                   {webhook.method === "GET" && "GET"}
                                   {webhook.method === "URL" && "URL"}
                                   {webhook.method === "SMART_URL" && "Smart"}
+                                  {webhook.method === "PROMPT" && "Prompt"}
                                 </span>
-                                {webhook.method !== "SMART_URL" && (
+                                {webhook.method !== "SMART_URL" && webhook.method !== "PROMPT" && (
                                   <span className="text-xs text-text-secondary truncate max-w-[120px]">
                                     {webhook.webhookUrl}
                                   </span>
                                 )}
                                 {webhook.method === "SMART_URL" && (
-                                  <span className="text-xs text-text-secondary italic">
+                                  <span className="text-xs text-text-secondary italic flex-shrink-0">
                                     Selection → URL or Search
+                                  </span>
+                                )}
+                                {webhook.method === "PROMPT" && (
+                                  <span className="text-xs text-text-secondary italic flex-shrink-0">
+                                    AI Transform
                                   </span>
                                 )}
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <button
                               onClick={() => setEditingWebhook(webhook)}
                               className="p-1 text-text-secondary hover:text-text-primary"
