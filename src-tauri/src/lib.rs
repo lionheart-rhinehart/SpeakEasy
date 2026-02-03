@@ -279,6 +279,8 @@ pub fn run() {
             commands::get_license_info,
             commands::deactivate_license,
             commands::get_machine_id,
+            commands::check_if_admin,
+            commands::activate_as_admin,
             // Feedback submission
             commands::submit_feedback,
             commands::upload_feedback_attachment,

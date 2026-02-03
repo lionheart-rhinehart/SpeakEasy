@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 // License status from Rust uses adjacently tagged format: { type: "valid" } or { type: "invalid", data: { reason: "..." } }
@@ -20,6 +20,9 @@ interface LicenseActivationProps {
   onActivated: () => void;
 }
 
+// Email validation regex
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LicenseActivation({ onActivated }: LicenseActivationProps) {
   const [licenseKey, setLicenseKey] = useState("");
   const [name, setName] = useState("");
@@ -27,7 +30,11 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [machineId, setMachineId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(false);
+  const [adminRole, setAdminRole] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get machine ID on mount
   useEffect(() => {
@@ -35,6 +42,62 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
     // Focus name input on mount
     setTimeout(() => nameInputRef.current?.focus(), 100);
   }, []);
+
+  // Check admin status (debounced)
+  const checkAdminStatus = useCallback(async (emailToCheck: string) => {
+    if (!emailToCheck || !emailRegex.test(emailToCheck)) {
+      setIsAdmin(false);
+      setAdminRole(null);
+      return;
+    }
+
+    setCheckingAdmin(true);
+    try {
+      const role = await invoke<string | null>("check_if_admin", { email: emailToCheck });
+      setIsAdmin(!!role);
+      setAdminRole(role);
+      if (role) {
+        setError(null); // Clear any previous error
+      }
+    } catch (err) {
+      console.error("Admin check failed:", err);
+      setIsAdmin(false);
+      setAdminRole(null);
+    } finally {
+      setCheckingAdmin(false);
+    }
+  }, []);
+
+  // Handle email change with debounced admin check
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEmail = e.target.value;
+    setEmail(newEmail);
+    setError(null);
+
+    // Clear previous timeout
+    if (checkTimeoutRef.current) {
+      clearTimeout(checkTimeoutRef.current);
+    }
+
+    // Reset admin state immediately on change
+    setIsAdmin(false);
+    setAdminRole(null);
+
+    // Debounce admin check (500ms after typing stops)
+    if (emailRegex.test(newEmail.trim())) {
+      checkTimeoutRef.current = setTimeout(() => {
+        checkAdminStatus(newEmail.trim());
+      }, 500);
+    }
+  };
+
+  // Also check on blur for immediate feedback
+  const handleEmailBlur = () => {
+    const trimmedEmail = email.trim();
+    if (emailRegex.test(trimmedEmail) && !isAdmin && !checkingAdmin) {
+      checkAdminStatus(trimmedEmail);
+    }
+  };
 
   // Handle license activation
   const handleActivate = async () => {
@@ -52,13 +115,39 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
       return;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
       setError("Please enter a valid email address");
       return;
     }
 
+    // Admin activation - no license key needed
+    if (isAdmin) {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const result = await invoke<LicenseInfo>("activate_as_admin", {
+          userName: trimmedName,
+          userEmail: trimmedEmail,
+        });
+
+        if (result.status.type === "valid") {
+          onActivated();
+        } else if (result.status.type === "invalid") {
+          setError(result.status.data?.reason || "Admin activation failed");
+        } else {
+          setError("Admin activation failed. Please try again.");
+        }
+      } catch (err) {
+        console.error("Admin activation error:", err);
+        setError(String(err));
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Normal activation - requires license key
     if (!trimmedKey) {
       setError("Please enter a license key");
       return;
@@ -189,61 +278,129 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
               <label className="block text-sm font-medium text-text-primary mb-1.5">
                 Email Address
               </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                onKeyDown={handleKeyDown}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-slate-300 bg-white"
-                disabled={isLoading}
-                autoComplete="email"
-              />
-            </div>
-
-            {/* License key input */}
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                License Key
-              </label>
-              <input
-                type="text"
-                value={licenseKey}
-                onChange={handleKeyChange}
-                onKeyDown={handleKeyDown}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                className={`w-full px-4 py-3 border rounded-lg text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                  error
-                    ? "border-red-300 bg-red-50"
-                    : "border-slate-300 bg-white"
-                }`}
-                disabled={isLoading}
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {error && (
-                <p className="mt-2 text-sm text-red-600 flex items-center gap-1.5">
-                  <svg
-                    className="w-4 h-4 shrink-0"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                  {error}
-                </p>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={handleEmailChange}
+                  onBlur={handleEmailBlur}
+                  onKeyDown={handleKeyDown}
+                  placeholder="you@example.com"
+                  className={`w-full px-4 py-3 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                    isAdmin
+                      ? "border-green-300 bg-green-50"
+                      : "border-slate-300 bg-white"
+                  }`}
+                  disabled={isLoading}
+                  autoComplete="email"
+                />
+                {checkingAdmin && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg
+                      className="animate-spin h-4 w-4 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                  </div>
+                )}
+                {isAdmin && !checkingAdmin && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <svg
+                      className="h-5 w-5 text-green-500"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              {isAdmin && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                      <path
+                        fillRule="evenodd"
+                        d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    {adminRole === "super_admin" ? "Super Admin" : "Admin"} Access
+                  </span>
+                  <span className="text-xs text-green-600">No license key required</span>
+                </div>
               )}
             </div>
+
+            {/* License key input - hidden for admins */}
+            {!isAdmin && (
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">
+                  License Key
+                </label>
+                <input
+                  type="text"
+                  value={licenseKey}
+                  onChange={handleKeyChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className={`w-full px-4 py-3 border rounded-lg text-sm font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                    error
+                      ? "border-red-300 bg-red-50"
+                      : "border-slate-300 bg-white"
+                  }`}
+                  disabled={isLoading}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            )}
+
+            {/* Error message */}
+            {error && (
+              <p className="text-sm text-red-600 flex items-center gap-1.5">
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                {error}
+              </p>
+            )}
 
             {/* Activate button */}
             <button
               onClick={handleActivate}
-              disabled={isLoading || !name.trim() || !email.trim() || !licenseKey.trim()}
-              className="w-full py-3 px-4 bg-primary-500 hover:bg-primary-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              disabled={isLoading || !name.trim() || !email.trim() || (!isAdmin && !licenseKey.trim())}
+              className={`w-full py-3 px-4 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                isAdmin
+                  ? "bg-green-500 hover:bg-green-600"
+                  : "bg-primary-500 hover:bg-primary-600"
+              }`}
             >
               {isLoading ? (
                 <>
@@ -266,7 +423,18 @@ export default function LicenseActivation({ onActivated }: LicenseActivationProp
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     />
                   </svg>
-                  Activating...
+                  {isAdmin ? "Activating Admin Access..." : "Activating..."}
+                </>
+              ) : isAdmin ? (
+                <>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  Activate as Admin
                 </>
               ) : (
                 "Activate License"

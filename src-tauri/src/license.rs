@@ -55,6 +55,9 @@ pub struct LicenseState {
     pub grace_period_until: String,
     /// App version at activation
     pub app_version: String,
+    /// Whether this is an admin activation (bypasses license validation)
+    #[serde(default)]
+    pub is_admin: bool,
 }
 
 /// Response from Supabase activation
@@ -265,6 +268,182 @@ fn mask_license_key(key: &str) -> String {
     format!("{}••••-••••", prefix)
 }
 
+/// Special license key for admin activations
+const ADMIN_LICENSE_KEY: &str = "ADMIN-ACCESS-00000000-0000-0000-0000-000000000000";
+
+/// Check if email is registered as admin in Supabase
+pub async fn check_admin_email(email: &str) -> Result<Option<String>> {
+    let client = reqwest::Client::new();
+    let encoded_email = urlencoding::encode(email);
+    let url = format!(
+        "{}/rest/v1/admins?email=eq.{}&select=role",
+        SUPABASE_URL, encoded_email
+    );
+
+    let response = client
+        .get(&url)
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .context("Failed to connect to admin verification server")?;
+
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+
+    let admins: Vec<serde_json::Value> = response.json().await?;
+
+    if let Some(admin) = admins.first() {
+        Ok(admin["role"].as_str().map(String::from))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Activate as admin (no license key required)
+pub async fn activate_as_admin(user_name: &str, user_email: &str) -> Result<LicenseInfo> {
+    let machine_id = get_machine_id();
+    let app_version = env!("CARGO_PKG_VERSION").to_string();
+
+    log::info!(
+        "Attempting admin activation for machine: {} (user: {})",
+        machine_id,
+        user_email
+    );
+
+    // 1. Verify email is actually admin
+    let role = check_admin_email(user_email)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Email not found in admin list"))?;
+
+    log::info!("Admin role verified: {}", role);
+
+    // 2. Get admin license ID from database
+    let client = reqwest::Client::new();
+    let check_url = format!(
+        "{}/rest/v1/licenses?license_key=eq.{}&select=id",
+        SUPABASE_URL, ADMIN_LICENSE_KEY
+    );
+
+    let response = client
+        .get(&check_url)
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+        .send()
+        .await
+        .context("Failed to connect to license server")?;
+
+    let licenses: Vec<serde_json::Value> = response.json().await?;
+    let license_id = licenses
+        .first()
+        .and_then(|l| l["id"].as_str())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Admin license not found in database. Please contact support to set up admin access."
+            )
+        })?;
+
+    let now = chrono::Utc::now();
+    let now_str = now.to_rfc3339();
+    let grace_until = now + chrono::Duration::hours(GRACE_PERIOD_HOURS);
+    let grace_until_str = grace_until.to_rfc3339();
+
+    // 3. Check if this machine already has an activation
+    let activations_url = format!(
+        "{}/rest/v1/activations?license_id=eq.{}&machine_id=eq.{}&select=id",
+        SUPABASE_URL, license_id, machine_id
+    );
+
+    let activations_response = client
+        .get(&activations_url)
+        .header("apikey", SUPABASE_ANON_KEY)
+        .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+        .send()
+        .await?;
+
+    let activations: Vec<serde_json::Value> = activations_response.json().await?;
+    let already_activated = !activations.is_empty();
+
+    // 4. Create or update activation record
+    if already_activated {
+        let update_url = format!(
+            "{}/rest/v1/activations?license_id=eq.{}&machine_id=eq.{}",
+            SUPABASE_URL, license_id, machine_id
+        );
+
+        let _ = client
+            .patch(&update_url)
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "last_validated_at": now_str,
+                "app_version": app_version,
+                "is_active": true,
+                "user_name": user_name,
+                "user_email": user_email
+            }))
+            .send()
+            .await?;
+    } else {
+        let insert_url = format!("{}/rest/v1/activations", SUPABASE_URL);
+
+        let os_type = if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+
+        let _ = client
+            .post(&insert_url)
+            .header("apikey", SUPABASE_ANON_KEY)
+            .header("Authorization", format!("Bearer {}", SUPABASE_ANON_KEY))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "license_id": license_id,
+                "machine_id": machine_id,
+                "app_version": app_version,
+                "os_type": os_type,
+                "is_active": true,
+                "last_validated_at": now_str,
+                "user_name": user_name,
+                "user_email": user_email
+            }))
+            .send()
+            .await?;
+    }
+
+    // 5. Store admin license key in keychain
+    store_license_key(ADMIN_LICENSE_KEY)?;
+
+    // 6. Save license state with is_admin=true
+    let state = LicenseState {
+        license_key_preview: "ADMIN".to_string(),
+        machine_id: machine_id.clone(),
+        activated_at: now_str.clone(),
+        last_validated_at: now_str.clone(),
+        grace_period_until: grace_until_str.clone(),
+        app_version,
+        is_admin: true,
+    };
+    save_license_state(&state)?;
+
+    log::info!("Admin activation successful");
+
+    Ok(LicenseInfo {
+        status: LicenseStatus::Valid,
+        license_key_preview: Some("ADMIN".to_string()),
+        machine_id: Some(machine_id),
+        activated_at: Some(now_str.clone()),
+        last_validated_at: Some(now_str),
+        grace_period_until: Some(grace_until_str),
+    })
+}
+
 /// Activate a license key with the server
 pub async fn activate_license(license_key: &str, user_name: &str, user_email: &str) -> Result<LicenseInfo> {
     let machine_id = get_machine_id();
@@ -448,6 +627,7 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
         activated_at: now_str.clone(),
         last_validated_at: now_str.clone(),
         grace_period_until: grace_until_str.clone(),
+        is_admin: false,
         app_version,
     };
     save_license_state(&state)?;
@@ -466,6 +646,21 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
 
 /// Validate the current license (called on startup and periodically)
 pub async fn validate_license() -> Result<LicenseInfo> {
+    // Check local state first for admin bypass
+    if let Some(state) = load_license_state() {
+        if state.is_admin {
+            log::info!("Admin license detected - skipping server validation");
+            return Ok(LicenseInfo {
+                status: LicenseStatus::Valid,
+                license_key_preview: Some("ADMIN".to_string()),
+                machine_id: Some(state.machine_id),
+                activated_at: Some(state.activated_at),
+                last_validated_at: Some(state.last_validated_at),
+                grace_period_until: Some(state.grace_period_until),
+            });
+        }
+    }
+
     // Check if we have a stored license
     let license_key = match get_license_key()? {
         Some(key) => key,

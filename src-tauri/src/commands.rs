@@ -1825,6 +1825,25 @@ pub async fn deactivate_license() -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Check if an email is registered as admin
+#[tauri::command]
+pub async fn check_if_admin(email: String) -> Result<Option<String>, String> {
+    license::check_admin_email(&email)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Activate as admin (no license key required)
+#[tauri::command]
+pub async fn activate_as_admin(
+    user_name: String,
+    user_email: String,
+) -> Result<license::LicenseInfo, String> {
+    license::activate_as_admin(&user_name, &user_email)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// Get the machine ID for this device
 #[tauri::command]
 pub fn get_machine_id() -> String {
