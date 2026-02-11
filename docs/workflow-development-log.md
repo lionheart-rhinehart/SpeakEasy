@@ -13,9 +13,10 @@
 ### Active Work
 | Item | Status | Notes |
 |------|--------|-------|
-| Settings panel hotkey UX | Complete | 5 bugs fixed: state conflict, scroll, overflow |
+| (none) | | |
 
 ### Recently Completed
+- 2026-02-11: Connected /test-protocol command to project-level Tauri build/install/launch script
 - 2026-02-11: Fixed hotkey actions edit form accessibility and list scrolling (5 interacting bugs)
 
 ### Blockers
@@ -52,4 +53,27 @@
 
 **Commands Run:**
 - /test-protocol (PASS)
+- /wrapup
+
+### 2026-02-11 - Session 2 Complete
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Point command to `npm run test-protocol` | Project-level script has full Tauri build/install/launch; generic one only has quality gates | 2026-02-11 |
+
+**Files Modified:**
+- Edited: `.claude/commands/test-protocol.md` (rewrote to reference project-level Tauri script)
+- Created: `docs/lessons-learned/2026-02-11__devops__test-protocol-command-resolution.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| /test-protocol ran generic quality gates instead of Tauri build/install/launch | Updated command to run `npm run test-protocol` (project-level script) |
+
+**Commands Run:**
+- /unlock-commands
+- /lock-all
 - /wrapup
