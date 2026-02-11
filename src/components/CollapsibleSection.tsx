@@ -1,4 +1,4 @@
-import { useState, ReactNode } from "react";
+import { useState, useEffect, useRef, ReactNode } from "react";
 
 interface CollapsibleSectionProps {
   title: string;
@@ -20,6 +20,19 @@ export default function CollapsibleSection({
   onToggle,
 }: CollapsibleSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const animationTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    setIsAnimating(true);
+    if (animationTimer.current) clearTimeout(animationTimer.current);
+    animationTimer.current = setTimeout(() => setIsAnimating(false), 300);
+    return () => {
+      if (animationTimer.current) clearTimeout(animationTimer.current);
+    };
+  }, [isExpanded]);
+
+  const shouldHideOverflow = !isExpanded || isAnimating;
 
   const handleToggle = () => {
     const newState = !isExpanded;
@@ -69,7 +82,7 @@ export default function CollapsibleSection({
 
       {/* Content - animated expand/collapse */}
       <div
-        className={`overflow-hidden transition-all duration-300 ease-out ${
+        className={`${shouldHideOverflow ? "overflow-hidden" : ""} transition-all duration-300 ease-out ${
           isExpanded ? "max-h-[3000px] opacity-100 pb-4" : "max-h-0 opacity-0"
         }`}
       >

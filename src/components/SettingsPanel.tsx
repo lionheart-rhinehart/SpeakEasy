@@ -159,6 +159,16 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
   const inFlightRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
   const cachedModelsRef = useRef<ProviderModel[]>([]);
+  const editFormRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to edit form when it opens
+  useEffect(() => {
+    if (editingWebhook && !isAddingWebhook && editFormRef.current) {
+      setTimeout(() => {
+        editFormRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
+    }
+  }, [editingWebhook, isAddingWebhook]);
 
   // Reset all section expansion states when settings closes
   useEffect(() => {
@@ -447,6 +457,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
         w.id === webhook.id ? webhook : w
       ),
     });
+    setIsAddingWebhook(false);
     setEditingWebhook(null);
   };
 
@@ -455,6 +466,8 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
       updateSettings({
         webhookActions: webhookActions.filter((w) => w.id !== id),
       });
+      setEditingWebhook(null);
+      setIsAddingWebhook(false);
     }
   };
 
@@ -900,12 +913,12 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                 </p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-[320px] overflow-y-auto">
                 {webhookActions.map((webhook) => (
                   <div key={webhook.id}>
                     {/* Inline Edit Form - shown when editing this webhook */}
                     {!isAddingWebhook && editingWebhook?.id === webhook.id ? (
-                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div ref={editFormRef} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                         <h4 className="text-sm font-medium text-text-primary mb-3">
                           Edit Hotkey Action
                         </h4>
@@ -1073,7 +1086,10 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button
-                              onClick={() => setEditingWebhook(webhook)}
+                              onClick={() => {
+                                setIsAddingWebhook(false);
+                                setEditingWebhook(webhook);
+                              }}
                               className="p-1 text-text-secondary hover:text-text-primary"
                               title="Edit"
                             >
