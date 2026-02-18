@@ -8,7 +8,7 @@
 
 ## Current Status
 
-**Last Updated:** 2026-02-11
+**Last Updated:** 2026-02-18
 
 ### Active Work
 | Item | Status | Notes |
@@ -16,6 +16,9 @@
 | (none) | | |
 
 ### Recently Completed
+- 2026-02-18: Fixed AI Transform silent error handling — errors now show toast notifications
+- 2026-02-18: Fixed BUG-003 early release cleanup — quick-tap no longer gets stuck
+- 2026-02-18: Fixed Vite multi-page build — extracted inline CSS from HTML entry points
 - 2026-02-11: Connected /test-protocol command to project-level Tauri build/install/launch script
 - 2026-02-11: Fixed hotkey actions edit form accessibility and list scrolling (5 interacting bugs)
 
@@ -25,6 +28,36 @@
 ---
 
 ## Sessions
+
+### 2026-02-18 - Session Complete
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Add showToast to all AI Transform error paths | App used showToast in 30+ places but AI Transform handler had none — all errors were console-only | 2026-02-18 |
+| Extract inline CSS to shared file | Vite html-inline-proxy can't handle inline styles in multi-page builds | 2026-02-18 |
+| Fix BUG-003 while in the handler | Already editing the same useEffect, minimal extra risk | 2026-02-18 |
+
+**Files Modified:**
+- Edited: `src/App.tsx` (AI Transform error handling, BUG-003 cleanup, useEffect deps)
+- Edited: `overlay.html` (extracted inline CSS)
+- Edited: `voice-review.html` (extracted inline CSS)
+- Edited: `profile-chooser.html` (extracted inline CSS)
+- Created: `src/styles/transparent-window.css` (shared transparent window base styles)
+- Created: `lessons-learned/2026-02-18__bugfix__fix-ai-transform-silent-errors-and-vite-build.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| AI Transform errors only logged to console, user saw nothing | Added showToast with error-type-specific messages + history entries |
+| Early release (<300ms) left app stuck in recording mode (BUG-003) | Added state cleanup (reset refs, hide overlay, set idle) before early return |
+| Vite production build failed on html-inline-proxy | Extracted inline `<style>` to external `transparent-window.css` |
+
+**Commands Run:**
+- /test-protocol (PASS)
+- /wrapup
 
 ### 2026-02-11 - Session Complete
 

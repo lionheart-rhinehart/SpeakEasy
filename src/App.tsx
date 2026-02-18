@@ -511,6 +511,13 @@ function App() {
             const recordingDurationMs = Date.now() - aiTransformStartTime.current;
             if (recordingDurationMs < MIN_AI_TRANSFORM_RECORDING_MS) {
               console.log(`AI Transform: ignoring early release (${recordingDurationMs}ms < ${MIN_AI_TRANSFORM_RECORDING_MS}ms)`);
+
+              // Clean up recording state (fixes BUG-003)
+              aiTransformClipboardText.current = "";
+              aiTransformStartTime.current = 0;
+              useAppStore.getState().setRecordingState("idle");
+              invoke("hide_recording_overlay").catch(console.error);
+
               return;
             }
 
@@ -533,8 +540,10 @@ function App() {
               const apiKey = useAppStore.getState().apiKey;
               if (!apiKey) {
                 console.log("No API key for transcription");
+                showToast("No OpenAI API key set — needed for voice transcription", "error");
                 aiTransformClipboardText.current = "";
                 invoke("hide_recording_overlay").catch(console.error);
+                useAppStore.getState().setRecordingState("idle");
                 return;
               }
 
@@ -563,6 +572,7 @@ function App() {
 
               if (!instruction || instruction.trim() === "") {
                 console.log("No voice instruction detected");
+                showToast("No voice instruction detected — try speaking louder", "info");
                 aiTransformClipboardText.current = "";
                 invoke("hide_recording_overlay").catch(console.error);
                 useAppStore.getState().setRecordingState("idle");
@@ -616,10 +626,29 @@ function App() {
                 });
               } else {
                 console.error("LLM Transform failed:", llmResult.error);
-                // Show a more helpful error message if it's a known error type
+
+                // Show user-friendly error based on type
                 if (llmResult.error_type === "NoApiKey") {
-                  console.log("No API key set for transform provider - please configure in Settings");
+                  showToast("No API key set for AI Transform — configure in Settings", "error");
+                } else if (llmResult.error_type === "InvalidApiKey") {
+                  showToast("AI Transform API key is invalid — check Settings", "error");
+                } else if (llmResult.error_type === "ModelNotFound") {
+                  showToast("AI Transform model not found — check Settings", "error");
+                } else if (llmResult.error_type === "RateLimited") {
+                  showToast("AI Transform rate limited — try again shortly", "error");
+                } else {
+                  showToast(llmResult.error || "AI Transform failed", "error");
                 }
+
+                // Add to history so user has a record
+                useAppStore.getState().addTranscription({
+                  id: crypto.randomUUID(),
+                  text: `[AI Transform Error] ${llmResult.error || "Unknown error"}`,
+                  durationMs: 0,
+                  language: "en",
+                  createdAt: new Date().toISOString(),
+                });
+
                 useAppStore.getState().setRecordingState("idle");
               }
             } catch (error) {
@@ -657,7 +686,7 @@ function App() {
         registeredAiTransformHotkey.current = "";
       }
     };
-  }, [hotkeyAiTransform]);
+  }, [hotkeyAiTransform, showToast]);
 
   // Handle prompt action execution (LLM-based transforms with stored prompts)
   const executePromptAction = useCallback(async (action: PromptAction) => {
