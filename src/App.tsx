@@ -292,6 +292,8 @@ function App() {
                 console.log("Recording started via hotkey");
               } catch (error) {
                 console.error("Failed to start recording:", error);
+                showToast(`Recording failed to start: ${error}`, "error");
+                useAppStore.getState().setRecordingState("idle");
               }
             } else if (state.recordingState === "recording") {
               // Stop recording and transcribe
@@ -494,6 +496,7 @@ function App() {
               console.log("AI Transform: recording voice instruction...");
             } catch (error) {
               console.error("Failed to start AI Transform:", error);
+              showToast(`AI Transform recording failed: ${error}`, "error");
               aiTransformClipboardText.current = "";
               aiTransformStartTime.current = 0;
             }

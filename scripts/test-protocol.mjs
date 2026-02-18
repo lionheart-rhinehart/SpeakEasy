@@ -476,20 +476,40 @@ function buildRelease(step) {
 // ─────────────────────────────────────────────────────────────────────────────
 function killRunningApp(step) {
   const appName = 'SpeakEasy.exe';
+  const details = [];
 
+  // Kill installed/release SpeakEasy
   try {
-    // Try to kill any running instances
-    const result = execSync(`taskkill /F /IM ${appName}`, {
-      encoding: 'utf-8',
-      stdio: 'pipe'
-    });
+    execSync(`taskkill /F /IM ${appName}`, { encoding: 'utf-8', stdio: 'pipe' });
     logInfo(`Killed running ${appName} processes`);
-    return { details: `Killed running ${appName} processes` };
+    details.push(`Killed ${appName}`);
   } catch (e) {
-    // Process not running is fine
     logInfo(`No running ${appName} instance found`);
-    return { details: 'No running instance found' };
+    details.push(`No ${appName} running`);
   }
+
+  // Kill any Tauri dev server processes to prevent hotkey conflicts
+  // (dev server registers same global shortcuts as the installed app)
+  try {
+    const wmic = execSync(
+      'wmic process where "name=\'node.exe\' and CommandLine like \'%tauri%dev%\'" get ProcessId /FORMAT:LIST',
+      { encoding: 'utf-8', stdio: 'pipe' }
+    );
+    const pids = [...wmic.matchAll(/ProcessId=(\d+)/g)].map(m => m[1]);
+    for (const pid of pids) {
+      try {
+        execSync(`taskkill /F /PID ${pid}`, { stdio: 'pipe' });
+      } catch { /* already exited */ }
+    }
+    if (pids.length > 0) {
+      logInfo(`Killed ${pids.length} Tauri dev server process(es)`);
+      details.push(`Killed ${pids.length} dev server process(es)`);
+    }
+  } catch {
+    // No dev server running or WMIC not available — fine
+  }
+
+  return { details: details.join('; ') || 'No running instances found' };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -579,11 +599,13 @@ let devServerWasRunning = false;
 function detectRunningDevServer() {
   try {
     if (process.platform === 'win32') {
-      const tasks = execSync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV /NH', {
-        encoding: 'utf-8',
-        stdio: 'pipe'
-      });
-      devServerWasRunning = tasks.includes('node.exe');
+      // Use WMIC to check command lines — plain tasklist matches ANY node.exe
+      // (including Claude Code, this script, etc.) causing false positives
+      const wmic = execSync(
+        'wmic process where "name=\'node.exe\'" get CommandLine /FORMAT:LIST',
+        { encoding: 'utf-8', stdio: 'pipe' }
+      );
+      devServerWasRunning = wmic.includes('tauri') && wmic.includes('dev');
     }
   } catch {
     // Ignore errors

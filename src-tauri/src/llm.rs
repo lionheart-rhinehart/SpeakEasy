@@ -273,15 +273,29 @@ async fn transform_openai(
         request.input_text, request.instruction
     );
 
-    let body = serde_json::json!({
-        "model": request.model,
-        "messages": [
-            { "role": "system", "content": TRANSFORM_SYSTEM_PROMPT },
-            { "role": "user", "content": user_content }
-        ],
-        "temperature": request.temperature,
-        "max_tokens": request.max_tokens
-    });
+    // OpenAI reasoning models (o1, o3 series) use max_completion_tokens instead of max_tokens
+    let is_reasoning_model = request.model.starts_with("o1") || request.model.starts_with("o3");
+
+    let body = if is_reasoning_model {
+        serde_json::json!({
+            "model": request.model,
+            "messages": [
+                { "role": "system", "content": TRANSFORM_SYSTEM_PROMPT },
+                { "role": "user", "content": user_content }
+            ],
+            "max_completion_tokens": request.max_tokens
+        })
+    } else {
+        serde_json::json!({
+            "model": request.model,
+            "messages": [
+                { "role": "system", "content": TRANSFORM_SYSTEM_PROMPT },
+                { "role": "user", "content": user_content }
+            ],
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens
+        })
+    };
 
     let response = client
         .post("https://api.openai.com/v1/chat/completions")

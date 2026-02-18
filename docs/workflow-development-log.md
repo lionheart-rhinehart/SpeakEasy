@@ -16,11 +16,11 @@
 | (none) | | |
 
 ### Recently Completed
+- 2026-02-18: Fixed phantom dev server hotkey conflicts — test-protocol no longer spawns unwanted dev server
+- 2026-02-18: Fixed OpenAI o3-mini parameter rejection — reasoning models use max_completion_tokens
+- 2026-02-18: Added toasts for recording start failures — all error paths now have user-visible feedback
 - 2026-02-18: Bulletproof admin license persistence — triple redundancy (state + marker + keychain)
 - 2026-02-18: Toast on hotkey registration failure — all 3 hotkeys now show errors visibly
-- 2026-02-18: Added coding rules to CLAUDE.md — error visibility, offline-first, change verification
-- 2026-02-18: Added smoke test checklist to test-protocol — manual verification step after install
-- 2026-02-18: Fixed AI Transform silent error handling — errors now show toast notifications
 
 ### Blockers
 - None
@@ -28,6 +28,37 @@
 ---
 
 ## Sessions
+
+### 2026-02-18 - Session Complete (Hotkey Stability + o3-mini Fix)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Fix dev server detection with WMIC command-line matching | Broad `node.exe` check always true due to Claude Code/script processes | 2026-02-18 |
+| Kill dev server in killRunningApp | Prevents hotkey conflicts between installed app and dev server | 2026-02-18 |
+| Conditional OpenAI body for reasoning models | o3-mini requires `max_completion_tokens` instead of `max_tokens` | 2026-02-18 |
+| Add toasts to recording start catch blocks | Same silent-error bug class found in third location | 2026-02-18 |
+
+**Files Modified:**
+- Edited: `scripts/test-protocol.mjs` (WMIC-based dev server detection, dev server kill in killRunningApp)
+- Edited: `src-tauri/src/llm.rs` (conditional body for reasoning models — o1*, o3*)
+- Edited: `src/App.tsx` (toasts + state reset for recording start failures)
+- Created: `lessons-learned/2026-02-18__devops__phantom-dev-server-and-silent-recording-failures.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Hotkeys intermittently fail ~3 min after rebuild | Test-protocol falsely detected node.exe → always spawned dev server → hotkey conflicts |
+| OpenAI o3-mini rejects `max_tokens` parameter | Detect reasoning model prefix (o1*, o3*), use `max_completion_tokens`, omit `temperature` |
+| Recording start failures invisible to user | Added showToast + state reset to catch blocks at lines 294 and 498 |
+
+**Commands Run:**
+- /test-protocol --skip-backup --no-restart (PASS — all 9 steps, no dev server spawned)
+- /wrapup
+
+---
 
 ### 2026-02-18 - Session Complete (License + Guardrails)
 
