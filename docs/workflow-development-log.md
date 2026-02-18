@@ -16,11 +16,11 @@
 | (none) | | |
 
 ### Recently Completed
+- 2026-02-18: Bulletproof admin license persistence — triple redundancy (state + marker + keychain)
+- 2026-02-18: Toast on hotkey registration failure — all 3 hotkeys now show errors visibly
+- 2026-02-18: Added coding rules to CLAUDE.md — error visibility, offline-first, change verification
+- 2026-02-18: Added smoke test checklist to test-protocol — manual verification step after install
 - 2026-02-18: Fixed AI Transform silent error handling — errors now show toast notifications
-- 2026-02-18: Fixed BUG-003 early release cleanup — quick-tap no longer gets stuck
-- 2026-02-18: Fixed Vite multi-page build — extracted inline CSS from HTML entry points
-- 2026-02-11: Connected /test-protocol command to project-level Tauri build/install/launch script
-- 2026-02-11: Fixed hotkey actions edit form accessibility and list scrolling (5 interacting bugs)
 
 ### Blockers
 - None
@@ -28,6 +28,39 @@
 ---
 
 ## Sessions
+
+### 2026-02-18 - Session Complete (License + Guardrails)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Triple redundancy for admin status | Single point of failure (state file) kept getting wiped by re-activation | 2026-02-18 |
+| Toast on hotkey registration failure | Same silent-error bug class as AI Transform — grep'd codebase for pattern | 2026-02-18 |
+| Add coding rules to CLAUDE.md | Codify "no silent errors" rule to prevent recurrence | 2026-02-18 |
+| Add smoke test checklist to test-protocol | Make manual verification explicit and visible in pipeline | 2026-02-18 |
+
+**Files Modified:**
+- Edited: `src-tauri/src/license.rs` (admin marker file, preserve admin in activate_license, triple-check in validate_license)
+- Edited: `src/App.tsx` (showToast on 3 hotkey registration catch blocks, voice command useEffect deps)
+- Edited: `CLAUDE.md` (coding rules section)
+- Edited: `scripts/test-protocol.mjs` (smoke test checklist step)
+- Created: `lessons-learned/2026-02-18__devops__bulletproof-admin-license-and-process-guardrails.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| `activate_license()` hardcoded `is_admin: false` — wiped admin on re-activation | Read existing state + marker file before creating new state |
+| Admin status had single point of failure (state file) | Added `.admin` marker file + keychain check as redundant sources |
+| All 3 hotkey registrations silently swallowed failures | Added showToast to all 3 catch blocks |
+| ESLint caught missing dependency after adding toast | Added `showToast` to voice command useEffect dependency array |
+
+**Commands Run:**
+- /test-protocol (PASS — all 9 steps including new smoke test)
+- /wrapup
+
+---
 
 ### 2026-02-18 - Session Complete
 

@@ -46,3 +46,21 @@ All commits and pushes MUST go through `/wrapup`.
 - `scripts/` - Build and workflow scripts (test-protocol.mjs, wrapup.mjs)
 - `lessons-learned/` - Session documentation created by wrapup
 - `.backups/` - Local backups created by test-protocol (gitignored)
+
+## Coding Rules
+
+### Error Visibility (MANDATORY)
+- NEVER use `console.error` alone. Every `catch` block and error branch MUST have user-visible feedback via `showToast()`, UI state change, or alert.
+- Silent failures are bugs. If a feature can fail, the user must see WHY it failed.
+- This applies to: API calls, hotkey registration, file operations, clipboard operations, and all async operations.
+
+### Offline-First Design
+- Features that should work offline MUST NOT depend on remote services for their critical path.
+- Admin bypasses and local overrides must work without network connectivity.
+- Persistent state (license, settings) must survive app restarts, reinstalls, and state file corruption.
+
+### Change Verification
+- After modifying any feature, manually verify it works end-to-end before committing.
+- Hotkey changes: test the full flow (press → record → transcribe → result).
+- Error handling changes: trigger the error path and confirm the user sees feedback.
+- License changes: verify app launches without offline-mode banner.

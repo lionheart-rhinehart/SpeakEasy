@@ -554,6 +554,24 @@ function launchInstalledApp(step) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Step: Smoke Test Checklist
+// ─────────────────────────────────────────────────────────────────────────────
+function smokeTestChecklist(step) {
+  log('');
+  log('┌─────────────────────────────────────────────────┐', colors.yellow);
+  log('│  SMOKE TEST - Verify before /wrapup             │', colors.yellow + colors.bold);
+  log('├─────────────────────────────────────────────────┤', colors.yellow);
+  log('│  [ ] App launched without license/offline banner │', colors.yellow);
+  log('│  [ ] Ctrl+Space records and transcribes          │', colors.yellow);
+  log('│  [ ] AI Transform hotkey responds (sound plays)  │', colors.yellow);
+  log('│  [ ] Settings panel opens and closes             │', colors.yellow);
+  log('│  [ ] No error toasts on startup                  │', colors.yellow);
+  log('└─────────────────────────────────────────────────┘', colors.yellow);
+  log('');
+  return { details: 'Smoke test checklist displayed' };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Step: Restart Dev Server
 // ─────────────────────────────────────────────────────────────────────────────
 let devServerWasRunning = false;
@@ -649,7 +667,10 @@ async function main() {
     // Step 6: Launch app
     recordStep('launch_app', 'Launch installed app', launchInstalledApp);
 
-    // Step 7: Restart dev server
+    // Step 7: Smoke test checklist
+    recordStep('smoke_test', 'Manual smoke test checklist', smokeTestChecklist);
+
+    // Step 8: Restart dev server
     recordStep('restart_dev', 'Restart dev server', restartDevServer);
 
     // Success!

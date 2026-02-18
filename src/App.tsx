@@ -410,6 +410,7 @@ function App() {
         console.log(`Global hotkey registered: ${hotkeyRecord}`);
       } catch (error) {
         console.error("Failed to register hotkey:", error);
+        showToast(`Hotkey registration failed: ${hotkeyRecord}`, "error");
       }
     };
 
@@ -675,6 +676,7 @@ function App() {
         console.log(`AI Transform hotkey registered: ${hotkeyAiTransform}`);
       } catch (error) {
         console.error("Failed to register AI Transform hotkey:", error);
+        showToast(`AI Transform hotkey failed to register: ${hotkeyAiTransform}`, "error");
       }
     };
 
@@ -1698,6 +1700,7 @@ function App() {
         console.log(`Voice Command hotkey registered: ${hotkeyVoiceCommand}`);
       } catch (error) {
         console.error("Failed to register voice command hotkey:", error);
+        showToast(`Voice command hotkey failed to register: ${hotkeyVoiceCommand}`, "error");
       }
     };
 
@@ -1709,7 +1712,7 @@ function App() {
         registeredVoiceCommandHotkey.current = "";
       }
     };
-  }, [hotkeyVoiceCommand, settings.voiceCommandEnabled, startVoiceCommandRecording, stopVoiceCommandRecording]);
+  }, [hotkeyVoiceCommand, settings.voiceCommandEnabled, startVoiceCommandRecording, stopVoiceCommandRecording, showToast]);
 
   // Listen for manual voice command button trigger
   useEffect(() => {

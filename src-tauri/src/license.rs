@@ -118,6 +118,7 @@ fn save_license_state(state: &LicenseState) -> Result<()> {
     let path = get_license_state_path()?;
     let contents = serde_json::to_string_pretty(state)?;
     fs::write(path, contents)?;
+    set_admin_marker(state.is_admin);
     Ok(())
 }
 
@@ -128,6 +129,32 @@ fn delete_license_state() -> Result<()> {
         fs::remove_file(path)?;
     }
     Ok(())
+}
+
+/// Path to admin marker file (survives state file deletion)
+fn get_admin_marker_path() -> Result<PathBuf> {
+    let config_dir =
+        dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
+    Ok(config_dir.join("SpeakEasy").join(".admin"))
+}
+
+/// Write or remove admin marker file
+fn set_admin_marker(is_admin: bool) {
+    if let Ok(path) = get_admin_marker_path() {
+        if is_admin {
+            let _ = fs::write(&path, "1");
+        } else if path.exists() {
+            let _ = fs::remove_file(&path);
+        }
+    }
+}
+
+/// Check if admin marker file exists
+fn has_admin_marker() -> bool {
+    get_admin_marker_path()
+        .ok()
+        .map(|p| p.exists())
+        .unwrap_or(false)
 }
 
 /// Get keyring entry for license key
@@ -620,6 +647,10 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
     // Store license key in keychain
     store_license_key(license_key)?;
 
+    // Preserve admin status from existing state or marker file (prevents wipe on re-activation)
+    let preserve_admin = load_license_state().map(|s| s.is_admin).unwrap_or(false)
+        || has_admin_marker();
+
     // Save license state to disk
     let state = LicenseState {
         license_key_preview: mask_license_key(license_key),
@@ -627,7 +658,7 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
         activated_at: now_str.clone(),
         last_validated_at: now_str.clone(),
         grace_period_until: grace_until_str.clone(),
-        is_admin: false,
+        is_admin: preserve_admin,
         app_version,
     };
     save_license_state(&state)?;
@@ -648,7 +679,18 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
 pub async fn validate_license() -> Result<LicenseInfo> {
     // Check local state first for admin bypass
     if let Some(state) = load_license_state() {
-        if state.is_admin {
+        // Triple redundancy: check state flag, marker file, or keychain admin key
+        let is_admin = state.is_admin
+            || has_admin_marker()
+            || matches!(get_license_key(), Ok(Some(ref k)) if k == ADMIN_LICENSE_KEY);
+        if is_admin {
+            // Ensure is_admin is persisted if it wasn't already
+            if !state.is_admin {
+                log::info!("Admin license key detected in keychain - updating state");
+                let mut fixed_state = state.clone();
+                fixed_state.is_admin = true;
+                let _ = save_license_state(&fixed_state);
+            }
             log::info!("Admin license detected - skipping server validation");
             return Ok(LicenseInfo {
                 status: LicenseStatus::Valid,
