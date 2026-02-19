@@ -25,6 +25,8 @@ pub struct WebhookAction {
     pub ask_chrome_profile: Option<bool>,
     #[serde(default)]
     pub prompt: Option<String>, // For PROMPT method: the stored prompt template
+    #[serde(default = "default_true")]
+    pub requires_selection: bool, // For PROMPT method: when false, runs standalone without selected text
 }
 
 /// Prompt action configuration for LLM-based transforms with stored prompts
@@ -36,6 +38,8 @@ pub struct PromptAction {
     pub hotkey: String,
     pub prompt: String, // The stored prompt, use {{text}} for selected text placeholder
     pub enabled: bool,
+    #[serde(default = "default_true")]
+    pub requires_selection: bool, // When false, runs prompt standalone without selected text
 }
 
 /// User settings that survive app reinstalls

@@ -142,6 +142,8 @@ export interface WebhookAction {
   askChromeProfile?: boolean;
   // For PROMPT method: the stored prompt template (use {{text}} for selected text placeholder)
   prompt?: string;
+  // For PROMPT method: when false, runs prompt standalone without copying selected text
+  requiresSelection?: boolean;
 }
 
 // Prompt Action for LLM-based transforms with stored prompts
@@ -152,6 +154,7 @@ export interface PromptAction {
   hotkey: string;         // e.g., "Control+Shift+E"
   prompt: string;         // The stored prompt, use {{text}} for selected text placeholder
   enabled: boolean;
+  requiresSelection: boolean; // When false, runs prompt standalone without copying selected text
 }
 
 // Chrome profile info returned from backend
@@ -193,6 +196,7 @@ export interface FileWebhookAction {
   enabled: boolean;
   ask_chrome_profile?: boolean;
   prompt?: string;
+  requires_selection?: boolean;
 }
 
 export interface FilePromptAction {
@@ -201,6 +205,7 @@ export interface FilePromptAction {
   hotkey: string;
   prompt: string;
   enabled: boolean;
+  requires_selection?: boolean;
 }
 
 export interface FileUserSettings {

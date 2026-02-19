@@ -208,10 +208,14 @@ async fn transform_openrouter(
             message: e.to_string(),
         })?;
 
-    let user_content = format!(
-        "Text to transform:\n\n{}\n\nInstruction: {}",
-        request.input_text, request.instruction
-    );
+    let user_content = if request.input_text.is_empty() {
+        request.instruction.clone()
+    } else {
+        format!(
+            "Text to transform:\n\n{}\n\nInstruction: {}",
+            request.input_text, request.instruction
+        )
+    };
 
     let body = serde_json::json!({
         "model": request.model,
@@ -268,10 +272,14 @@ async fn transform_openai(
             message: e.to_string(),
         })?;
 
-    let user_content = format!(
-        "Text to transform:\n\n{}\n\nInstruction: {}",
-        request.input_text, request.instruction
-    );
+    let user_content = if request.input_text.is_empty() {
+        request.instruction.clone()
+    } else {
+        format!(
+            "Text to transform:\n\n{}\n\nInstruction: {}",
+            request.input_text, request.instruction
+        )
+    };
 
     // OpenAI reasoning models (o1, o3 series) use max_completion_tokens instead of max_tokens
     let is_reasoning_model = request.model.starts_with("o1") || request.model.starts_with("o3");
@@ -467,10 +475,14 @@ async fn transform_anthropic(
             message: e.to_string(),
         })?;
 
-    let user_content = format!(
-        "Text to transform:\n\n{}\n\nInstruction: {}",
-        request.input_text, request.instruction
-    );
+    let user_content = if request.input_text.is_empty() {
+        request.instruction.clone()
+    } else {
+        format!(
+            "Text to transform:\n\n{}\n\nInstruction: {}",
+            request.input_text, request.instruction
+        )
+    };
 
     let body = serde_json::json!({
         "model": request.model,

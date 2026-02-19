@@ -109,6 +109,7 @@ function App() {
   const aiTransformStartTime = useRef<number>(0);
   const voiceCommandStartTime = useRef<number>(0);
   const pendingVoiceReviewMatches = useRef<VoiceCommandMatch[]>([]);
+  const promptActionBusy = useRef(false);
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -706,48 +707,65 @@ function App() {
     }
     actionLastRunRef.current.set(action.id, now);
 
-    const currentSettings = useAppStore.getState().settings;
-
-    // Copy selected text using the same approach as webhook actions
-    let selectedText: string;
-    try {
-      console.log("Prompt Action: copying selected text...");
-      await invoke("simulate_copy");
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      selectedText = await invoke<string>("get_clipboard_text");
-    } catch (error) {
-      console.error("Prompt Action: Failed to copy selected text:", error);
-      showToast("Failed to copy selected text", "error");
+    // Execution guard: prevent concurrent prompt actions
+    if (promptActionBusy.current) {
+      showToast("Wait for current action to complete", "info");
       return;
     }
+    promptActionBusy.current = true;
 
-    if (!selectedText || selectedText.trim() === "") {
-      console.log("Prompt Action: No text selected");
-      showToast("No text selected", "error");
-      return;
-    }
-
-    console.log(`Prompt Action: captured ${selectedText.length} chars from selection`);
-
-    // Play sound to indicate transform started
-    if (currentSettings.audioEnabled) {
-      invoke("play_sound", { soundType: "start" }).catch(console.error);
-    }
-
-    // Process the prompt: replace {{text}} placeholder or append text
-    let finalInstruction: string;
-    if (action.prompt.includes("{{text}}")) {
-      finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
-    } else {
-      // No placeholder - append text to end of prompt
-      finalInstruction = `${action.prompt}\n\n${selectedText}`;
-    }
-
-    console.log(`Prompt Action: using prompt template, final instruction length: ${finalInstruction.length}`);
-
-    // Call LLM transform using global settings
     try {
-      const result = await invoke<{
+      const currentSettings = useAppStore.getState().settings;
+
+      let selectedText = "";
+      let finalInstruction: string;
+
+      if (action.requiresSelection !== false) {
+        // SELECTION MODE: copy selected text with stale clipboard detection
+        let clipboardBefore = "";
+        try { clipboardBefore = await invoke<string>("get_clipboard_text"); } catch { /* empty clipboard is fine */ }
+
+        try {
+          console.log("Prompt Action: copying selected text...");
+          await invoke("simulate_copy");
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          selectedText = await invoke<string>("get_clipboard_text");
+        } catch (error) {
+          console.error("Prompt Action: Failed to copy selected text:", error);
+          showToast("Failed to copy selected text", "error");
+          return;
+        }
+
+        // Stale clipboard detection: if clipboard didn't change, nothing was selected
+        if (!selectedText || selectedText.trim() === "" || selectedText === clipboardBefore) {
+          console.log("Prompt Action: No text selected (stale clipboard detected)");
+          showToast("No text selected", "error");
+          return;
+        }
+
+        console.log(`Prompt Action: captured ${selectedText.length} chars from selection`);
+
+        // Build instruction with selected text
+        if (action.prompt.includes("{{text}}")) {
+          finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
+        } else {
+          finalInstruction = `${action.prompt}\n\n${selectedText}`;
+        }
+      } else {
+        // STANDALONE MODE: no clipboard capture, prompt IS the instruction
+        console.log(`Prompt Action: standalone mode (no clipboard capture)`);
+        finalInstruction = action.prompt;
+      }
+
+      // Play sound to indicate transform started
+      if (currentSettings.audioEnabled) {
+        invoke("play_sound", { soundType: "start" }).catch(console.error);
+      }
+
+      console.log(`Prompt Action: using prompt template, final instruction length: ${finalInstruction.length}`);
+
+      // Call LLM transform with timeout
+      const llmPromise = invoke<{
         success: boolean;
         output_text: string | null;
         error: string | null;
@@ -762,6 +780,12 @@ function App() {
         temperature: currentSettings.transformTemperature ?? 0.7,
         maxTokens: currentSettings.transformMaxTokens ?? 4096,
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Prompt action timed out after 90 seconds")), 90000);
+      });
+
+      const result = await Promise.race([llmPromise, timeoutPromise]);
 
       if (result.success && result.output_text) {
         console.log(`Prompt Action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
@@ -797,6 +821,10 @@ function App() {
     } catch (error) {
       console.error("Prompt Action error:", error);
       showToast(`Prompt action error: ${error}`, "error");
+      useAppStore.getState().setRecordingState("idle");
+      invoke("hide_recording_overlay").catch(console.error);
+    } finally {
+      promptActionBusy.current = false;
     }
   }, [showToast]);
 
@@ -978,46 +1006,63 @@ function App() {
         return;
       }
 
-      // Copy selected text
-      let selectedText: string;
-      try {
-        console.log("PROMPT action: copying selected text...");
-        await invoke("simulate_copy");
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        selectedText = await invoke<string>("get_clipboard_text");
-      } catch (error) {
-        console.error("PROMPT action: Failed to copy selected text:", error);
-        showToast("Failed to copy selected text", "error");
+      // Execution guard: prevent concurrent prompt actions
+      if (promptActionBusy.current) {
+        showToast("Wait for current action to complete", "info");
         return;
       }
+      promptActionBusy.current = true;
 
-      if (!selectedText || selectedText.trim() === "") {
-        console.log("PROMPT action: No text selected");
-        showToast("No text selected", "error");
-        return;
-      }
-
-      console.log(`PROMPT action: captured ${selectedText.length} chars from selection`);
-
-      // Play sound to indicate transform started
-      if (currentSettings.audioEnabled) {
-        invoke("play_sound", { soundType: "start" }).catch(console.error);
-      }
-
-      // Process the prompt: replace {{text}} placeholder or append text
-      let finalInstruction: string;
-      if (action.prompt.includes("{{text}}")) {
-        finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
-      } else {
-        // No placeholder - append text to end of prompt
-        finalInstruction = `${action.prompt}\n\n${selectedText}`;
-      }
-
-      console.log(`PROMPT action: using prompt template, final instruction length: ${finalInstruction.length}`);
-
-      // Call LLM transform using global settings
       try {
-        const result = await invoke<{
+        let selectedText = "";
+        let finalInstruction: string;
+
+        if (action.requiresSelection !== false) {
+          // SELECTION MODE: copy selected text with stale clipboard detection
+          let clipboardBefore = "";
+          try { clipboardBefore = await invoke<string>("get_clipboard_text"); } catch { /* empty clipboard is fine */ }
+
+          try {
+            console.log("PROMPT action: copying selected text...");
+            await invoke("simulate_copy");
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            selectedText = await invoke<string>("get_clipboard_text");
+          } catch (error) {
+            console.error("PROMPT action: Failed to copy selected text:", error);
+            showToast("Failed to copy selected text", "error");
+            return;
+          }
+
+          // Stale clipboard detection: if clipboard didn't change, nothing was selected
+          if (!selectedText || selectedText.trim() === "" || selectedText === clipboardBefore) {
+            console.log("PROMPT action: No text selected (stale clipboard detected)");
+            showToast("No text selected", "error");
+            return;
+          }
+
+          console.log(`PROMPT action: captured ${selectedText.length} chars from selection`);
+
+          // Build instruction with selected text
+          if (action.prompt.includes("{{text}}")) {
+            finalInstruction = action.prompt.replace(/\{\{text\}\}/g, selectedText);
+          } else {
+            finalInstruction = `${action.prompt}\n\n${selectedText}`;
+          }
+        } else {
+          // STANDALONE MODE: no clipboard capture, prompt IS the instruction
+          console.log(`PROMPT action: standalone mode (no clipboard capture)`);
+          finalInstruction = action.prompt;
+        }
+
+        // Play sound to indicate transform started
+        if (currentSettings.audioEnabled) {
+          invoke("play_sound", { soundType: "start" }).catch(console.error);
+        }
+
+        console.log(`PROMPT action: using prompt template, final instruction length: ${finalInstruction.length}`);
+
+        // Call LLM transform with timeout
+        const llmPromise = invoke<{
           success: boolean;
           output_text: string | null;
           error: string | null;
@@ -1032,6 +1077,12 @@ function App() {
           temperature: currentSettings.transformTemperature ?? 0.7,
           maxTokens: currentSettings.transformMaxTokens ?? 4096,
         });
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Prompt action timed out after 90 seconds")), 90000);
+        });
+
+        const result = await Promise.race([llmPromise, timeoutPromise]);
 
         if (result.success && result.output_text) {
           console.log(`PROMPT action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
@@ -1067,6 +1118,10 @@ function App() {
       } catch (error) {
         console.error("PROMPT action error:", error);
         showToast(`Prompt action error: ${error}`, "error");
+        useAppStore.getState().setRecordingState("idle");
+        invoke("hide_recording_overlay").catch(console.error);
+      } finally {
+        promptActionBusy.current = false;
       }
       return;
     }
@@ -1419,8 +1474,13 @@ function App() {
     setVoiceCommandModalOpen(false);
     setVoiceCommandMatches([]);
     setVoiceCommandTranscript("");
+    setGlobalBusy(false);
+    setVoiceCommandListening(false);
+    voiceCommandStartTime.current = 0;
+    useAppStore.getState().setRecordingState("idle");
+    invoke("hide_recording_overlay").catch(console.error);
     console.log("Voice command cancelled");
-  }, []);
+  }, [setGlobalBusy, setVoiceCommandListening]);
 
   // Start voice command recording flow
   const startVoiceCommandRecording = useCallback(async () => {
@@ -1565,6 +1625,7 @@ function App() {
         }
 
         // Reset state after auto-execute
+        useAppStore.getState().setRecordingState("idle");
         setGlobalBusy(false);
         voiceCommandStartTime.current = 0;
       } else {
@@ -1592,6 +1653,7 @@ function App() {
           console.error("Voice Command: failed to show review window:", e);
           showToast("Failed to show review window", "error");
           pendingVoiceReviewMatches.current = [];
+          useAppStore.getState().setRecordingState("idle");
           setGlobalBusy(false);
           voiceCommandStartTime.current = 0;
         }
@@ -1602,6 +1664,7 @@ function App() {
       showToast(`Voice command error: ${error}`, "error");
       setGlobalBusy(false);
       voiceCommandStartTime.current = 0;
+      useAppStore.getState().setRecordingState("idle");
     }
   }, [voiceCommandListening, getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction, settings.voiceCommandAutoExecuteThreshold]);
 
@@ -1627,6 +1690,7 @@ function App() {
             pendingVoiceReviewMatches.current = [];
             setGlobalBusy(false);
             voiceCommandStartTime.current = 0;
+            useAppStore.getState().setRecordingState("idle");
             return;
           }
 
@@ -1646,6 +1710,7 @@ function App() {
           }
 
           pendingVoiceReviewMatches.current = [];
+          useAppStore.getState().setRecordingState("idle");
           setGlobalBusy(false);
           voiceCommandStartTime.current = 0;
         }

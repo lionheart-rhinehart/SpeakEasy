@@ -8,7 +8,7 @@
 
 ## Current Status
 
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-19
 
 ### Active Work
 | Item | Status | Notes |
@@ -16,11 +16,11 @@
 | (none) | | |
 
 ### Recently Completed
-- 2026-02-18: Fixed phantom dev server hotkey conflicts — test-protocol no longer spawns unwanted dev server
-- 2026-02-18: Fixed OpenAI o3-mini parameter rejection — reasoning models use max_completion_tokens
-- 2026-02-18: Added toasts for recording start failures — all error paths now have user-visible feedback
-- 2026-02-18: Bulletproof admin license persistence — triple redundancy (state + marker + keychain)
-- 2026-02-18: Toast on hotkey registration failure — all 3 hotkeys now show errors visibly
+- 2026-02-19: Fixed clipboard contamination in PROMPT actions — stale detection + per-hotkey requiresSelection toggle
+- 2026-02-19: Fixed 6+ stuck spinner paths — all error paths now reset recordingState to idle
+- 2026-02-19: Added click-to-cancel recovery on RecordingButton when stuck in processing
+- 2026-02-19: Added 90s LLM timeout + concurrent execution guard on prompt actions
+- 2026-02-19: LLM backend handles empty inputText cleanly for standalone prompts
 
 ### Blockers
 - None
@@ -28,6 +28,43 @@
 ---
 
 ## Sessions
+
+### 2026-02-19 - Session Complete (Clipboard Contamination + Stuck Spinner Fix)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Per-hotkey `requiresSelection` toggle instead of system-wide | Some hotkeys need selected text, others run standalone | 2026-02-19 |
+| Stale clipboard detection (before/after compare) in frontend | Backend `get_selected_text` exists but frontend approach is more transparent | 2026-02-19 |
+| Explicit `setRecordingState("idle")` on all error paths | `addTranscription()` side effect only covers success paths | 2026-02-19 |
+| 90s frontend timeout on LLM calls | Backend 60s timeout may not propagate; frontend waited forever | 2026-02-19 |
+| Click-to-cancel on RecordingButton during processing | Previously disabled with no recovery — required app restart | 2026-02-19 |
+
+**Files Modified:**
+- Edited: `src/types/index.ts` (added `requiresSelection` to 4 interfaces)
+- Edited: `src-tauri/src/config.rs` (added `requires_selection` to 2 Rust structs)
+- Edited: `src/stores/appStore.ts` (updated 4 converter functions)
+- Edited: `src-tauri/src/llm.rs` (empty inputText handling in 3 providers)
+- Edited: `src/App.tsx` (stale detection, standalone mode, 7 state resets, timeout, execution guard, voice cancel fix)
+- Edited: `src/components/RecordingButton.tsx` (click-to-cancel recovery when processing)
+- Edited: `src/components/SettingsPanel.tsx` (requiresSelection checkbox in both form variants)
+- Created: `docs/lessons-learned/2026-02-19__frontend__clipboard-contamination-and-stuck-spinner.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Old transcription text contaminates prompt action output | Stale clipboard detection (before/after) + per-hotkey requiresSelection toggle |
+| 6+ error paths leave recordingState stuck at "processing" | Added explicit setRecordingState("idle") to all error/cancel paths |
+| No recovery when spinner gets stuck | RecordingButton now clickable during processing (X icon, click to cancel) |
+| Rapid hotkey presses cause parallel prompt execution | Added promptActionBusy ref guard |
+| handleVoiceCommandCancel missing state resets | Added globalBusy, voiceCommandListening, recordingState, hide_recording_overlay resets |
+| LLM backend produces confusing format with empty inputText | Conditional: empty inputText sends instruction only, not "Text to transform:\n\n\n\n" |
+
+**Commands Run:**
+- /test-protocol --skip-backup (PASS — lint, typecheck, build, rust check)
+- /wrapup
 
 ### 2026-02-18 - Session Complete (Hotkey Stability + o3-mini Fix)
 

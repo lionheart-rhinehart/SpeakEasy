@@ -771,6 +771,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                     webhookUrl: "",
                     method: "POST",
                     enabled: true,
+                    requiresSelection: true,
                   });
                 }}
                 className="text-xs text-primary-500 hover:text-primary-700 font-medium"
@@ -847,21 +848,35 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                   )}
                   {/* Prompt textarea - shown only for PROMPT method */}
                   {editingWebhook.method === "PROMPT" && (
-                    <div>
-                      <label className="block text-xs text-text-secondary mb-1">
-                        Prompt (use {"{{text}}"} for selected text)
+                    <>
+                      <div>
+                        <label className="block text-xs text-text-secondary mb-1">
+                          Prompt (use {"{{text}}"} for selected text)
+                        </label>
+                        <textarea
+                          value={editingWebhook.prompt || ""}
+                          onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
+                          placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
+                          rows={4}
+                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                        />
+                        <p className="text-xs text-text-secondary mt-1">
+                          {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
+                        </p>
+                      </div>
+                      <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={editingWebhook.requiresSelection ?? true}
+                          onChange={(e) => setEditingWebhook({ ...editingWebhook, requiresSelection: e.target.checked })}
+                          className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-text-primary">Requires selected text</p>
+                          <p className="text-xs text-text-secondary">When unchecked, runs prompt standalone without copying selected text</p>
+                        </div>
                       </label>
-                      <textarea
-                        value={editingWebhook.prompt || ""}
-                        onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
-                        placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
-                        rows={4}
-                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
-                      />
-                      <p className="text-xs text-text-secondary mt-1">
-                        {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
-                      </p>
-                    </div>
+                    </>
                   )}
                   {/* Chrome profile chooser option - only for URL method */}
                   {editingWebhook.method === "URL" && (
@@ -984,21 +999,35 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                           )}
                           {/* Prompt textarea - shown only for PROMPT method */}
                           {editingWebhook.method === "PROMPT" && (
-                            <div>
-                              <label className="block text-xs text-text-secondary mb-1">
-                                Prompt (use {"{{text}}"} for selected text)
+                            <>
+                              <div>
+                                <label className="block text-xs text-text-secondary mb-1">
+                                  Prompt (use {"{{text}}"} for selected text)
+                                </label>
+                                <textarea
+                                  value={editingWebhook.prompt || ""}
+                                  onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
+                                  placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
+                                  rows={4}
+                                  className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                                />
+                                <p className="text-xs text-text-secondary mt-1">
+                                  {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
+                                </p>
+                              </div>
+                              <label className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editingWebhook.requiresSelection ?? true}
+                                  onChange={(e) => setEditingWebhook({ ...editingWebhook, requiresSelection: e.target.checked })}
+                                  className="w-4 h-4 text-primary-500 rounded focus:ring-primary-500"
+                                />
+                                <div>
+                                  <p className="text-sm font-medium text-text-primary">Requires selected text</p>
+                                  <p className="text-xs text-text-secondary">When unchecked, runs prompt standalone without copying selected text</p>
+                                </div>
                               </label>
-                              <textarea
-                                value={editingWebhook.prompt || ""}
-                                onChange={(e) => setEditingWebhook({ ...editingWebhook, prompt: e.target.value })}
-                                placeholder="e.g., Add relevant emojis throughout this text: {{text}}"
-                                rows={4}
-                                className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
-                              />
-                              <p className="text-xs text-text-secondary mt-1">
-                                {"{{text}}"} will be replaced with selected text. If no placeholder, text will be appended.
-                              </p>
-                            </div>
+                            </>
                           )}
                           {/* Chrome profile chooser option - only for URL method */}
                           {editingWebhook.method === "URL" && (
