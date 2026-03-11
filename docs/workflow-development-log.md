@@ -8,7 +8,7 @@
 
 ## Current Status
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-03-11
 
 ### Active Work
 | Item | Status | Notes |
@@ -16,11 +16,11 @@
 | (none) | | |
 
 ### Recently Completed
+- 2026-03-11: Fixed voice command hotkey stale closure race condition — stabilized callbacks, added ref safety layer, toggle mode
+- 2026-03-11: Fixed early release stuck state — full cleanup including Rust-side stop_recording
+- 2026-03-11: Added globalBusy 120s timeout safety net
 - 2026-02-19: Fixed clipboard contamination in PROMPT actions — stale detection + per-hotkey requiresSelection toggle
 - 2026-02-19: Fixed 6+ stuck spinner paths — all error paths now reset recordingState to idle
-- 2026-02-19: Added click-to-cancel recovery on RecordingButton when stuck in processing
-- 2026-02-19: Added 90s LLM timeout + concurrent execution guard on prompt actions
-- 2026-02-19: LLM backend handles empty inputText cleanly for standalone prompts
 
 ### Blockers
 - None
@@ -28,6 +28,36 @@
 ---
 
 ## Sessions
+
+### 2026-03-11 - Session Complete (Voice Command Hotkey Race Condition Fix)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Read volatile state from `useAppStore.getState()` instead of closures | Prevents callback recreation between press/release, stopping hotkey re-registration race | 2026-03-11 |
+| Added ref safety layer for hotkey callbacks | Belt-and-suspenders: even if callbacks change, hotkey handler always uses latest via refs | 2026-03-11 |
+| Switched voice command to toggle mode (press-to-start, press-to-stop) | More reliable than press-and-hold — eliminates dependency on Released events which can be unreliable on Windows | 2026-03-11 |
+| Added 120s globalBusy timeout | Safety net to auto-recover from any stuck state without requiring app restart | 2026-03-11 |
+
+**Files Modified:**
+- Edited: `src/App.tsx` (stabilized callbacks, ref safety layer, toggle mode, early release cleanup, globalBusy timeout)
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Voice command hotkey broke after Windows update — Released event lost between Press/Release due to hotkey re-registration | Stabilized callback deps by reading from store + ref safety layer to decouple hotkey lifecycle from callback changes |
+| Early release (<200ms) left globalBusy stuck forever | Added full cleanup including Rust-side stop_recording in early release path |
+| Manual voice command button had same stale closure issue | Applied same ref + store read pattern |
+| No recovery from stuck globalBusy state | Added 120s timeout that auto-resets when not actively recording |
+| Windows sends spurious immediate Released events for some hotkey combos | Switched to toggle mode — press once to start, press again to stop |
+
+**Commands Run:**
+- /test-protocol (3 runs: lint fix, quality gates, full build+install+launch)
+- /wrapup
+
+---
 
 ### 2026-02-19 - Session Complete (Clipboard Contamination + Stuck Spinner Fix)
 

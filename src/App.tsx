@@ -110,6 +110,9 @@ function App() {
   const voiceCommandStartTime = useRef<number>(0);
   const pendingVoiceReviewMatches = useRef<VoiceCommandMatch[]>([]);
   const promptActionBusy = useRef(false);
+  // Refs for voice command callbacks - prevents hotkey re-registration between Press/Release
+  const startVoiceCommandRecordingRef = useRef<() => void>(() => {});
+  const stopVoiceCommandRecordingRef = useRef<() => void>(() => {});
 
   // Toast notification state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -135,7 +138,6 @@ function App() {
   const [voiceCommandModalOpen, setVoiceCommandModalOpen] = useState(false);
   const [voiceCommandTranscript, setVoiceCommandTranscript] = useState("");
   const [voiceCommandMatches, setVoiceCommandMatches] = useState<VoiceCommandMatch[]>([]);
-  const voiceCommandListening = useAppStore((state) => state.voiceCommandListening);
   const setVoiceCommandListening = useAppStore((state) => state.setVoiceCommandListening);
   const globalBusy = useAppStore((state) => state.globalBusy);
   const setGlobalBusy = useAppStore((state) => state.setGlobalBusy);
@@ -1484,14 +1486,14 @@ function App() {
 
   // Start voice command recording flow
   const startVoiceCommandRecording = useCallback(async () => {
-    // Check if voice commands are enabled
-    if (!settings.voiceCommandEnabled) {
+    // Check if voice commands are enabled (read from store to avoid stale closure)
+    if (!useAppStore.getState().settings.voiceCommandEnabled) {
       console.log("Voice commands are disabled");
       return;
     }
 
-    // Check if already busy
-    if (globalBusy) {
+    // Check if already busy (read from store to avoid stale closure)
+    if (useAppStore.getState().globalBusy) {
       showToast("Wait for current action to complete", "info");
       return;
     }
@@ -1525,11 +1527,12 @@ function App() {
       setVoiceCommandListening(false);
       voiceCommandStartTime.current = 0;
     }
-  }, [settings.voiceCommandEnabled, globalBusy, showToast, setGlobalBusy, setVoiceCommandListening]);
+  }, [showToast, setGlobalBusy, setVoiceCommandListening]);
 
   // Stop voice command recording and process
   const stopVoiceCommandRecording = useCallback(async () => {
-    if (!voiceCommandListening) {
+    // Read from store to avoid stale closure (prevents hotkey re-registration race)
+    if (!useAppStore.getState().voiceCommandListening) {
       return;
     }
 
@@ -1537,6 +1540,13 @@ function App() {
     const recordingDurationMs = Date.now() - voiceCommandStartTime.current;
     if (recordingDurationMs < MIN_VOICE_COMMAND_RECORDING_MS) {
       console.log(`Voice Command: ignoring early release (${recordingDurationMs}ms < ${MIN_VOICE_COMMAND_RECORDING_MS}ms)`);
+      // Clean up to avoid stuck state (globalBusy, Rust recording, overlay)
+      try { await invoke("stop_recording"); } catch { /* recording may not have fully started */ }
+      useAppStore.getState().setRecordingState("idle");
+      setGlobalBusy(false);
+      setVoiceCommandListening(false);
+      voiceCommandStartTime.current = 0;
+      invoke("hide_recording_overlay").catch(console.error);
       return;
     }
 
@@ -1605,7 +1615,7 @@ function App() {
       // Match against available actions
       const allActions = getAllActions();
       const matches = matchVoiceCommand(transcribedText, allActions);
-      const threshold = settings.voiceCommandAutoExecuteThreshold ?? 0.4;
+      const threshold = useAppStore.getState().settings.voiceCommandAutoExecuteThreshold ?? 0.4;
 
       console.log(`Voice Command: found ${matches.length} matches (threshold: ${threshold})`);
 
@@ -1666,7 +1676,7 @@ function App() {
       voiceCommandStartTime.current = 0;
       useAppStore.getState().setRecordingState("idle");
     }
-  }, [voiceCommandListening, getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction, settings.voiceCommandAutoExecuteThreshold]);
+  }, [getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction]);
 
   // Reset globalBusy when voice command modal closes
   useEffect(() => {
@@ -1675,6 +1685,23 @@ function App() {
       voiceCommandStartTime.current = 0;
     }
   }, [voiceCommandModalOpen, setGlobalBusy]);
+
+  // Safety net: auto-reset stuck globalBusy after 2 minutes
+  useEffect(() => {
+    if (!globalBusy) return;
+    const timeout = setTimeout(() => {
+      const state = useAppStore.getState();
+      // Only reset if not actively recording (don't interrupt legitimate long operations)
+      if (state.recordingState !== "recording") {
+        console.warn("Voice Command: globalBusy stuck for 120s, force-resetting");
+        state.setGlobalBusy(false);
+        state.setVoiceCommandListening(false);
+        state.setRecordingState("idle");
+        invoke("hide_recording_overlay").catch(console.error);
+      }
+    }, 120000);
+    return () => clearTimeout(timeout);
+  }, [globalBusy]);
 
   // Listen for voice review result (from the review window)
   useEffect(() => {
@@ -1726,6 +1753,10 @@ function App() {
     };
   }, [showToast, setGlobalBusy, executeWebhookAction, executePromptAction]);
 
+  // Keep voice command callback refs in sync (avoids stale closures in hotkey handler)
+  useEffect(() => { startVoiceCommandRecordingRef.current = startVoiceCommandRecording; }, [startVoiceCommandRecording]);
+  useEffect(() => { stopVoiceCommandRecordingRef.current = stopVoiceCommandRecording; }, [stopVoiceCommandRecording]);
+
   // Register voice command hotkey
   useEffect(() => {
     if (!settings.voiceCommandEnabled) {
@@ -1757,10 +1788,15 @@ function App() {
             return;
           }
 
+          // Toggle mode: press to start, press again to stop
+          // (more reliable than press-and-hold — avoids spurious Released events from Windows)
           if (event.state === "Pressed") {
-            startVoiceCommandRecording();
-          } else if (event.state === "Released") {
-            stopVoiceCommandRecording();
+            const state = useAppStore.getState();
+            if (state.voiceCommandListening || state.recordingState === "recording") {
+              stopVoiceCommandRecordingRef.current();
+            } else {
+              startVoiceCommandRecordingRef.current();
+            }
           }
         });
 
@@ -1780,16 +1816,17 @@ function App() {
         registeredVoiceCommandHotkey.current = "";
       }
     };
-  }, [hotkeyVoiceCommand, settings.voiceCommandEnabled, startVoiceCommandRecording, stopVoiceCommandRecording, showToast]);
+  }, [hotkeyVoiceCommand, settings.voiceCommandEnabled, showToast]);
 
   // Listen for manual voice command button trigger
+  // Uses refs and store reads to avoid stale closure issues (same fix as hotkey handler)
   useEffect(() => {
     const handleVoiceCommandTrigger = () => {
       // Toggle behavior: if listening, stop; if not, start
-      if (voiceCommandListening) {
-        stopVoiceCommandRecording();
+      if (useAppStore.getState().voiceCommandListening) {
+        stopVoiceCommandRecordingRef.current();
       } else {
-        startVoiceCommandRecording();
+        startVoiceCommandRecordingRef.current();
       }
     };
 
@@ -1797,7 +1834,7 @@ function App() {
     return () => {
       window.removeEventListener("voice-command-trigger", handleVoiceCommandTrigger);
     };
-  }, [voiceCommandListening, startVoiceCommandRecording, stopVoiceCommandRecording]);
+  }, []);
 
   // Show loading state while checking license
   if (!licenseChecked) {
