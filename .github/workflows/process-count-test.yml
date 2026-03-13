@@ -19,6 +19,8 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
     - name: Install dependencies
       run: npm ci
+    - name: Build frontend
+      run: npm run build
     - name: Build release
       run: cargo build --release --manifest-path src-tauri/Cargo.toml
     - name: Test Single Instance

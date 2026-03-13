@@ -14,9 +14,10 @@
 | Item | Status | Notes |
 |------|--------|-------|
 | Send Ivan v1.0.1 installer | Next | From GitHub Release (not local build) |
-| Tag v1.0.2 and push | Next | Ships diagnostics via auto-update |
 
 ### Recently Completed
+- 2026-03-13: Fixed CI — added frontend build step to Single Instance Process Test workflow
+- 2026-03-13: Tagged v1.0.2 and pushed — ships diagnostics via auto-update
 - 2026-03-13: Auto-diagnostic reporting — WARN/ERROR logs auto-upload to Supabase on startup
 - 2026-03-13: Added file logging (tauri-plugin-log) — logs to %LOCALAPPDATA%\com.speakeasy.app\logs\
 - 2026-03-13: Enabled auto-updates — signing keys, pubkey, GitHub Secrets configured
@@ -29,6 +30,26 @@
 ---
 
 ## Sessions
+
+### 2026-03-13 - Session Complete (CI Fix: Single Instance Process Test)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Add `npm run build` before `cargo build` in CI | Tauri's `generate_context!()` macro requires frontend dist at compile time | 2026-03-13 |
+
+**Files Modified:**
+- Edited: `.github/workflows/process-count-test.yml`
+- Created: `docs/lessons-learned/2026-03-13__devops__tauri-ci-missing-frontend-build.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Single Instance Process Test failing on every push — `frontendDist "../dist"` path doesn't exist | Added `npm run build` step before `cargo build` in workflow |
+
+---
 
 ### 2026-03-13 - Session Complete (Auto-Diagnostic Reporting)
 
