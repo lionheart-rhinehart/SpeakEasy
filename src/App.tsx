@@ -224,15 +224,22 @@ function App() {
       const update = await check();
       if (update) {
         console.log("Downloading update...");
-        await update.downloadAndInstall();
+
+        // Timeout: if download takes more than 5 minutes, something is wrong
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Download timed out after 5 minutes")), 300000);
+        });
+
+        await Promise.race([update.downloadAndInstall(), timeoutPromise]);
         console.log("Update installed, relaunching...");
         await relaunch();
       }
     } catch (err) {
       console.error("Update installation failed:", err);
+      showToast(`Update failed: ${err}. Please try again later.`, "error");
       setIsUpdating(false);
     }
-  }, []);
+  }, [showToast]);
 
   // Listen for tray menu events
   useEffect(() => {

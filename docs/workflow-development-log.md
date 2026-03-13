@@ -8,19 +8,20 @@
 
 ## Current Status
 
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-03-13
 
 ### Active Work
 | Item | Status | Notes |
 |------|--------|-------|
-| (none) | | |
+| Send Ivan v1.0.1 installer | Next | From GitHub Release (not local build) |
+| Get Ivan's log file | Next | Diagnose his hotkey issue with new file logging |
 
 ### Recently Completed
-- 2026-03-11: Fixed voice command hotkey stale closure race condition — stabilized callbacks, added ref safety layer, toggle mode
-- 2026-03-11: Fixed early release stuck state — full cleanup including Rust-side stop_recording
-- 2026-03-11: Added globalBusy 120s timeout safety net
-- 2026-02-19: Fixed clipboard contamination in PROMPT actions — stale detection + per-hotkey requiresSelection toggle
-- 2026-02-19: Fixed 6+ stuck spinner paths — all error paths now reset recordingState to idle
+- 2026-03-13: Added file logging (tauri-plugin-log) — logs to %LOCALAPPDATA%\com.speakeasy.app\logs\
+- 2026-03-13: Enabled auto-updates — signing keys, pubkey, GitHub Secrets configured
+- 2026-03-13: Fixed update error visibility — timeout + toast on failure
+- 2026-03-13: Bumped version to 1.0.1 across all config files
+- 2026-03-11: Fixed voice command hotkey stale closure race condition
 
 ### Blockers
 - None
@@ -28,6 +29,36 @@
 ---
 
 ## Sessions
+
+### 2026-03-13 - Session Complete (Auto-Updates + File Logging)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Replace env_logger with tauri-plugin-log | env_logger only writes to stderr, invisible on Windows GUI apps — need disk logs for remote debugging | 2026-03-13 |
+| Keep Tauri instead of converting to web app | Global hotkeys not possible in web apps — core feature requirement | 2026-03-13 |
+| Register log plugin FIRST in builder chain | Captures all startup logs including single-instance and autostart init | 2026-03-13 |
+| v1.0.1 is last manual install | v1.0.0 has empty pubkey, can't verify signed updates — bootstrap cost | 2026-03-13 |
+
+**Files Modified:**
+- Edited: `src-tauri/Cargo.toml` (swap env_logger→tauri-plugin-log, version bump)
+- Edited: `src-tauri/src/main.rs` (remove env_logger::init())
+- Edited: `src-tauri/src/lib.rs` (add tauri-plugin-log as first plugin, startup log)
+- Edited: `src-tauri/tauri.conf.json` (set updater pubkey, version bump)
+- Edited: `package.json` (version bump)
+- Edited: `src/App.tsx` (update handler timeout + error toast)
+- Auto-generated: `src-tauri/Cargo.lock`, `src-tauri/gen/schemas/*`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Double-logger panic (env_logger + tauri-plugin-log both call set_boxed_logger) | Remove env_logger entirely — only one logger backend allowed |
+| Log file 0 bytes after 8s — old single-instance process intercepting launches | Kill old process with PowerShell Stop-Process before launching new build |
+| Beta tester can't auto-update from v1.0.0 (empty pubkey) | Accept one-time manual install of v1.0.1 which has the pubkey |
+
+---
 
 ### 2026-03-11 - Session Complete (Voice Command Hotkey Race Condition Fix)
 
