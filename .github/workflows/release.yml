@@ -94,6 +94,57 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
+      - name: Upload updater artifacts and generate latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          RELEASE_ID="${{ needs.create-release.outputs.release_id }}"
+          NSIS_DIR="src-tauri/target/release/bundle/nsis"
+
+          # Upload .nsis.zip (the actual update package)
+          NSIS_ZIP="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip"
+          if [ -f "$NSIS_ZIP" ]; then
+            echo "Uploading $(basename $NSIS_ZIP)..."
+            gh release upload "v${VERSION}" "$NSIS_ZIP" --clobber
+          else
+            echo "ERROR: $NSIS_ZIP not found"
+            exit 1
+          fi
+
+          # Upload .nsis.zip.sig (signature for update verification)
+          NSIS_SIG="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip.sig"
+          if [ -f "$NSIS_SIG" ]; then
+            echo "Uploading $(basename $NSIS_SIG)..."
+            gh release upload "v${VERSION}" "$NSIS_SIG" --clobber
+          else
+            echo "ERROR: $NSIS_SIG not found"
+            exit 1
+          fi
+
+          # Read the signature content for latest.json
+          SIGNATURE=$(cat "$NSIS_SIG")
+
+          # Build latest.json for the Tauri updater
+          cat > latest.json << ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": "SpeakEasy v${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${SIGNATURE}",
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/SpeakEasy_${VERSION}_x64-setup.nsis.zip"
+              }
+            }
+          }
+          ENDJSON
+
+          echo "Uploading latest.json..."
+          gh release upload "v${VERSION}" latest.json --clobber
+          echo "Done! Updater artifacts uploaded successfully."
+
   publish-release:
     needs: [create-release, build-tauri]
     runs-on: ubuntu-latest
