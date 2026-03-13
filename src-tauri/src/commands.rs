@@ -1886,3 +1886,12 @@ pub async fn upload_feedback_attachment(
         .await
         .map_err(|e| e.to_string())
 }
+
+/// Manually trigger diagnostic log upload to Supabase
+#[tauri::command]
+pub async fn send_diagnostics() -> Result<String, String> {
+    crate::diagnostics::upload_diagnostics()
+        .await
+        .map(|_| "Diagnostics sent successfully".to_string())
+        .map_err(|e| format!("Failed to send diagnostics: {}", e))
+}

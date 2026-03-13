@@ -14,14 +14,14 @@
 | Item | Status | Notes |
 |------|--------|-------|
 | Send Ivan v1.0.1 installer | Next | From GitHub Release (not local build) |
-| Get Ivan's log file | Next | Diagnose his hotkey issue with new file logging |
+| Tag v1.0.2 and push | Next | Ships diagnostics via auto-update |
 
 ### Recently Completed
+- 2026-03-13: Auto-diagnostic reporting — WARN/ERROR logs auto-upload to Supabase on startup
 - 2026-03-13: Added file logging (tauri-plugin-log) — logs to %LOCALAPPDATA%\com.speakeasy.app\logs\
 - 2026-03-13: Enabled auto-updates — signing keys, pubkey, GitHub Secrets configured
 - 2026-03-13: Fixed update error visibility — timeout + toast on failure
 - 2026-03-13: Bumped version to 1.0.1 across all config files
-- 2026-03-11: Fixed voice command hotkey stale closure race condition
 
 ### Blockers
 - None
@@ -29,6 +29,30 @@
 ---
 
 ## Sessions
+
+### 2026-03-13 - Session Complete (Auto-Diagnostic Reporting)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Auto-report errors to Supabase (Option B) | Better than manual log collection, uses existing Supabase infra | 2026-03-13 |
+| Cursor-based deduplication | Simple file-based tracking, no DB state needed | 2026-03-13 |
+| Filter ][WARN]/][ERROR] only | Privacy + payload size + signal-to-noise | 2026-03-13 |
+| Fire-and-forget tokio::spawn with 5s delay | Non-blocking startup, captures startup errors | 2026-03-13 |
+
+**Files Modified:**
+- Created: `src-tauri/src/diagnostics.rs`, `supabase/migrations/003_diagnostic_logs.sql`
+- Edited: `src-tauri/src/lib.rs`, `src-tauri/src/commands.rs`, `.gitignore`
+- Supabase: Applied migration via MCP tool (diagnostic_logs table + RLS)
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Supabase MCP rejected `project_id` param | Omit it — the MCP server infers the project automatically |
+
+---
 
 ### 2026-03-13 - Session Complete (Auto-Updates + File Logging)
 

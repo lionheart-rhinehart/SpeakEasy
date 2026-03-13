@@ -2,6 +2,7 @@ mod audio;
 mod clipboard;
 mod commands;
 mod config;
+mod diagnostics;
 mod feedback;
 mod hotkeys;
 mod license;
@@ -223,6 +224,16 @@ pub fn run() {
                 .build(app)?;
 
             log::info!("SpeakEasy initialized successfully with system tray");
+
+            // Auto-report error logs to Supabase (fire-and-forget, non-blocking)
+            tokio::spawn(async {
+                // 5-second delay: let startup finish and flush any new errors to the log file
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                if let Err(e) = diagnostics::upload_diagnostics().await {
+                    log::warn!("Diagnostic upload failed (non-fatal): {}", e);
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -298,6 +309,8 @@ pub fn run() {
             // Feedback submission
             commands::submit_feedback,
             commands::upload_feedback_attachment,
+            // Diagnostic log reporting
+            commands::send_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
