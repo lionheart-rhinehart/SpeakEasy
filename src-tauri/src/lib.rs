@@ -67,7 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            log::info!("=== SpeakEasy v1.0.1 starting up ===");
+            log::info!("=== SpeakEasy v1.0.2 starting up ===");
 
             // Initialize application state
             let state = AppState::new();
