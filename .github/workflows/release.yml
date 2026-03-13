@@ -94,40 +94,44 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
+      - name: Debug bundle contents
+        shell: bash
+        run: |
+          echo "=== NSIS bundle directory ==="
+          ls -la src-tauri/target/release/bundle/nsis/ 2>/dev/null || echo "NSIS dir not found"
+          echo "=== MSI bundle directory ==="
+          ls -la src-tauri/target/release/bundle/msi/ 2>/dev/null || echo "MSI dir not found"
+
       - name: Upload updater artifacts and generate latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
-          RELEASE_ID="${{ needs.create-release.outputs.release_id }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
 
-          # Upload .nsis.zip (the actual update package)
-          NSIS_ZIP="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip"
-          if [ -f "$NSIS_ZIP" ]; then
-            echo "Uploading $(basename $NSIS_ZIP)..."
-            gh release upload "v${VERSION}" "$NSIS_ZIP" --clobber
-          else
-            echo "ERROR: $NSIS_ZIP not found"
+          # Find the .nsis.zip file
+          NSIS_ZIP=$(find "$NSIS_DIR" -name "*.nsis.zip" -not -name "*.sig" 2>/dev/null | head -1)
+          if [ -z "$NSIS_ZIP" ]; then
+            echo "ERROR: No .nsis.zip file found in $NSIS_DIR"
+            echo "Signing may have failed. Check TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets."
             exit 1
           fi
+          echo "Found update package: $NSIS_ZIP"
+          gh release upload "v${VERSION}" "$NSIS_ZIP" --clobber
 
-          # Upload .nsis.zip.sig (signature for update verification)
-          NSIS_SIG="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip.sig"
-          if [ -f "$NSIS_SIG" ]; then
-            echo "Uploading $(basename $NSIS_SIG)..."
-            gh release upload "v${VERSION}" "$NSIS_SIG" --clobber
-          else
-            echo "ERROR: $NSIS_SIG not found"
+          # Find the .nsis.zip.sig file
+          NSIS_SIG="${NSIS_ZIP}.sig"
+          if [ ! -f "$NSIS_SIG" ]; then
+            echo "ERROR: Signature file $NSIS_SIG not found"
             exit 1
           fi
+          echo "Found signature: $NSIS_SIG"
+          gh release upload "v${VERSION}" "$NSIS_SIG" --clobber
 
-          # Read the signature content for latest.json
+          # Read signature content and build latest.json
           SIGNATURE=$(cat "$NSIS_SIG")
-
-          # Build latest.json for the Tauri updater
-          cat > latest.json << ENDJSON
+          cat > latest.json <<EOF
           {
             "version": "${VERSION}",
             "notes": "SpeakEasy v${VERSION}",
@@ -139,7 +143,7 @@ jobs:
               }
             }
           }
-          ENDJSON
+          EOF
 
           echo "Uploading latest.json..."
           gh release upload "v${VERSION}" latest.json --clobber
