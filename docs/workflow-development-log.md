@@ -8,28 +8,55 @@
 
 ## Current Status
 
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-03-14
 
 ### Active Work
 | Item | Status | Notes |
 |------|--------|-------|
-| Send Ivan v1.0.1 installer | Next | From GitHub Release (not local build) |
+| Verify Ivan installs v1.0.3 | Next | Email sent with step-by-step instructions |
+| Verify diagnostics in Supabase | Next | Check diagnostic_logs table after Ivan launches |
 
 ### Recently Completed
+- 2026-03-14: v1.0.3 release LIVE — all 5 artifacts (.exe, .msi, .nsis.zip, .sig, latest.json)
+- 2026-03-14: Bulletproof CI signing fix — -f flag, printf, PowerShell Compress-Archive
+- 2026-03-14: Emailed Ivan installation instructions for v1.0.3
 - 2026-03-13: Fixed CI — added frontend build step to Single Instance Process Test workflow
 - 2026-03-13: Tagged v1.0.2 and pushed — ships diagnostics via auto-update
-- 2026-03-13: Auto-diagnostic reporting — WARN/ERROR logs auto-upload to Supabase on startup
-- 2026-03-13: Added file logging (tauri-plugin-log) — logs to %LOCALAPPDATA%\com.speakeasy.app\logs\
-- 2026-03-13: Enabled auto-updates — signing keys, pubkey, GitHub Secrets configured
-- 2026-03-13: Fixed update error visibility — timeout + toast on failure
-- 2026-03-13: Bumped version to 1.0.1 across all config files
 
 ### Blockers
-- None
+- Resend MCP proxy broken — arguments not forwarding through lazy-mcp
 
 ---
 
 ## Sessions
+
+### 2026-03-14 - Session Complete (v1.0.3 Release + CI Signing Fix)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Regenerate signing key with known password | Original key had unknown password, blocking all signing | 2026-03-13 |
+| Manual post-build signing step | tauri-apps/tauri-action@v0 silently skips signing | 2026-03-13 |
+| Use `-f` flag (file) instead of `-k` (string) | `-k` can't parse base64 key blob | 2026-03-13 |
+| Use `printf '%s'` instead of `echo` | echo adds trailing newline breaking base64 | 2026-03-13 |
+| Use PowerShell Compress-Archive instead of 7z | 7z not reliably available on windows-latest; also preserves directory structure | 2026-03-13 |
+| Accept pubkey mismatch for v1.0.1/v1.0.2 | Only ~2 beta testers, manual install acceptable | 2026-03-13 |
+
+**Files Modified:**
+- Edited: `.github/workflows/release.yml` (bulletproof signing step)
+- Created: `docs/lessons-learned/2026-03-14__devops__tauri-signing-pipeline-failures.md`
+- Created: `docs/lessons-learned/2026-03-14__mcp__resend-lazy-mcp-proxy-bug.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| 7 distinct CI signing failure modes | Identified all 7 via local testing, fixed in one commit |
+| Resend MCP arguments not forwarding | Used Gmail draft as workaround |
+| Gmail MCP has no send_draft tool | User sends manually from Gmail drafts |
+
+---
 
 ### 2026-03-13 - Session Complete (CI Fix: Single Instance Process Test)
 

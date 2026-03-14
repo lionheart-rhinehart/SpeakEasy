@@ -88,10 +88,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
@@ -106,51 +102,53 @@ jobs:
           VERSION="${{ needs.create-release.outputs.version }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
           SETUP_EXE="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.exe"
-
-          echo "=== Bundle directory contents ==="
-          ls -la "$NSIS_DIR/" 2>/dev/null || { echo "NSIS dir not found"; exit 1; }
-
-          # Check if .nsis.zip already exists (tauri-action signed it)
           NSIS_ZIP="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip"
+
+          echo "=== Bundle directory ==="
+          ls -la "$NSIS_DIR/"
+
+          # Write signing key to temp file
+          # MUST use printf (not echo) to avoid trailing newline that breaks base64
+          # MUST use -f flag (not -k) because -k can't parse the base64 key blob
+          KEY_FILE=$(mktemp)
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$TAURI_PRIVATE_KEY" > "$KEY_FILE"
+
+          # Check if tauri-action already created signed artifacts (unlikely but handle it)
           if [ -f "$NSIS_ZIP" ] && [ -f "${NSIS_ZIP}.sig" ]; then
             echo "Signed artifacts already exist from tauri-action"
           else
-            echo "Signing artifacts manually..."
-
-            # Verify the exe exists
+            # Verify the exe was built
             if [ ! -f "$SETUP_EXE" ]; then
               echo "ERROR: $SETUP_EXE not found"
               exit 1
             fi
 
-            # Sign the exe
-            echo "Signing $SETUP_EXE..."
-            npx tauri signer sign -k "$TAURI_PRIVATE_KEY" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$SETUP_EXE"
-            echo "Created: ${SETUP_EXE}.sig"
+            # Step 1: Sign the exe
+            echo "Signing exe..."
+            npx tauri signer sign -f "$KEY_FILE" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$SETUP_EXE"
 
-            # Create .nsis.zip (zip the exe for the updater)
+            # Step 2: Create .nsis.zip using PowerShell (guaranteed on Windows runners)
+            # Compress-Archive stores only the leaf filename (exe at zip root)
+            # 7z is NOT reliably available on windows-latest and preserves relative paths
             echo "Creating update zip..."
-            7z a -tzip "$NSIS_ZIP" "$SETUP_EXE"
-            echo "Created: $NSIS_ZIP"
+            powershell -Command "Compress-Archive -Path '$SETUP_EXE' -DestinationPath '$NSIS_ZIP' -Force"
 
-            # Sign the zip
-            echo "Signing $NSIS_ZIP..."
-            npx tauri signer sign -k "$TAURI_PRIVATE_KEY" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$NSIS_ZIP"
-            echo "Created: ${NSIS_ZIP}.sig"
+            # Step 3: Sign the zip
+            echo "Signing zip..."
+            npx tauri signer sign -f "$KEY_FILE" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$NSIS_ZIP"
           fi
 
-          echo "=== Final bundle directory ==="
+          echo "=== Final bundle ==="
           ls -la "$NSIS_DIR/"
 
-          # Upload .nsis.zip
-          echo "Uploading $(basename $NSIS_ZIP)..."
+          # Upload .nsis.zip and .nsis.zip.sig to the release
+          echo "Uploading $(basename "$NSIS_ZIP")..."
           gh release upload "v${VERSION}" "$NSIS_ZIP" --clobber
-
-          # Upload .nsis.zip.sig
-          echo "Uploading $(basename ${NSIS_ZIP}.sig)..."
+          echo "Uploading $(basename "${NSIS_ZIP}.sig")..."
           gh release upload "v${VERSION}" "${NSIS_ZIP}.sig" --clobber
 
-          # Read signature and build latest.json
+          # Generate and upload latest.json for the Tauri updater
           SIGNATURE=$(cat "${NSIS_ZIP}.sig")
           cat > latest.json <<ENDJSON
           {
@@ -165,10 +163,9 @@ jobs:
             }
           }
           ENDJSON
-
           echo "Uploading latest.json..."
           gh release upload "v${VERSION}" latest.json --clobber
-          echo "Done! Updater artifacts uploaded successfully."
+          echo "Done! All updater artifacts uploaded successfully."
 
   publish-release:
     needs: [create-release, build-tauri]
