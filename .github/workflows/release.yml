@@ -96,44 +96,63 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
-      - name: Debug bundle contents
-        shell: bash
-        run: |
-          echo "=== NSIS bundle directory ==="
-          ls -la src-tauri/target/release/bundle/nsis/ 2>/dev/null || echo "NSIS dir not found"
-          echo "=== MSI bundle directory ==="
-          ls -la src-tauri/target/release/bundle/msi/ 2>/dev/null || echo "MSI dir not found"
-
-      - name: Upload updater artifacts and generate latest.json
+      - name: Sign, zip, and upload updater artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
           NSIS_DIR="src-tauri/target/release/bundle/nsis"
+          SETUP_EXE="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.exe"
 
-          # Find the .nsis.zip file
-          NSIS_ZIP=$(find "$NSIS_DIR" -name "*.nsis.zip" -not -name "*.sig" 2>/dev/null | head -1)
-          if [ -z "$NSIS_ZIP" ]; then
-            echo "ERROR: No .nsis.zip file found in $NSIS_DIR"
-            echo "Signing may have failed. Check TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets."
-            exit 1
+          echo "=== Bundle directory contents ==="
+          ls -la "$NSIS_DIR/" 2>/dev/null || { echo "NSIS dir not found"; exit 1; }
+
+          # Check if .nsis.zip already exists (tauri-action signed it)
+          NSIS_ZIP="$NSIS_DIR/SpeakEasy_${VERSION}_x64-setup.nsis.zip"
+          if [ -f "$NSIS_ZIP" ] && [ -f "${NSIS_ZIP}.sig" ]; then
+            echo "Signed artifacts already exist from tauri-action"
+          else
+            echo "Signing artifacts manually..."
+
+            # Verify the exe exists
+            if [ ! -f "$SETUP_EXE" ]; then
+              echo "ERROR: $SETUP_EXE not found"
+              exit 1
+            fi
+
+            # Sign the exe
+            echo "Signing $SETUP_EXE..."
+            npx tauri signer sign -k "$TAURI_PRIVATE_KEY" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$SETUP_EXE"
+            echo "Created: ${SETUP_EXE}.sig"
+
+            # Create .nsis.zip (zip the exe for the updater)
+            echo "Creating update zip..."
+            7z a -tzip "$NSIS_ZIP" "$SETUP_EXE"
+            echo "Created: $NSIS_ZIP"
+
+            # Sign the zip
+            echo "Signing $NSIS_ZIP..."
+            npx tauri signer sign -k "$TAURI_PRIVATE_KEY" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$NSIS_ZIP"
+            echo "Created: ${NSIS_ZIP}.sig"
           fi
-          echo "Found update package: $NSIS_ZIP"
+
+          echo "=== Final bundle directory ==="
+          ls -la "$NSIS_DIR/"
+
+          # Upload .nsis.zip
+          echo "Uploading $(basename $NSIS_ZIP)..."
           gh release upload "v${VERSION}" "$NSIS_ZIP" --clobber
 
-          # Find the .nsis.zip.sig file
-          NSIS_SIG="${NSIS_ZIP}.sig"
-          if [ ! -f "$NSIS_SIG" ]; then
-            echo "ERROR: Signature file $NSIS_SIG not found"
-            exit 1
-          fi
-          echo "Found signature: $NSIS_SIG"
-          gh release upload "v${VERSION}" "$NSIS_SIG" --clobber
+          # Upload .nsis.zip.sig
+          echo "Uploading $(basename ${NSIS_ZIP}.sig)..."
+          gh release upload "v${VERSION}" "${NSIS_ZIP}.sig" --clobber
 
-          # Read signature content and build latest.json
-          SIGNATURE=$(cat "$NSIS_SIG")
-          cat > latest.json <<EOF
+          # Read signature and build latest.json
+          SIGNATURE=$(cat "${NSIS_ZIP}.sig")
+          cat > latest.json <<ENDJSON
           {
             "version": "${VERSION}",
             "notes": "SpeakEasy v${VERSION}",
@@ -145,7 +164,7 @@ jobs:
               }
             }
           }
-          EOF
+          ENDJSON
 
           echo "Uploading latest.json..."
           gh release upload "v${VERSION}" latest.json --clobber
