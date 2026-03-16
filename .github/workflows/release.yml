@@ -95,8 +95,8 @@ jobs:
       - name: Sign, zip, and upload updater artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
@@ -109,10 +109,11 @@ jobs:
 
           # Write signing key to temp file
           # MUST use printf (not echo) to avoid trailing newline that breaks base64
-          # MUST use -f flag (not -k) because -k can't parse the base64 key blob
+          # Env vars are named SIGNING_KEY/SIGNING_PASSWORD (NOT TAURI_PRIVATE_KEY)
+          # to avoid conflict with tauri signer's auto-detection of TAURI_PRIVATE_KEY env var
           KEY_FILE=$(mktemp)
           trap 'rm -f "$KEY_FILE"' EXIT
-          printf '%s' "$TAURI_PRIVATE_KEY" > "$KEY_FILE"
+          printf '%s' "$SIGNING_KEY" > "$KEY_FILE"
 
           # Check if tauri-action already created signed artifacts (unlikely but handle it)
           if [ -f "$NSIS_ZIP" ] && [ -f "${NSIS_ZIP}.sig" ]; then
@@ -126,17 +127,16 @@ jobs:
 
             # Step 1: Sign the exe
             echo "Signing exe..."
-            npx tauri signer sign -f "$KEY_FILE" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$SETUP_EXE"
+            npx tauri signer sign -f "$KEY_FILE" -p "$SIGNING_PASSWORD" "$SETUP_EXE"
 
             # Step 2: Create .nsis.zip using PowerShell (guaranteed on Windows runners)
             # Compress-Archive stores only the leaf filename (exe at zip root)
-            # 7z is NOT reliably available on windows-latest and preserves relative paths
             echo "Creating update zip..."
             powershell -Command "Compress-Archive -Path '$SETUP_EXE' -DestinationPath '$NSIS_ZIP' -Force"
 
             # Step 3: Sign the zip
             echo "Signing zip..."
-            npx tauri signer sign -f "$KEY_FILE" -p "$TAURI_PRIVATE_KEY_PASSWORD" "$NSIS_ZIP"
+            npx tauri signer sign -f "$KEY_FILE" -p "$SIGNING_PASSWORD" "$NSIS_ZIP"
           fi
 
           echo "=== Final bundle ==="

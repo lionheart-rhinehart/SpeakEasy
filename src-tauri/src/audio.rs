@@ -51,6 +51,9 @@ impl AudioRecorderHandle {
         let (stop_tx, stop_rx) = mpsc::channel();
         self.stop_tx = Some(stop_tx);
 
+        // Channel for the audio thread to signal it's ready (stream is playing)
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<()>>();
+
         // Reset level
         *self.current_level.lock().unwrap() = 0.0;
 
@@ -58,16 +61,35 @@ impl AudioRecorderHandle {
         // NOTE: is_recording is set to true INSIDE the thread, right before stream.play()
         thread::spawn(move || {
             if let Err(e) =
-                run_audio_capture(device_name, samples, is_recording, current_level, stop_rx)
+                run_audio_capture(device_name, samples, is_recording, current_level, stop_rx, ready_tx)
             {
                 log::error!("Audio capture error: {}", e);
             }
         });
 
-        // Wait a moment for the stream to actually start
-        thread::sleep(std::time::Duration::from_millis(50));
+        // Wait for the audio thread to confirm the stream is running.
+        // This replaces the old 50ms sleep which was a race condition —
+        // on Windows, device enumeration + stream setup can take >100ms.
+        match ready_rx.recv_timeout(std::time::Duration::from_secs(3)) {
+            Ok(Ok(())) => {
+                log::info!("Audio recording started (stream confirmed running)");
+            }
+            Ok(Err(e)) => {
+                // Thread reported a setup error
+                self.is_recording.store(false, Ordering::SeqCst);
+                return Err(e);
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.is_recording.store(false, Ordering::SeqCst);
+                return Err(anyhow!("Audio stream failed to start within 3 seconds"));
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                // Thread died (panic or early error return) — ready_tx was dropped
+                self.is_recording.store(false, Ordering::SeqCst);
+                return Err(anyhow!("Audio capture failed to initialize — check your microphone"));
+            }
+        }
 
-        log::info!("Audio recording started");
         Ok(())
     }
 
@@ -99,8 +121,32 @@ impl AudioRecorderHandle {
             duration_secs
         );
 
+        // Check peak audio level for diagnostics and silence detection
+        let peak_level = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+        log::info!(
+            "Recording stats: {} samples ({:.2}s), peak level: {:.4}",
+            samples.len(),
+            duration_secs,
+            peak_level
+        );
+
         if samples.is_empty() {
             return Err(anyhow!("No audio recorded"));
+        }
+
+        // Reject recordings shorter than 200ms — can't contain useful speech
+        if samples.len() < 3200 {
+            return Err(anyhow!(
+                "Recording too short ({:.0}ms) — try holding the key longer",
+                duration_secs * 1000.0
+            ));
+        }
+
+        // Reject recordings with no audio signal (mic disconnected/muted/failed)
+        if peak_level < 0.001 {
+            return Err(anyhow!(
+                "No audio signal detected — check that your microphone is connected and not muted"
+            ));
         }
 
         // Sanity check: if recording is way too long, something went wrong
@@ -141,6 +187,7 @@ fn run_audio_capture(
     is_recording: Arc<AtomicBool>,
     current_level: Arc<Mutex<f32>>,
     stop_rx: mpsc::Receiver<()>,
+    ready_tx: mpsc::Sender<Result<()>>,
 ) -> Result<()> {
     let host = cpal::default_host();
 
@@ -324,6 +371,12 @@ fn run_audio_capture(
 
     stream.play()?;
 
+    // Signal to start() that the stream is running and capturing audio.
+    // If this send fails (start() already timed out), recording still works —
+    // it just means start() returned an error, but the stream keeps running
+    // until stop() is called or the thread exits.
+    let _ = ready_tx.send(Ok(()));
+
     // Wait for stop signal
     let _ = stop_rx.recv();
 
@@ -373,7 +426,7 @@ fn process_audio_for_whisper(samples: &mut Vec<f32>) {
 
     // 2. Calculate RMS for noise gate threshold
     let rms: f32 = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
-    let noise_threshold = rms * 0.1; // 10% of RMS as noise floor
+    let noise_threshold = rms * 0.03; // 3% of RMS as noise floor (reduced from 10% to preserve quiet speech)
 
     // 3. Apply soft noise gate (reduce very quiet samples that are likely noise)
     for sample in samples.iter_mut() {

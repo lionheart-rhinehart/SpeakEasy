@@ -12,7 +12,7 @@ export default function RecordingButton() {
         startRecording();
       } catch (error) {
         console.error("Failed to start recording:", error);
-        setRecordingState("error");
+        setRecordingState("idle");
       }
     } else if (recordingState === "recording") {
       stopRecording();
@@ -42,6 +42,17 @@ export default function RecordingButton() {
           apiKey,
           language: lang,
         });
+
+        if (!result.text.trim()) {
+          addTranscription({
+            id: crypto.randomUUID(),
+            text: "No speech detected",
+            durationMs: result.duration_ms,
+            language: result.language,
+            createdAt: new Date().toISOString(),
+          });
+          return;
+        }
 
         addTranscription({
           id: crypto.randomUUID(),

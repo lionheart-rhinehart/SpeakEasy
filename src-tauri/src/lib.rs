@@ -25,6 +25,39 @@ use tauri_plugin_log::{Target, TargetKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Install panic hook BEFORE anything else — in release mode, panics are silent.
+    // This writes the panic info to a crash log file so we can diagnose issues remotely.
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!(
+            "PANIC at {}: {}",
+            info.location()
+                .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+                .unwrap_or_else(|| "unknown".into()),
+            info.payload()
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| info.payload().downcast_ref::<String>().map(|s| s.as_str()))
+                .unwrap_or("(no message)")
+        );
+        // Try to write to crash log next to the app log
+        if let Some(dir) = dirs::data_local_dir() {
+            let crash_path = dir
+                .join("com.speakeasy.app")
+                .join("logs")
+                .join("crash.log");
+            let _ = std::fs::create_dir_all(crash_path.parent().unwrap());
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let entry = format!("[{}] {}\n", timestamp, msg);
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&crash_path)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
+        }
+        // Also try eprintln in case there's a console
+        eprintln!("{}", msg);
+    }));
+
     tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -237,7 +270,7 @@ pub fn run() {
             log::info!("SpeakEasy initialized successfully with system tray");
 
             // Auto-report error logs to Supabase (fire-and-forget, non-blocking)
-            tokio::spawn(async {
+            tauri::async_runtime::spawn(async {
                 // 5-second delay: let startup finish and flush any new errors to the log file
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 if let Err(e) = diagnostics::upload_diagnostics().await {
@@ -324,5 +357,22 @@ pub fn run() {
             commands::send_diagnostics,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            let msg = format!("Tauri runtime error: {}", e);
+            log::error!("{}", msg);
+            // Write to crash log since the logger may not flush
+            if let Some(dir) = dirs::data_local_dir() {
+                let crash_path = dir
+                    .join("com.speakeasy.app")
+                    .join("logs")
+                    .join("crash.log");
+                let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+                let entry = format!("[{}] {}\n", timestamp, msg);
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&crash_path)
+                    .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
+            }
+        });
 }

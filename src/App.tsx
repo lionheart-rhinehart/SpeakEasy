@@ -287,9 +287,10 @@ function App() {
               // Start recording
               console.log("Starting recording...");
               try {
-                // Play start sound if enabled
+                // Play start sound if enabled — MUST await to avoid WASAPI conflict
+                // (rodio output stream + cpal input stream competing on Windows)
                 if (state.settings.audioEnabled) {
-                  invoke("play_sound", { soundType: "start" }).catch(console.error);
+                  await invoke("play_sound", { soundType: "start" });
                 }
                 await invoke("start_recording");
                 useAppStore.getState().startRecording();
@@ -374,6 +375,21 @@ function App() {
 
                 // Hide overlay after successful transcription
                 invoke("hide_recording_overlay").catch(console.error);
+
+                // Check for empty transcription (Whisper returns "" on silence)
+                const transcribedText = result.text.trim();
+                if (!transcribedText) {
+                  showToast("No speech detected — try speaking louder or closer to the mic", "info");
+                  useAppStore.getState().setRecordingState("idle");
+                  useAppStore.getState().addTranscription({
+                    id: crypto.randomUUID(),
+                    text: "",
+                    durationMs: result.duration_ms,
+                    language: result.language,
+                    createdAt: new Date().toISOString(),
+                  });
+                  return; // Skip auto-paste of empty string
+                }
 
                 useAppStore.getState().addTranscription({
                   id: crypto.randomUUID(),
@@ -490,9 +506,9 @@ function App() {
               aiTransformStartTime.current = Date.now();
               console.log(`AI Transform: captured ${clipboardText.length} chars from selection`);
 
-              // Play start sound
+              // Play start sound — MUST await to avoid WASAPI conflict
               if (state.settings.audioEnabled) {
-                invoke("play_sound", { soundType: "start" }).catch(console.error);
+                await invoke("play_sound", { soundType: "start" });
               }
 
               // Start recording the voice instruction
@@ -1518,9 +1534,9 @@ function App() {
     voiceCommandStartTime.current = Date.now();
 
     try {
-      // Play start sound if enabled
+      // Play start sound if enabled — MUST await to avoid WASAPI conflict
       if (state.settings.audioEnabled) {
-        invoke("play_sound", { soundType: "start" }).catch(console.error);
+        await invoke("play_sound", { soundType: "start" });
       }
 
       await invoke("start_recording");
@@ -1530,6 +1546,7 @@ function App() {
       invoke("show_recording_overlay").catch(console.error);
     } catch (error) {
       console.error("Voice Command: failed to start recording:", error);
+      showToast(`Voice command failed: ${error}`, "error");
       setGlobalBusy(false);
       setVoiceCommandListening(false);
       voiceCommandStartTime.current = 0;
