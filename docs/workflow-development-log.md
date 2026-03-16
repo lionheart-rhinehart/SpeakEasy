@@ -8,20 +8,21 @@
 
 ## Current Status
 
-**Last Updated:** 2026-03-14
+**Last Updated:** 2026-03-16
 
 ### Active Work
 | Item | Status | Notes |
 |------|--------|-------|
-| Verify Ivan installs v1.0.3 | Next | Email sent with step-by-step instructions |
+| Test voice detection reliability | In Progress | User testing after 6 audio pipeline fixes |
+| Verify Ivan installs v1.0.3+ | Next | Email sent with step-by-step instructions |
 | Verify diagnostics in Supabase | Next | Check diagnostic_logs table after Ivan launches |
 
 ### Recently Completed
+- 2026-03-16: Fixed intermittent voice detection — 6 root causes (WASAPI conflict, race condition, silent empty results, missing validation, aggressive noise gate, missing toasts)
 - 2026-03-14: v1.0.3 release LIVE — all 5 artifacts (.exe, .msi, .nsis.zip, .sig, latest.json)
 - 2026-03-14: Bulletproof CI signing fix — -f flag, printf, PowerShell Compress-Archive
 - 2026-03-14: Emailed Ivan installation instructions for v1.0.3
 - 2026-03-13: Fixed CI — added frontend build step to Single Instance Process Test workflow
-- 2026-03-13: Tagged v1.0.2 and pushed — ships diagnostics via auto-update
 
 ### Blockers
 - Resend MCP proxy broken — arguments not forwarding through lazy-mcp
@@ -29,6 +30,36 @@
 ---
 
 ## Sessions
+
+### 2026-03-16 - Session Complete (Fix Intermittent Voice Detection)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Await beep before recording (not fire-and-forget) | Concurrent WASAPI stream creation causes silent input failures on Windows | 2026-03-16 |
+| Replace 50ms sleep with sync channel | Sleep was a race condition — stream setup can take >100ms on Windows | 2026-03-16 |
+| Reduce noise gate from 10% to 3% RMS | 10% was suppressing quiet speech; Whisper handles noise well | 2026-03-16 |
+| Add peak-level validation before Whisper | Prevents sending silence to API, gives clear error messages | 2026-03-16 |
+
+**Files Modified:**
+- Edited: `src-tauri/src/audio.rs` (race condition fix, sample validation, noise gate)
+- Edited: `src/App.tsx` (await beep in 3 flows, empty text feedback, voice command toast)
+- Edited: `src/components/RecordingButton.tsx` (empty text feedback, fix invalid state)
+- Created: `docs/lessons-learned/2026-03-16__audio__intermittent-voice-detection-failures.md`
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| Beep sound + recording start compete for WASAPI | Await beep completion before starting recording in all 3 flows |
+| 50ms sleep race condition in audio thread startup | mpsc channel sync — stream confirmed running before returning |
+| Empty Whisper results shown as blank entries | Added empty-text check with "No speech detected" toast |
+| No validation of audio signal quality | Peak-level and duration checks with clear error messages |
+| Noise gate too aggressive for quiet speech | Reduced threshold from 10% to 3% of RMS |
+| Voice command start failures silent | Added missing error toast |
+
+---
 
 ### 2026-03-14 - Session Complete (v1.0.3 Release + CI Signing Fix)
 
