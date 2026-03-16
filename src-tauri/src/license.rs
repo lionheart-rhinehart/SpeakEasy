@@ -205,13 +205,17 @@ pub fn get_machine_id() -> String {
     #[cfg(target_os = "windows")]
     {
         // On Windows, use the machine GUID from registry
+        use std::os::windows::process::CommandExt;
         use std::process::Command;
+
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
 
         let output = Command::new("powershell")
             .args([
                 "-Command",
                 "(Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Cryptography' -Name MachineGuid).MachineGuid"
             ])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
 
         if let Ok(output) = output {

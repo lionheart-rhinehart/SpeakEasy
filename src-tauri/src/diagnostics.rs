@@ -61,8 +61,15 @@ fn get_os_info() -> String {
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         use std::process::Command;
-        if let Ok(output) = Command::new("cmd").args(["/c", "ver"]).output() {
+
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        if let Ok(output) = Command::new("cmd")
+            .args(["/c", "ver"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
             if output.status.success() {
                 let version = String::from_utf8_lossy(&output.stdout);
                 let version = version.trim();
