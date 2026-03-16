@@ -67,7 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            log::info!("=== SpeakEasy v1.0.3 starting up ===");
+            log::info!("=== SpeakEasy v{} starting up ===", env!("CARGO_PKG_VERSION"));
 
             // Initialize application state
             let state = AppState::new();
@@ -84,91 +84,102 @@ pub fn run() {
                 }
             }
 
-            // Aggressive overlay status bar restoration -- always ensure overlay window exists
-            // See README.md, 'Overlay Recording Status Bar Architecture & Troubleshooting', for context.
-            // This forces the recording-overlay to exist even if Tauri fails to spawn it on startup or after reload/crash.
+            // Create auxiliary windows dynamically (not from config) to handle
+            // WebView2 transparency failures gracefully on some Windows machines.
+            // If transparent creation fails (HRESULT 0x80070057), retry without transparency.
             {
                 use tauri::Manager;
-                let recording_overlay = app.get_webview_window("recording-overlay");
-                log::info!("[aggressive-setup] Checking for pre-existing overlay window: {:#?}", recording_overlay.is_some());
-                if recording_overlay.is_none() {
-                    // Overlay window missing, forcibly create it
-                    let overlay_window_result = tauri::WebviewWindowBuilder::new(
+
+                // Helper: try to create a window with transparency, fall back to opaque
+                fn create_auxiliary_window(
+                    app: &tauri::App,
+                    label: &str,
+                    url: &str,
+                    title: &str,
+                    width: f64,
+                    height: f64,
+                    focused: bool,
+                ) -> Option<tauri::WebviewWindow> {
+                    if let Some(existing) = app.get_webview_window(label) {
+                        let _ = existing.hide();
+                        log::info!("[setup] {} window already exists, hidden for clean state", label);
+                        return Some(existing);
+                    }
+
+                    // Try with transparency first
+                    let result = tauri::WebviewWindowBuilder::new(
                         app,
-                        "recording-overlay",
-                        tauri::WebviewUrl::App("overlay.html".into())
+                        label,
+                        tauri::WebviewUrl::App(url.into()),
                     )
-                    .title("Recording")
-                    .inner_size(300.0, 80.0)
+                    .title(title)
+                    .inner_size(width, height)
                     .decorations(false)
                     .transparent(true)
                     .always_on_top(true)
                     .visible(false)
-                    .focused(false)
+                    .focused(focused)
                     .skip_taskbar(true)
                     .build();
-                    match overlay_window_result {
-                        Ok(_) => {
-                            log::info!("[aggressive-setup] Overlay window created at startup (QA/robustness).");
-                            // Apply topmost subclass immediately after creation
-                            if let Some(overlay) = app.get_webview_window("recording-overlay") {
-                                if let Err(e) = window_topmost::apply_topmost_subclass(&overlay) {
-                                    log::warn!("[aggressive-setup] Failed to apply topmost subclass: {}", e);
-                                } else {
-                                    log::info!("[aggressive-setup] Applied topmost subclass for z-order enforcement");
+
+                    match result {
+                        Ok(w) => {
+                            log::info!("[setup] {} window created (transparent)", label);
+                            Some(w)
+                        }
+                        Err(e) => {
+                            log::warn!("[setup] {} transparent window failed: {}, retrying opaque", label, e);
+                            // Retry without transparency
+                            match tauri::WebviewWindowBuilder::new(
+                                app,
+                                label,
+                                tauri::WebviewUrl::App(url.into()),
+                            )
+                            .title(title)
+                            .inner_size(width, height)
+                            .decorations(false)
+                            .always_on_top(true)
+                            .visible(false)
+                            .focused(focused)
+                            .skip_taskbar(true)
+                            .build()
+                            {
+                                Ok(w) => {
+                                    log::info!("[setup] {} window created (opaque fallback)", label);
+                                    Some(w)
+                                }
+                                Err(e2) => {
+                                    log::error!("[setup] {} window creation failed entirely: {}", label, e2);
+                                    None
                                 }
                             }
                         }
-                        Err(e) => log::error!("[aggressive-setup] Failed to create overlay window: {}", e),
-                    }
-                } else {
-                    // Window exists (likely dev reload); ensure it's clean and hidden
-                    if let Some(overlay) = app.get_webview_window("recording-overlay") {
-                        let _ = overlay.hide();
-                        // Apply topmost subclass to existing window as well
-                        if let Err(e) = window_topmost::apply_topmost_subclass(&overlay) {
-                            log::warn!("[aggressive-setup] Failed to apply topmost subclass to existing window: {}", e);
-                        } else {
-                            log::info!("[aggressive-setup] Applied topmost subclass to existing overlay window");
-                        }
-                        log::info!("[aggressive-setup] Overlay window exists and has been hidden for clean state.");
                     }
                 }
-            }
 
-            // Ensure voice-review window exists for voice command disambiguation
-            {
-                use tauri::Manager;
-                let voice_review = app.get_webview_window("voice-review");
-                log::info!("[aggressive-setup] Checking for voice-review window: {:#?}", voice_review.is_some());
-                if voice_review.is_none() {
-                    let voice_review_result = tauri::WebviewWindowBuilder::new(
-                        app,
-                        "voice-review",
-                        tauri::WebviewUrl::App("voice-review.html".into())
-                    )
-                    .title("Voice Review")
-                    .inner_size(400.0, 300.0)
-                    .decorations(false)
-                    .transparent(true)
-                    .always_on_top(true)
-                    .visible(false)
-                    .focused(true) // Needs focus for keyboard input
-                    .skip_taskbar(true)
-                    .build();
-                    match voice_review_result {
-                        Ok(_) => {
-                            log::info!("[aggressive-setup] Voice review window created at startup.");
-                        }
-                        Err(e) => log::error!("[aggressive-setup] Failed to create voice review window: {}", e),
-                    }
-                } else {
-                    // Window exists; ensure it's hidden
-                    if let Some(vr) = app.get_webview_window("voice-review") {
-                        let _ = vr.hide();
-                        log::info!("[aggressive-setup] Voice review window exists and has been hidden.");
+                // Create recording overlay
+                if let Some(overlay) = create_auxiliary_window(
+                    app, "recording-overlay", "overlay.html", "Recording", 300.0, 80.0, false,
+                ) {
+                    if let Err(e) = window_topmost::apply_topmost_subclass(&overlay) {
+                        log::warn!("[setup] Failed to apply topmost subclass to overlay: {}", e);
                     }
                 }
+
+                // Create voice review window
+                create_auxiliary_window(
+                    app, "voice-review", "voice-review.html", "Voice Review", 400.0, 300.0, true,
+                );
+
+                // Create status bar window
+                create_auxiliary_window(
+                    app, "status-bar", "statusbar.html", "Status", 220.0, 80.0, false,
+                );
+
+                // Create profile chooser window
+                create_auxiliary_window(
+                    app, "profile-chooser", "profile-chooser.html", "Profile Chooser", 350.0, 400.0, true,
+                );
             }
 
             // Set up system tray
