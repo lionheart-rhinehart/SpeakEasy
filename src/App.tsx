@@ -233,10 +233,13 @@ function App() {
         await Promise.race([update.downloadAndInstall(), timeoutPromise]);
         console.log("Update installed, relaunching...");
         await relaunch();
+      } else {
+        showToast("No update found", "info");
       }
     } catch (err) {
       console.error("Update installation failed:", err);
-      showToast(`Update failed: ${err}. Please try again later.`, "error");
+      showToast(`Update failed: ${err}. Try closing and reopening the app.`, "error");
+    } finally {
       setIsUpdating(false);
     }
   }, [showToast]);
