@@ -129,10 +129,19 @@ jobs:
             echo "Signing exe..."
             npx tauri signer sign -f "$KEY_FILE" -p "$SIGNING_PASSWORD" "$SETUP_EXE"
 
-            # Step 2: Create .nsis.zip using PowerShell (guaranteed on Windows runners)
-            # Compress-Archive stores only the leaf filename (exe at zip root)
+            # Step 2: Create .nsis.zip using .NET ZipFile with standard Deflate compression
+            # PowerShell's Compress-Archive uses Deflate64 on newer Windows which Tauri's
+            # updater can't read ("unsupported Zip archive: Compression method not supported")
             echo "Creating update zip..."
-            powershell -Command "Compress-Archive -Path '$SETUP_EXE' -DestinationPath '$NSIS_ZIP' -Force"
+            powershell -Command "
+              Add-Type -AssemblyName System.IO.Compression.FileSystem
+              \$zip = [System.IO.Compression.ZipFile]::Open('$NSIS_ZIP', 'Create')
+              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                \$zip, '$SETUP_EXE', [System.IO.Path]::GetFileName('$SETUP_EXE'),
+                [System.IO.Compression.CompressionLevel]::Optimal
+              )
+              \$zip.Dispose()
+            "
 
             # Step 3: Sign the zip
             echo "Signing zip..."
