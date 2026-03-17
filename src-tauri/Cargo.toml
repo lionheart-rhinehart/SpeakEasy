@@ -1,6 +1,6 @@
 [package]
 name = "speakeasy"
-version = "1.0.8"
+version = "1.0.9"
 description = "Enterprise voice-to-text application"
 authors = ["SpeakEasy Team"]
 license = "MIT"

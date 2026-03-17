@@ -129,19 +129,19 @@ jobs:
             echo "Signing exe..."
             npx tauri signer sign -f "$KEY_FILE" -p "$SIGNING_PASSWORD" "$SETUP_EXE"
 
-            # Step 2: Create .nsis.zip using .NET ZipFile with standard Deflate compression
-            # PowerShell's Compress-Archive uses Deflate64 on newer Windows which Tauri's
-            # updater can't read ("unsupported Zip archive: Compression method not supported")
-            echo "Creating update zip..."
-            powershell -Command "
-              Add-Type -AssemblyName System.IO.Compression.FileSystem
-              \$zip = [System.IO.Compression.ZipFile]::Open('$NSIS_ZIP', 'Create')
-              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-                \$zip, '$SETUP_EXE', [System.IO.Path]::GetFileName('$SETUP_EXE'),
-                [System.IO.Compression.CompressionLevel]::Optimal
-              )
-              \$zip.Dispose()
-            "
+            # Step 2: Create .nsis.zip with Stored compression (no compression, method 0)
+            # tauri-plugin-updater uses zip crate with default-features=false, which only
+            # supports Stored (method 0). Deflate and Deflate64 both fail with
+            # "unsupported Zip archive: Compression method not supported"
+            # Python's zipfile with ZIP_STORED is the reliable way to produce method 0.
+            echo "Creating update zip (Stored compression)..."
+            python3 -c "
+import zipfile, os, sys
+z = zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_STORED)
+z.write(sys.argv[1], os.path.basename(sys.argv[1]))
+z.close()
+print(f'Created {sys.argv[2]} ({os.path.getsize(sys.argv[2])} bytes)')
+            " "$SETUP_EXE" "$NSIS_ZIP"
 
             # Step 3: Sign the zip
             echo "Signing zip..."
