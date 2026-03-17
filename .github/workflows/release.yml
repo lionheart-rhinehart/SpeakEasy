@@ -133,15 +133,8 @@ jobs:
             # tauri-plugin-updater uses zip crate with default-features=false, which only
             # supports Stored (method 0). Deflate and Deflate64 both fail with
             # "unsupported Zip archive: Compression method not supported"
-            # Python's zipfile with ZIP_STORED is the reliable way to produce method 0.
             echo "Creating update zip (Stored compression)..."
-            python3 -c "
-import zipfile, os, sys
-z = zipfile.ZipFile(sys.argv[2], 'w', zipfile.ZIP_STORED)
-z.write(sys.argv[1], os.path.basename(sys.argv[1]))
-z.close()
-print(f'Created {sys.argv[2]} ({os.path.getsize(sys.argv[2])} bytes)')
-            " "$SETUP_EXE" "$NSIS_ZIP"
+            python3 -c "import zipfile,os,sys; z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_STORED); z.write(sys.argv[1],os.path.basename(sys.argv[1])); z.close(); print(f'Created {sys.argv[2]} ({os.path.getsize(sys.argv[2])} bytes)')" "$SETUP_EXE" "$NSIS_ZIP"
 
             # Step 3: Sign the zip
             echo "Signing zip..."
