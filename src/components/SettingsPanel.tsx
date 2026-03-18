@@ -1243,15 +1243,17 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                     <>Get your key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">openrouter.ai/keys</a></>
                   )}
                   {settings.transformProvider === "openai" && (
-                    <>Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">platform.openai.com/api-keys</a> (can be same key as Whisper)</>
+                    <>Get your key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">platform.openai.com/api-keys</a>. Automatically uses your Whisper key if none set here.</>
                   )}
                   {settings.transformProvider === "anthropic" && (
                     <>Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">console.anthropic.com</a></>
                   )}
                 </p>
-                <p className="text-xs text-slate-400 mt-1 italic">
-                  This key is for AI Transform only. Does not affect Whisper transcription.
-                </p>
+                {settings.transformProvider !== "openai" && (
+                  <p className="text-xs text-slate-400 mt-1 italic">
+                    This key is for AI Transform only. Does not affect Whisper transcription.
+                  </p>
+                )}
               </div>
 
               {/* Model Selection */}

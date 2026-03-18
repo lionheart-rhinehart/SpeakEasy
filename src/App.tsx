@@ -840,15 +840,29 @@ function App() {
         console.log("Prompt Action: transform complete and pasted");
       } else {
         console.error("Prompt Action failed:", result.error);
-        if (result.error_type === "NoApiKey") {
-          showToast("No API key set for AI Transform - configure in Settings", "error");
-        } else {
-          showToast(result.error || "Prompt action failed", "error");
-        }
+        const errorMsg = result.error_type === "NoApiKey"
+          ? "No API key set for AI Transform - configure in Settings"
+          : (result.error || "Prompt action failed");
+        showToast(errorMsg, "error");
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Prompt: ${action.name}] ERROR: ${errorMsg}`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
       }
     } catch (error) {
       console.error("Prompt Action error:", error);
-      showToast(`Prompt action error: ${error}`, "error");
+      const errorMsg = String(error);
+      showToast(`Prompt action error: ${errorMsg}`, "error");
+      useAppStore.getState().addTranscription({
+        id: crypto.randomUUID(),
+        text: `[Prompt: ${action.name}] ERROR: ${errorMsg}`,
+        durationMs: 0,
+        language: "en",
+        createdAt: new Date().toISOString(),
+      });
       useAppStore.getState().setRecordingState("idle");
       invoke("hide_recording_overlay").catch(console.error);
     } finally {
@@ -1137,15 +1151,31 @@ function App() {
           console.log("PROMPT action: transform complete and pasted");
         } else {
           console.error("PROMPT action failed:", result.error);
-          if (result.error_type === "NoApiKey") {
-            showToast("No API key set for AI Transform - configure in Settings", "error");
-          } else {
-            showToast(result.error || "Prompt action failed", "error");
-          }
+          const errorMsg = result.error_type === "NoApiKey"
+            ? "No API key set for AI Transform - configure in Settings"
+            : (result.error || "Prompt action failed");
+          showToast(errorMsg, "error");
+          // Log execution errors to history so user can see what went wrong
+          useAppStore.getState().addTranscription({
+            id: crypto.randomUUID(),
+            text: `[Prompt: ${action.name}] ERROR: ${errorMsg}`,
+            durationMs: 0,
+            language: "en",
+            createdAt: new Date().toISOString(),
+          });
         }
       } catch (error) {
         console.error("PROMPT action error:", error);
-        showToast(`Prompt action error: ${error}`, "error");
+        const errorMsg = String(error);
+        showToast(`Prompt action error: ${errorMsg}`, "error");
+        // Log execution errors to history
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Prompt: ${action.name}] ERROR: ${errorMsg}`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
         useAppStore.getState().setRecordingState("idle");
         invoke("hide_recording_overlay").catch(console.error);
       } finally {
@@ -1600,6 +1630,13 @@ function App() {
       if (!apiKey) {
         console.log("Voice Command: no API key");
         showToast("Please set your OpenAI API key first", "error");
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Voice Command] ERROR: No OpenAI API key configured`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
         invoke("hide_recording_overlay").catch(console.error);
         setGlobalBusy(false);
         voiceCommandStartTime.current = 0;
@@ -1633,11 +1670,21 @@ function App() {
 
       if (!transcribedText) {
         console.log("Voice Command: no speech detected");
-        showToast("No speech detected", "info");
+        showToast("No speech detected - try speaking louder or longer", "info");
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Voice Command] No speech detected (empty transcription)`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
         setGlobalBusy(false);
         voiceCommandStartTime.current = 0;
         return;
       }
+
+      // Always log what Whisper heard (diagnostic: helps catch misheard phrases)
+      console.log(`Voice Command: Whisper heard: "${transcribedText}"`);
 
       // Match against available actions
       const allActions = getAllActions();
@@ -1649,9 +1696,25 @@ function App() {
       if (matches.length > 0 && matches[0].confidence >= threshold) {
         // Auto-execute best match - confidence is above threshold
         const bestMatch = matches[0];
+        const confidencePct = Math.round(bestMatch.confidence * 100);
         console.log(`Voice Command: auto-executing "${bestMatch.action.name}" (confidence: ${bestMatch.confidence} >= ${threshold})`);
 
+        // Show what was heard AND what's being executed
+        showToast(`Heard: "${transcribedText}" → ${bestMatch.action.name} (${confidencePct}%)`, "info");
+
+        // Log to history so user can see what was transcribed and matched
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Voice Command] "${transcribedText}" → ${bestMatch.action.name} (${confidencePct}%)`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
+
         const action = bestMatch.action;
+
+        // Safety reset: clear promptActionBusy if it's been stuck (prevents silent PROMPT failures)
+        promptActionBusy.current = false;
 
         if ("type" in action && action.type === "main") {
           showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
@@ -1669,6 +1732,19 @@ function App() {
         // Show review window - confidence is below threshold OR no matches found
         // This lets the user see what was transcribed and pick from available options
         console.log(`Voice Command: showing review window (${matches.length} matches, best confidence: ${matches[0]?.confidence ?? 0} < ${threshold})`);
+        showToast(`Heard: "${transcribedText}" - no confident match, showing options...`, "info");
+
+        // Log to history so user can see what was transcribed (even on no match)
+        const matchInfo = matches.length > 0
+          ? `best: ${matches[0].action.name} (${Math.round(matches[0].confidence * 100)}%)`
+          : "No match";
+        useAppStore.getState().addTranscription({
+          id: crypto.randomUUID(),
+          text: `[Voice Command] "${transcribedText}" → ${matchInfo}`,
+          durationMs: 0,
+          language: "en",
+          createdAt: new Date().toISOString(),
+        });
 
         // Store matches for when user selects from review window
         pendingVoiceReviewMatches.current = matches.slice(0, 5);
@@ -1698,7 +1774,16 @@ function App() {
     } catch (error) {
       console.error("Voice Command: transcription failed:", error);
       invoke("hide_recording_overlay").catch(console.error);
-      showToast(`Voice command error: ${error}`, "error");
+      const errorMsg = String(error);
+      showToast(`Voice command error: ${errorMsg}`, "error");
+      // Log errors to history so user can always see what happened
+      useAppStore.getState().addTranscription({
+        id: crypto.randomUUID(),
+        text: `[Voice Command] ERROR: ${errorMsg}`,
+        durationMs: 0,
+        language: "en",
+        createdAt: new Date().toISOString(),
+      });
       setGlobalBusy(false);
       voiceCommandStartTime.current = 0;
       useAppStore.getState().setRecordingState("idle");

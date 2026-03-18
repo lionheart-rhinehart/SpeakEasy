@@ -356,6 +356,13 @@ export const useAppStore = create<AppState>()(
           console.error("[Settings] Failed to load from file, using defaults:", error);
         }
 
+        // Sync Whisper API key to backend on startup
+        // (needed for OpenAI transform fallback when no dedicated transform key is set)
+        const currentApiKey = get().apiKey;
+        if (currentApiKey) {
+          invoke("set_api_key", { apiKey: currentApiKey }).catch(console.error);
+        }
+
         console.log("SpeakEasy initialized");
       },
 
@@ -365,6 +372,10 @@ export const useAppStore = create<AppState>()(
 
       setApiKey: (apiKey) => {
         set({ apiKey });
+        // Sync to backend so transform_with_llm can fall back to it for OpenAI
+        if (apiKey) {
+          invoke("set_api_key", { apiKey }).catch(console.error);
+        }
       },
 
       setRecordingState: (recordingState) => {

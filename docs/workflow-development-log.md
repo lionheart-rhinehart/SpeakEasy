@@ -8,16 +8,16 @@
 
 ## Current Status
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-18
 
 ### Active Work
 | Item | Status | Notes |
 |------|--------|-------|
-| Test voice detection reliability | In Progress | User testing after 6 audio pipeline fixes |
 | Verify Ivan installs v1.0.3+ | Next | Email sent with step-by-step instructions |
 | Verify diagnostics in Supabase | Next | Check diagnostic_logs table after Ivan launches |
 
 ### Recently Completed
+- 2026-03-18: Fixed "double check prompt" voice command — 3 root causes (API key not shared, errors invisible, Whisper punctuation breaking fuzzy match)
 - 2026-03-16: Fixed intermittent voice detection — 6 root causes (WASAPI conflict, race condition, silent empty results, missing validation, aggressive noise gate, missing toasts)
 - 2026-03-14: v1.0.3 release LIVE — all 5 artifacts (.exe, .msi, .nsis.zip, .sig, latest.json)
 - 2026-03-14: Bulletproof CI signing fix — -f flag, printf, PowerShell Compress-Archive
@@ -30,6 +30,37 @@
 ---
 
 ## Sessions
+
+### 2026-03-18 - Session Complete (Fix "Double Check Prompt" Silent Failures)
+
+**Status:** Completed
+
+**Decisions:**
+| Decision | Rationale | Date |
+|----------|-----------|------|
+| Fall back to Whisper key for OpenAI transform | Both use the same OpenAI API — avoids forcing users to enter the same key twice | 2026-03-18 |
+| Log all voice command/prompt action results to history | Toast-only errors are invisible if user misses the popup | 2026-03-18 |
+| Add text normalization to fuzzy matcher | Whisper adds punctuation/hyphens that break matching | 2026-03-18 |
+
+**Files Modified:**
+- Edited: src-tauri/src/commands.rs (OpenAI transform fallback to Whisper key)
+- Edited: src/App.tsx (error logging to history for voice commands + prompt actions)
+- Edited: src/stores/appStore.ts (sync Whisper key to backend on startup + change)
+- Edited: src/utils/fuzzyMatch.ts (normalize function for punctuation/hyphen stripping)
+- Edited: src/components/SettingsPanel.tsx (updated help text about key sharing)
+
+**Problems & Solutions:**
+| Problem | Solution |
+|---------|----------|
+| "Double check prompt" silently failed — no error visible | 3-part fix: API key fallback, error history logging, text normalization |
+| Whisper key in localStorage not available to Rust backend | Sync via `set_api_key` invoke on startup and on key change |
+| Whisper outputs "double-check prompt." with punctuation | `normalize()` strips punctuation and converts hyphens to spaces |
+
+**Commands Run:**
+- /test-protocol
+- /wrapup
+
+---
 
 ### 2026-03-16 - Session Complete (Fix Intermittent Voice Detection)
 
