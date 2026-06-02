@@ -993,9 +993,30 @@ pub async fn get_transform_api_key_status(provider: String) -> Result<ApiKeyStat
 }
 
 /// Get status for all transform providers
+/// If OpenAI has no dedicated key but a Whisper key exists, reports fallback availability
 #[tauri::command]
-pub async fn get_all_transform_api_key_statuses() -> Result<Vec<ApiKeyStatus>, String> {
-    Ok(secrets::get_all_api_key_statuses())
+pub async fn get_all_transform_api_key_statuses(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<ApiKeyStatus>, String> {
+    let mut statuses = secrets::get_all_api_key_statuses();
+
+    // Check if OpenAI can fall back to the Whisper key
+    let whisper_key_set = {
+        let app_state = state.lock().map_err(|e| e.to_string())?;
+        let has_key = app_state.api_key.lock().unwrap().is_some();
+        has_key
+    };
+
+    if whisper_key_set {
+        for status in &mut statuses {
+            if status.provider == "openai" && !status.is_set {
+                status.is_set = true;
+                status.preview = Some("Using Whisper key".to_string());
+            }
+        }
+    }
+
+    Ok(statuses)
 }
 
 /// Clear an API key for a provider
@@ -1297,6 +1318,7 @@ async fn fetch_anthropic_models(_api_key: &str) -> Result<Vec<ProviderModel>, St
 /// The API key is retrieved from secure OS credential storage based on the provider.
 #[tauri::command]
 pub async fn transform_with_llm(
+    state: State<'_, Mutex<AppState>>,
     provider: String,
     model: String,
     input_text: String,
@@ -1319,18 +1341,47 @@ pub async fn transform_with_llm(
     let api_key = match secrets::get_api_key(provider_enum) {
         Ok(Some(key)) => key,
         Ok(None) => {
-            let error = llm::TransformError::NoApiKey {
-                provider: provider.clone(),
-            };
-            return Ok(LlmTransformResponse {
-                success: false,
-                output_text: None,
-                error: Some(error.user_message()),
-                error_type: Some("NoApiKey".to_string()),
-                provider: Some(provider),
-                model: Some(model),
-                usage: None,
-            });
+            // Fallback: if provider is OpenAI, try the Whisper API key
+            // (both use OpenAI — avoids forcing users to enter the same key twice)
+            if provider_enum == TransformProvider::OpenAI {
+                let whisper_key = {
+                    let app_state = state.lock().map_err(|e| e.to_string())?;
+                    let guard = app_state.api_key.lock().unwrap();
+                    let cloned = guard.clone();
+                    drop(guard);
+                    cloned
+                };
+                if let Some(key) = whisper_key {
+                    log::info!("No dedicated OpenAI transform key, falling back to Whisper API key");
+                    key
+                } else {
+                    let error = llm::TransformError::NoApiKey {
+                        provider: provider.clone(),
+                    };
+                    return Ok(LlmTransformResponse {
+                        success: false,
+                        output_text: None,
+                        error: Some(error.user_message()),
+                        error_type: Some("NoApiKey".to_string()),
+                        provider: Some(provider),
+                        model: Some(model),
+                        usage: None,
+                    });
+                }
+            } else {
+                let error = llm::TransformError::NoApiKey {
+                    provider: provider.clone(),
+                };
+                return Ok(LlmTransformResponse {
+                    success: false,
+                    output_text: None,
+                    error: Some(error.user_message()),
+                    error_type: Some("NoApiKey".to_string()),
+                    provider: Some(provider),
+                    model: Some(model),
+                    usage: None,
+                });
+            }
         }
         Err(e) => {
             log::error!("Failed to retrieve API key: {}", e);

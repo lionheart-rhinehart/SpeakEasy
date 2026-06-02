@@ -17,6 +17,7 @@ import type {
   TransformProvider,
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
+import { normalizeHotkey } from "../utils/hotkeyValidation";
 
 // ============================================================================
 // Settings conversion helpers (camelCase <-> snake_case for Rust interop)
@@ -305,9 +306,28 @@ function migrateSettings(settings: Partial<UserSettings>): UserSettings {
     console.log("Migrated settings from v1 to v2 (added transform settings)");
   }
   
+  // Normalize all hotkeys to canonical modifier order so that physically
+  // identical shortcuts stored in different modifier orders (e.g.
+  // "Shift+Control+1" vs "Control+Shift+1") collapse to the same string.
+  // This lets the exact-string conflict detector catch duplicates. Idempotent.
+  migrated.hotkeyRecord = normalizeHotkey(migrated.hotkeyRecord);
+  migrated.hotkeyAiTransform = normalizeHotkey(migrated.hotkeyAiTransform);
+  migrated.hotkeyHistory = normalizeHotkey(migrated.hotkeyHistory);
+  if (migrated.hotkeyVoiceCommand) {
+    migrated.hotkeyVoiceCommand = normalizeHotkey(migrated.hotkeyVoiceCommand);
+  }
+  migrated.webhookActions = migrated.webhookActions.map((action) => ({
+    ...action,
+    hotkey: normalizeHotkey(action.hotkey),
+  }));
+  migrated.promptActions = migrated.promptActions.map((action) => ({
+    ...action,
+    hotkey: normalizeHotkey(action.hotkey),
+  }));
+
   // Always update to current version after migration
   migrated.settingsVersion = SETTINGS_SCHEMA_VERSION;
-  
+
   return migrated;
 }
 
@@ -356,6 +376,13 @@ export const useAppStore = create<AppState>()(
           console.error("[Settings] Failed to load from file, using defaults:", error);
         }
 
+        // Sync Whisper API key to backend on startup
+        // (needed for OpenAI transform fallback when no dedicated transform key is set)
+        const currentApiKey = get().apiKey;
+        if (currentApiKey) {
+          invoke("set_api_key", { apiKey: currentApiKey }).catch(console.error);
+        }
+
         console.log("SpeakEasy initialized");
       },
 
@@ -365,6 +392,10 @@ export const useAppStore = create<AppState>()(
 
       setApiKey: (apiKey) => {
         set({ apiKey });
+        // Sync to backend so transform_with_llm can fall back to it for OpenAI
+        if (apiKey) {
+          invoke("set_api_key", { apiKey }).catch(console.error);
+        }
       },
 
       setRecordingState: (recordingState) => {
