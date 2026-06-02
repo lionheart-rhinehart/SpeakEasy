@@ -120,7 +120,8 @@ interface HotkeyInputProps {
   showPresetToggle?: boolean;
 }
 
-type FieldIndex = 0 | 1 | 2;
+// Slots 0/1/2 are modifier fields; slot 3 is the key.
+type FieldIndex = 0 | 1 | 2 | 3;
 type CaptureMode = FieldIndex | null;
 
 export default function HotkeyInput({
@@ -133,17 +134,23 @@ export default function HotkeyInput({
   const settings = useAppStore((state) => state.settings);
   const setCapturingHotkey = useAppStore((state) => state.setCapturingHotkey);
 
-  // Parse the current value into fields
+  // Parse the current value into fields.
+  // field1/field2/field3 are modifier slots (field1 required); field4 is the key.
   const def = parseHotkeyToDefinition(value);
   const [field1, setField1] = useState<string>(def.modifiers[0] || "Control");
   const [field2, setField2] = useState<string>(def.modifiers[1] || "");
-  const [field3, setField3] = useState<string>(def.key || "");
+  const [field3, setField3] = useState<string>(def.modifiers[2] || "");
+  const [field4, setField4] = useState<string>(def.key || "");
 
   // Which field is being captured
   const [capturingField, setCapturingField] = useState<CaptureMode>(null);
 
   // Use preset dropdown mode
   const [usePreset, setUsePreset] = useState(false);
+
+  // Whether the capture UI is shown. A hotkey is optional: when there's no
+  // value the action is "voice only" until the user clicks "Add hotkey".
+  const [showCapture, setShowCapture] = useState<boolean>(!!value);
 
   // Validation error
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +160,11 @@ export default function HotkeyInput({
     const parsed = parseHotkeyToDefinition(value);
     setField1(parsed.modifiers[0] || "Control");
     setField2(parsed.modifiers[1] || "");
-    setField3(parsed.key || "");
+    setField3(parsed.modifiers[2] || "");
+    setField4(parsed.key || "");
+    if (value) {
+      setShowCapture(true);
+    }
   }, [value]);
 
   // Rebuild hotkey string when fields change
@@ -165,12 +176,15 @@ export default function HotkeyInput({
     if (field2 && MODIFIERS.includes(field2 as HotkeyModifier)) {
       modifiers.push(field2 as HotkeyModifier);
     }
-    return hotkeyDefinitionToString({ modifiers, key: field3 });
-  }, [field1, field2, field3]);
+    if (field3 && MODIFIERS.includes(field3 as HotkeyModifier)) {
+      modifiers.push(field3 as HotkeyModifier);
+    }
+    return hotkeyDefinitionToString({ modifiers, key: field4 });
+  }, [field1, field2, field3, field4]);
 
   // Validate and propagate changes
   useEffect(() => {
-    if (!field3) {
+    if (!field4) {
       // No key yet, don't validate or propagate
       setError(null);
       return;
@@ -191,7 +205,7 @@ export default function HotkeyInput({
         onChange(newHotkey);
       }
     }
-  }, [field1, field2, field3, buildHotkey, settings, excludeActionName, onChange, value]);
+  }, [field1, field2, field3, field4, buildHotkey, settings, excludeActionName, onChange, value]);
 
   // Handle key capture
   useEffect(() => {
@@ -216,24 +230,33 @@ export default function HotkeyInput({
       if (!key) return;
 
       if (capturingField === 0) {
-        // Field 1: must be a modifier
+        // Slot 0: primary modifier (required)
         if (MODIFIERS.includes(key as HotkeyModifier)) {
           setField1(key);
           setCapturingField(null);
         }
       } else if (capturingField === 1) {
-        // Field 2: optional modifier or clear
+        // Slot 1: optional second modifier
         if (MODIFIERS.includes(key as HotkeyModifier)) {
-          // Don't allow same modifier as field 1
+          // Don't allow same modifier as slot 0
           if (key !== field1) {
             setField2(key);
           }
           setCapturingField(null);
         }
       } else if (capturingField === 2) {
-        // Field 3: the actual key (non-modifier)
+        // Slot 2: optional third modifier
+        if (MODIFIERS.includes(key as HotkeyModifier)) {
+          // Don't allow a modifier already chosen in slot 0 or slot 1
+          if (key !== field1 && key !== field2) {
+            setField3(key);
+          }
+          setCapturingField(null);
+        }
+      } else if (capturingField === 3) {
+        // Slot 3: the actual key (non-modifier)
         if (!MODIFIERS.includes(key as HotkeyModifier)) {
-          setField3(key);
+          setField4(key);
           setCapturingField(null);
         }
       }
@@ -244,10 +267,27 @@ export default function HotkeyInput({
       window.removeEventListener("keydown", handleKeyDown);
       setCapturingHotkey(false);
     };
-  }, [capturingField, field1, setCapturingHotkey]);
+  }, [capturingField, field1, field2, field3, setCapturingHotkey]);
 
   // Preset dropdown options
   const presets = getPresetHotkeys();
+
+  // Voice-only state: no hotkey assigned and the user hasn't opted to add one.
+  // The action still works by voice (saying its name); a manual hotkey is optional.
+  if (!showCapture && !usePreset) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-500 italic">No hotkey — voice only</span>
+        <button
+          onClick={() => !disabled && setShowCapture(true)}
+          disabled={disabled}
+          className="text-xs text-primary-500 hover:text-primary-700 font-medium"
+        >
+          + Add hotkey
+        </button>
+      </div>
+    );
+  }
 
   if (usePreset) {
     return (
@@ -314,7 +354,7 @@ export default function HotkeyInput({
 
         <span className="text-slate-400">+</span>
 
-        {/* Field 3: The key (required) */}
+        {/* Slot 2: Third modifier (optional) */}
         <button
           onClick={() => !disabled && setCapturingField(2)}
           disabled={disabled}
@@ -326,16 +366,45 @@ export default function HotkeyInput({
                 : "bg-slate-50 border-dashed border-slate-300 text-slate-400 hover:border-primary-300"
           } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         >
-          {capturingField === 2 ? "Press..." : field3 ? formatKeyForDisplay(field3) : "Key"}
+          {capturingField === 2 ? "Press..." : field3 ? formatKeyForDisplay(field3) : "(opt)"}
         </button>
 
-        {/* Clear field 2 button */}
+        <span className="text-slate-400">+</span>
+
+        {/* Slot 3: The key (required) */}
+        <button
+          onClick={() => !disabled && setCapturingField(3)}
+          disabled={disabled}
+          className={`px-2 py-1.5 min-w-[60px] border rounded text-xs font-mono transition-colors ${
+            capturingField === 3
+              ? "bg-primary-100 border-primary-400 text-primary-700 animate-pulse"
+              : field4
+                ? "bg-slate-100 border-slate-300 hover:border-primary-300 hover:bg-primary-50"
+                : "bg-slate-50 border-dashed border-slate-300 text-slate-400 hover:border-primary-300"
+          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          {capturingField === 3 ? "Press..." : field4 ? formatKeyForDisplay(field4) : "Key"}
+        </button>
+
+        {/* Clear optional modifier buttons */}
         {field2 && (
           <button
             onClick={() => setField2("")}
             disabled={disabled}
             className="p-1 text-slate-400 hover:text-slate-600"
-            title="Remove optional modifier"
+            title="Remove second modifier"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        {field3 && (
+          <button
+            onClick={() => setField3("")}
+            disabled={disabled}
+            className="p-1 text-slate-400 hover:text-slate-600"
+            title="Remove third modifier"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -349,15 +418,33 @@ export default function HotkeyInput({
         <p className="text-xs text-red-500">{error}</p>
       )}
 
-      {/* Preset toggle */}
-      {showPresetToggle && (
+      {/* Toggles */}
+      <div className="flex items-center gap-3">
+        {showPresetToggle && (
+          <button
+            onClick={() => setUsePreset(true)}
+            className="text-xs text-slate-500 hover:text-primary-500"
+          >
+            Use preset shortcuts
+          </button>
+        )}
+        {/* Remove hotkey → voice only */}
         <button
-          onClick={() => setUsePreset(true)}
-          className="text-xs text-slate-500 hover:text-primary-500"
+          onClick={() => {
+            setField1("Control");
+            setField2("");
+            setField3("");
+            setField4("");
+            setUsePreset(false);
+            setShowCapture(false);
+            onChange("");
+          }}
+          disabled={disabled}
+          className="text-xs text-slate-500 hover:text-red-500"
         >
-          Use preset shortcuts
+          Remove hotkey (voice only)
         </button>
-      )}
+      </div>
 
       {/* Helper text */}
       <p className="text-xs text-slate-400">

@@ -767,7 +767,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                   setEditingWebhook({
                     id: "",
                     name: "",
-                    hotkey: "Control+1",
+                    hotkey: "", // Voice-only by default; user can add a manual hotkey if they want one
                     webhookUrl: "",
                     method: "POST",
                     enabled: true,

@@ -14,6 +14,7 @@ import ProfileChooserModal from "./components/ProfileChooserModal";
 import VoiceCommandModal from "./components/VoiceCommandModal";
 import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
+import { normalizeHotkey } from "./utils/hotkeyValidation";
 import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // License status types matching Rust backend
@@ -105,6 +106,10 @@ function App() {
   const registeredAiTransformHotkey = useRef<string>("");
   const registeredVoiceCommandHotkey = useRef<string>("");
   const registeredWebhookHotkeys = useRef<string[]>([]);
+  // Serializes action-hotkey registration passes so a re-run can't race the
+  // previous pass's unregister/register (which caused spurious "registration
+  // failed" toasts on unrelated hotkeys when an action was added/edited).
+  const actionRegLock = useRef<Promise<void>>(Promise.resolve());
   const aiTransformClipboardText = useRef<string>("");
   const aiTransformStartTime = useRef<number>(0);
   const voiceCommandStartTime = useRef<number>(0);
@@ -1262,7 +1267,13 @@ function App() {
     const abortController = new AbortController();
 
     const setupActionHotkeys = async () => {
-      // Unregister any previously registered hotkeys
+      // Wait for any in-flight registration pass to fully finish before starting,
+      // so passes never overlap and race on the same hotkeys.
+      await actionRegLock.current.catch(() => {});
+      if (abortController.signal.aborted) return;
+
+      // Unregister any previously registered hotkeys (awaited — the cleanup no
+      // longer fire-and-forgets, so this is the single teardown path).
       for (const hotkey of registeredWebhookHotkeys.current) {
         if (abortController.signal.aborted) {
           console.log("Hotkey registration aborted during unregister phase");
@@ -1280,6 +1291,20 @@ function App() {
       }
       registeredWebhookHotkeys.current = [];
 
+      // Track which physical chords are already claimed this pass so we never
+      // call register() twice for the same chord (the OS rejects the second,
+      // and two actions can store the same chord in different modifier orders).
+      // Seed with the system hotkeys so action shortcuts can't shadow them.
+      const claimedChords = new Map<string, string>();
+      const systemSettings = useAppStore.getState().settings;
+      const seedSystemChord = (hotkey: string | undefined, label: string) => {
+        if (hotkey) claimedChords.set(normalizeHotkey(hotkey), label);
+      };
+      seedSystemChord(systemSettings.hotkeyRecord, "Voice to Text");
+      seedSystemChord(systemSettings.hotkeyAiTransform, "AI Transform");
+      seedSystemChord(systemSettings.hotkeyHistory, "History");
+      seedSystemChord(systemSettings.hotkeyVoiceCommand, "Voice Command");
+
       // Register webhook action hotkeys
       for (const action of webhookActions) {
         if (abortController.signal.aborted) {
@@ -1292,6 +1317,17 @@ function App() {
         // - For SMART_URL: no webhookUrl required
         if (!action.enabled || !action.hotkey) continue;
         if ((action.method === "POST" || action.method === "GET" || action.method === "URL") && !action.webhookUrl) {
+          continue;
+        }
+
+        // Skip a chord already claimed by an earlier action/system hotkey — the
+        // OS only allows one registration per physical chord. Report it clearly
+        // instead of letting register() throw a generic failure.
+        const webhookChord = normalizeHotkey(action.hotkey);
+        const webhookConflict = claimedChords.get(webhookChord);
+        if (webhookConflict) {
+          console.warn(`Skipping webhook hotkey ${action.hotkey} for ${action.name}: already used by ${webhookConflict}`);
+          showToast(`${action.name}: shortcut already used by ${webhookConflict}`, "error");
           continue;
         }
 
@@ -1322,9 +1358,11 @@ function App() {
           });
 
           registeredWebhookHotkeys.current.push(action.hotkey);
+          claimedChords.set(webhookChord, action.name);
           console.log(`Registered webhook hotkey: ${action.hotkey} -> ${action.name} (${action.method})`);
         } catch (error) {
           console.error(`Failed to register webhook hotkey ${action.hotkey}:`, error);
+          showToast(`Hotkey registration failed: ${action.hotkey} (${action.name})`, "error");
         }
       }
 
@@ -1335,6 +1373,15 @@ function App() {
           return;
         }
         if (!action.enabled || !action.hotkey || !action.prompt) continue;
+
+        // Skip a chord already claimed by an earlier action/system hotkey.
+        const promptChord = normalizeHotkey(action.hotkey);
+        const promptConflict = claimedChords.get(promptChord);
+        if (promptConflict) {
+          console.warn(`Skipping prompt hotkey ${action.hotkey} for ${action.name}: already used by ${promptConflict}`);
+          showToast(`${action.name}: shortcut already used by ${promptConflict}`, "error");
+          continue;
+        }
 
         try {
           const isReg = await isRegistered(action.hotkey);
@@ -1356,25 +1403,27 @@ function App() {
           });
 
           registeredWebhookHotkeys.current.push(action.hotkey);
+          claimedChords.set(promptChord, action.name);
           console.log(`Registered prompt hotkey: ${action.hotkey} -> ${action.name}`);
         } catch (error) {
           console.error(`Failed to register prompt hotkey ${action.hotkey}:`, error);
+          showToast(`Hotkey registration failed: ${action.hotkey} (${action.name})`, "error");
         }
       }
     };
 
-    setupActionHotkeys();
+    // Publish this pass on the lock so the next effect run waits for it.
+    actionRegLock.current = setupActionHotkeys();
 
     // Cleanup on unmount or when actions change
     return () => {
-      // Abort any in-flight registration to prevent race conditions
+      // Abort this pass; the NEXT pass's awaited teardown loop unregisters
+      // everything in registeredWebhookHotkeys.current. We intentionally do NOT
+      // fire-and-forget unregister here — that was racing the next pass's
+      // register() calls and causing spurious failures on unrelated hotkeys.
       abortController.abort();
-      for (const hotkey of registeredWebhookHotkeys.current) {
-        unregister(hotkey).catch(console.error);
-      }
-      registeredWebhookHotkeys.current = [];
     };
-  }, [webhookActions, promptActions, executeWebhookAction, executePromptAction]);
+  }, [webhookActions, promptActions, executeWebhookAction, executePromptAction, showToast]);
 
   // Handle profile chooser selection (in-window modal)
   const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {

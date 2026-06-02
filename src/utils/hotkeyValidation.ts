@@ -3,6 +3,11 @@ import type { UserSettings, HotkeyDefinition, HotkeyModifier } from "../types";
 // List of valid modifier keys
 const MODIFIERS: HotkeyModifier[] = ["Control", "Alt", "Shift", "Meta"];
 
+// Canonical modifier ordering. Hotkey strings are sorted into this order so that
+// physically identical shortcuts (e.g. "Control+Shift+Alt+D" vs "Control+Alt+Shift+D")
+// produce the same string and are caught by the exact-string conflict detector.
+const MODIFIER_ORDER: HotkeyModifier[] = ["Control", "Alt", "Shift", "Meta"];
+
 /**
  * Get all hotkeys currently in use across the application.
  * Returns a Map of hotkey string -> action name (for conflict messages).
@@ -105,8 +110,28 @@ export function hotkeyDefinitionToString(def: HotkeyDefinition): string {
     return "";
   }
 
-  const parts = [...def.modifiers, def.key];
+  // Sort modifiers into canonical order so equivalent shortcuts stringify identically.
+  const sortedModifiers = [...def.modifiers].sort(
+    (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b)
+  );
+  const parts = [...sortedModifiers, def.key];
   return parts.join("+");
+}
+
+/**
+ * Normalize a hotkey string to canonical modifier order.
+ * Two physically identical shortcuts stored in different modifier orders
+ * (e.g. "Shift+Control+1" and "Control+Shift+1") both normalize to the same
+ * string, so the exact-string conflict detector can catch the collision.
+ * Empty / no-key strings pass through unchanged. Idempotent.
+ */
+export function normalizeHotkey(hotkey: string): string {
+  if (!hotkey) {
+    return hotkey;
+  }
+  const normalized = hotkeyDefinitionToString(parseHotkeyToDefinition(hotkey));
+  // If parsing produced no key (malformed), keep the original rather than dropping it.
+  return normalized || hotkey;
 }
 
 /**
@@ -178,6 +203,22 @@ export function getPresetHotkeys(): { value: string; label: string }[] {
     presets.push({
       value: `Control+Shift+${i}`,
       label: `Ctrl+Shift+${i}`,
+    });
+  }
+
+  // Ctrl+Alt+1 through Ctrl+Alt+9
+  for (let i = 1; i <= 9; i++) {
+    presets.push({
+      value: `Control+Alt+${i}`,
+      label: `Ctrl+Alt+${i}`,
+    });
+  }
+
+  // Ctrl+Shift+Alt+1 through Ctrl+Shift+Alt+9
+  for (let i = 1; i <= 9; i++) {
+    presets.push({
+      value: `Control+Alt+Shift+${i}`,
+      label: `Ctrl+Shift+Alt+${i}`,
     });
   }
 
