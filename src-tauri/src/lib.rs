@@ -9,6 +9,7 @@ mod license;
 mod llm;
 mod secrets;
 mod state;
+mod target_window;
 mod transcription;
 mod window_topmost;
 
@@ -105,6 +106,9 @@ pub fn run() {
             // Initialize application state
             let state = AppState::new();
             app.manage(Mutex::new(state));
+
+            // Cursor Lock target (separate managed state to avoid AppState lock contention)
+            app.manage(target_window::TargetState::default());
             
             // Handle --minimized flag: if present, hide the main window
             let args: Vec<String> = std::env::args().collect();
@@ -297,6 +301,11 @@ pub fn run() {
             commands::paste_text,
             commands::simulate_copy,
             commands::get_selected_text,
+            // Cursor Lock (locked paste target)
+            commands::lock_paste_target,
+            commands::clear_paste_target,
+            commands::get_lock_state,
+            commands::paste_to_target,
             commands::get_audio_devices,
             commands::set_audio_device,
             commands::play_sound,

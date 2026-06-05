@@ -101,6 +101,10 @@ function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
     hotkey_voice_command: settings.hotkeyVoiceCommand ?? "Control+Shift+Space",
     voice_command_enabled: settings.voiceCommandEnabled ?? true,
     voice_command_auto_execute_threshold: settings.voiceCommandAutoExecuteThreshold ?? 0.4,
+    // Cursor Lock settings
+    cursor_lock_enabled: settings.cursorLockEnabled ?? false,
+    hotkey_lock_target: settings.hotkeyLockTarget ?? "Alt+Shift+Z",
+    lock_target_auto_enter: settings.lockTargetAutoEnter ?? true,
   };
 }
 
@@ -130,6 +134,10 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     hotkeyVoiceCommand: fileSettings.hotkey_voice_command ?? "Control+Shift+Space",
     voiceCommandEnabled: fileSettings.voice_command_enabled ?? true,
     voiceCommandAutoExecuteThreshold: fileSettings.voice_command_auto_execute_threshold ?? 0.4,
+    // Cursor Lock settings
+    cursorLockEnabled: fileSettings.cursor_lock_enabled ?? false,
+    hotkeyLockTarget: fileSettings.hotkey_lock_target ?? "Alt+Shift+Z",
+    lockTargetAutoEnter: fileSettings.lock_target_auto_enter ?? true,
   };
 }
 
@@ -226,6 +234,9 @@ interface AppState {
   showVoiceCommandModal: boolean;
   voiceCommandTranscript: string | null;
 
+  // Cursor Lock (transient — armed target window; not persisted)
+  lockedTarget: { title: string } | null;
+
   // Actions
   initialize: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -245,6 +256,7 @@ interface AppState {
   setVoiceCommandListening: (listening: boolean) => void;
   setShowVoiceCommandModal: (show: boolean) => void;
   setVoiceCommandTranscript: (transcript: string | null) => void;
+  setLockedTarget: (target: { title: string } | null) => void;
 }
 
 const defaultSettings: UserSettings = {
@@ -283,6 +295,11 @@ const defaultSettings: UserSettings = {
   hotkeyVoiceCommand: "Control+Shift+Space",
   voiceCommandEnabled: true,
   voiceCommandAutoExecuteThreshold: 0.4,
+
+  // Cursor Lock settings
+  cursorLockEnabled: false,
+  hotkeyLockTarget: "Alt+Shift+Z",
+  lockTargetAutoEnter: true,
 };
 
 /**
@@ -354,6 +371,9 @@ export const useAppStore = create<AppState>()(
       voiceCommandListening: false,
       showVoiceCommandModal: false,
       voiceCommandTranscript: null,
+
+      // Cursor Lock (transient)
+      lockedTarget: null,
 
       // Actions
       initialize: async () => {
@@ -487,6 +507,10 @@ export const useAppStore = create<AppState>()(
 
       setVoiceCommandTranscript: (voiceCommandTranscript) => {
         set({ voiceCommandTranscript });
+      },
+
+      setLockedTarget: (lockedTarget) => {
+        set({ lockedTarget });
       },
     }),
     {

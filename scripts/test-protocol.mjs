@@ -439,7 +439,12 @@ function buildRelease(step) {
     // Find the installer
     const nsisDir = join(ROOT, 'src-tauri', 'target', 'release', 'bundle', 'nsis');
     if (existsSync(nsisDir)) {
-      const installers = readdirSync(nsisDir).filter(f => f.endsWith('-setup.exe'));
+      // Sort by mtime DESC so we always pick the just-built installer, not a
+      // stale older-version one left in the bundle dir (readdir is alphabetical,
+      // which would grab e.g. 1.0.0 forever).
+      const installers = readdirSync(nsisDir)
+        .filter(f => f.endsWith('-setup.exe'))
+        .sort((a, b) => statSync(join(nsisDir, b)).mtimeMs - statSync(join(nsisDir, a)).mtimeMs);
       if (installers.length > 0) {
         const installerPath = join(nsisDir, installers[0]);
         const installerSize = (statSync(installerPath).size / (1024 * 1024)).toFixed(2);
@@ -522,7 +527,11 @@ function runInstaller(step) {
     throw new Error('NSIS directory not found - build may have failed');
   }
 
-  const installers = readdirSync(nsisDir).filter(f => f.endsWith('-setup.exe'));
+  // Sort by mtime DESC so we install the freshly-built version, not a stale
+  // older installer left in the bundle dir (readdir order is alphabetical).
+  const installers = readdirSync(nsisDir)
+    .filter(f => f.endsWith('-setup.exe'))
+    .sort((a, b) => statSync(join(nsisDir, b)).mtimeMs - statSync(join(nsisDir, a)).mtimeMs);
   if (installers.length === 0) {
     throw new Error('No installer found in NSIS directory');
   }

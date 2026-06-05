@@ -1,8 +1,99 @@
 {
   "version": "1.0",
-  "last_updated": "2025-12-20T19:57:19.533Z",
-  "count": 38,
+  "last_updated": "2026-06-05T00:23:10.984Z",
+  "count": 45,
   "entries": [
+    {
+      "id": "2026-06-05__tauri-build__test-protocol-installs-wrong-version",
+      "file": "2026-06-05__tauri-build__test-protocol-installs-wrong-version.md",
+      "title": "test-protocol-installs-wrong-version",
+      "date": "2026-06-05",
+      "area": "tauri-build",
+      "tags": [
+        "tauri",
+        "build",
+        "test-protocol",
+        "installer",
+        "nsis",
+        "gotcha"
+      ],
+      "summary": "Added the Cursor Lock feature and ran the full test-protocol. Build, lint, typecheck and cargo all passed and the release built, but the new toggle did not appear in the running app.",
+      "problem": "scripts/test-protocol.mjs picked the installer via readdirSync(nsisDir)[0], which is alphabetical. With 6 stale installers in bundle/nsis it always chose the OLDEST (SpeakEasy_1.0.0) and installed that over the fresh 1.0.9 build, so the new code never reached the running app while every gate still reported PASS.",
+      "fix": "Sorted installers by mtime descending in both buildRelease and runInstaller so the freshly built one is always chosen; manually installed 1.0.9; deleted the 5 stale installers. Also added .claude to eslint ignores so a leftover worktree stopped breaking lint."
+    },
+    {
+      "id": "2026-06-04__cursor-lock__windows-foreground-steal-architecture",
+      "file": "2026-06-04__cursor-lock__windows-foreground-steal-architecture.md",
+      "title": "Cursor Lock — delivering text to a background window on Windows",
+      "date": "2026-06-04",
+      "area": "cursor-lock",
+      "tags": [
+        "tauri",
+        "rust",
+        "windows",
+        "win32",
+        "focus",
+        "ux"
+      ],
+      "summary": "Built \"Cursor Lock\": the user pins a destination field (click it, press Alt+Shift+Z),\nthen dictates and walks away; when transcription/transform output is ready, SpeakEasy\nforces the locked window to the foreground, pastes, and optionally presses Enter. The\nlocked target is stored in a separate Tauri-managed `TargetState` (HWND as `isize`), and\nALL five output paste paths (dictation, AI Transform, both Prompt Actions, Webhook\nresponse) route through one shared `pasteOutput()` helper so behavior can't drift.",
+      "problem": "The hard part is foregrounding a *background* window. Per MSDN's `SetForegroundWindow`\nRemarks, a background process is normally refused — Windows just flashes the taskbar\nbutton instead. At delivery time the user is working in another app, so SpeakEasy is not\nthe foreground process and didn't receive the last input event → the focus-steal fails.\nNaive code would then `Ctrl+V` (and Enter) into whatever app the user is currently in,\ndumping the transcript into an unrelated document. `AttachThreadInput` is NOT a reliable\nbypass on Win10/11.",
+      "fix": "In `src-tauri/src/target_window.rs`, `focus_window_robust()`:\n1. `IsWindow()` guard against a stale/closed HWND.\n2. Save then zero the foreground-lock timeout via\n   `SystemParametersInfoW(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, ...)` (the lever AutoHotkey's\n   `WinActivate` uses), restore it afterward.\n3. `AttachThreadInput` as a secondary aid (it lives in `Win32::System::Threading`, not\n   `KeyboardAndMouse` — needed the `Win32_System_Threading` windows-crate feature).\n4. **Return `GetForegroundWindow() == target`** as the only trustworthy success signal.\n\nThe `paste_to_target` command then **refuses to paste unless that returns true**, and\nre-verifies foreground immediately before both the paste and the Enter. On failure the\ntext is left on the clipboard with a toast — a benign \"press Ctrl+V yourself\" instead of\ncorrupting another app. The target is `take()`n up front (one-shot, no double-fire)."
+    },
+    {
+      "id": "2026-03-13__devops__auto-updates-file-logging-beta-distribution",
+      "file": "2026-03-13__devops__auto-updates-file-logging-beta-distribution.md",
+      "title": "Auto-Updates, File Logging & Beta Distribution",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "Enabled auto-updates and file logging for SpeakEasy v1.0.1 to solve two critical beta distribution problems: no way to diagnose user issues remotely (no log files on disk), and no way to push fixes without manually sending new installers.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2026-03-13__devops__auto-diagnostic-reporting-supabase",
+      "file": "2026-03-13__devops__auto-diagnostic-reporting-supabase.md",
+      "title": "Auto-Diagnostic Reporting to Supabase",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "Added automatic error log reporting: on every app startup, WARN/ERROR entries from the local log file are uploaded to a `diagnostic_logs` table in Supabase. Developers can diagnose beta tester issues without asking users to manually find and send log files.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2026-02-18__devops__phantom-dev-server-and-silent-recording-failures",
+      "file": "2026-02-18__devops__phantom-dev-server-and-silent-recording-failures.md",
+      "title": "Phantom Dev Server Hotkey Conflicts & Silent Recording Failures",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "Three issues surfaced after test-protocol rebuilds: (1) hotkeys intermittently stopped working ~3 minutes after install, (2) recording start failures were invisible to the user, (3) OpenAI o3-mini rejected the `max_tokens` parameter. Root cause of #1 was the test-protocol always spawning a phantom dev server due to false-positive node.exe detection.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2026-02-18__devops__bulletproof-admin-license-and-process-guardrails",
+      "file": "2026-02-18__devops__bulletproof-admin-license-and-process-guardrails.md",
+      "title": "Bulletproof Admin License Persistence & Process Guardrails",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "Admin license status kept resetting because `activate_license()` hardcoded `is_admin: false`. Additionally, hotkey registration failures were silent (same bug class as the AI Transform errors fixed earlier). Added triple-redundant admin persistence, toast notifications on all hotkey registrations, coding rules in CLAUDE.md, and smoke test checklist to test-protocol.",
+      "problem": "",
+      "fix": ""
+    },
+    {
+      "id": "2026-02-18__bugfix__fix-ai-transform-silent-errors-and-vite-build",
+      "file": "2026-02-18__bugfix__fix-ai-transform-silent-errors-and-vite-build.md",
+      "title": "Fix AI Transform Silent Errors & Vite Multi-Page Build",
+      "date": "Unknown",
+      "area": "general",
+      "tags": [],
+      "summary": "AI Transform feature failed silently — hotkey fired (sound played) but nothing happened. All errors were only logged to `console.error` with zero user-visible feedback. Additionally, Vite production builds were broken by inline `<style>` tags in multi-page HTML entry points.",
+      "problem": "",
+      "fix": ""
+    },
     {
       "id": "2025-12-20__frontend__settings-panel-ux-improvements",
       "file": "2025-12-20__frontend__settings-panel-ux-improvements.md",

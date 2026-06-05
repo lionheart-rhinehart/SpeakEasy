@@ -102,9 +102,11 @@ function App() {
   const hotkeyRecord = settings.hotkeyRecord || DEFAULT_RECORD_HOTKEY;
   const hotkeyAiTransform = settings.hotkeyAiTransform || DEFAULT_AI_TRANSFORM_HOTKEY;
   const hotkeyVoiceCommand = settings.hotkeyVoiceCommand || DEFAULT_VOICE_COMMAND_HOTKEY;
+  const hotkeyLockTarget = settings.hotkeyLockTarget || "Alt+Shift+Z";
   const registeredRecordHotkey = useRef<string>("");
   const registeredAiTransformHotkey = useRef<string>("");
   const registeredVoiceCommandHotkey = useRef<string>("");
+  const registeredLockHotkey = useRef<string>("");
   const registeredWebhookHotkeys = useRef<string[]>([]);
   // Serializes action-hotkey registration passes so a re-run can't race the
   // previous pass's unregister/register (which caused spurious "registration
@@ -128,6 +130,32 @@ function App() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Cursor Lock: single source of truth for "where does produced output go".
+  // Copies to clipboard first (so text is never lost), then delivers to the
+  // armed locked target if Cursor Lock is on, otherwise pastes into the current
+  // foreground window exactly like before. Used by ALL output paths.
+  const pasteOutput = useCallback(async (text: string) => {
+    await invoke("copy_to_clipboard", { text });
+    const s = useAppStore.getState();
+    const target = s.settings.cursorLockEnabled ? s.lockedTarget : null;
+    if (target) {
+      try {
+        await invoke("paste_to_target", { pressEnter: s.settings.lockTargetAutoEnter ?? true });
+        showToast(`Pasted into ${target.title}`, "success");
+      } catch (e) {
+        // Rust aborts BEFORE pasting if it can't foreground the locked window,
+        // so the text is safely still on the clipboard — never the wrong app.
+        console.error("Locked paste failed:", e);
+        showToast("Couldn't reach your locked window — text is on your clipboard", "error");
+      } finally {
+        s.setLockedTarget(null); // one-shot (Rust also consumed it)
+      }
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await invoke("paste_text");
+    }
+  }, [showToast]);
 
   // Debounce tracking for hotkey actions (prevents spam opens)
   const actionLastRunRef = useRef<Map<string, number>>(new Map());
@@ -409,17 +437,17 @@ function App() {
                 console.log("Transcription completed via hotkey:", result.text);
 
                 // Auto-paste: copy to clipboard and simulate paste
-                if (currentSettings.autoPasteMode !== "never") {
-                  try {
-                    await invoke("copy_to_clipboard", { text: result.text });
-                    console.log("Text copied to clipboard");
-
-                    // Small delay then paste
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    await invoke("paste_text");
-                    console.log("Paste simulated");
-                  } catch (pasteError) {
-                    console.error("Auto-paste failed:", pasteError);
+                {
+                  // Cursor Lock, when armed, overrides "never" — locking is explicit intent.
+                  const lockArmed =
+                    useAppStore.getState().settings.cursorLockEnabled &&
+                    !!useAppStore.getState().lockedTarget;
+                  if (lockArmed || currentSettings.autoPasteMode !== "never") {
+                    try {
+                      await pasteOutput(result.text);
+                    } catch (pasteError) {
+                      console.error("Auto-paste failed:", pasteError);
+                    }
                   }
                 }
               } catch (error) {
@@ -459,7 +487,59 @@ function App() {
         registeredRecordHotkey.current = "";
       }
     };
-  }, [hotkeyRecord, showToast]);
+  }, [hotkeyRecord, showToast, pasteOutput]);
+
+  // Register Cursor Lock target hotkey (configurable, default Alt+Shift+Z).
+  // Press = capture the current foreground window as the locked paste target.
+  // Live-rebindable: changing hotkeyLockTarget re-runs this effect, unregistering
+  // the old combo and registering the new one with no restart.
+  useEffect(() => {
+    const setupLockHotkey = async () => {
+      try {
+        if (registeredLockHotkey.current && registeredLockHotkey.current !== hotkeyLockTarget) {
+          await unregister(registeredLockHotkey.current).catch(console.error);
+          registeredLockHotkey.current = "";
+        }
+        if (await isRegistered(hotkeyLockTarget)) {
+          await unregister(hotkeyLockTarget);
+        }
+
+        await register(hotkeyLockTarget, async (event) => {
+          if (event.state !== "Pressed") return;
+          // Don't arm a target while the user is recording a new hotkey in Settings.
+          if (useAppStore.getState().isCapturingHotkey) return;
+
+          if (!useAppStore.getState().settings.cursorLockEnabled) {
+            showToast("Turn on Cursor Lock first (toggle in the main window)", "info");
+            return;
+          }
+          try {
+            const title = await invoke<string>("lock_paste_target");
+            useAppStore.getState().setLockedTarget({ title });
+            showToast(`🔒 Locked to: ${title}`, "success");
+          } catch (err) {
+            console.error("lock_paste_target failed:", err);
+            showToast(`Couldn't lock target: ${err}`, "error");
+          }
+        });
+
+        registeredLockHotkey.current = hotkeyLockTarget;
+        console.log(`Cursor Lock hotkey registered: ${hotkeyLockTarget}`);
+      } catch (error) {
+        console.error("Failed to register Cursor Lock hotkey:", error);
+        showToast(`Cursor Lock hotkey registration failed: ${hotkeyLockTarget}`, "error");
+      }
+    };
+
+    setupLockHotkey();
+
+    return () => {
+      if (registeredLockHotkey.current) {
+        unregister(registeredLockHotkey.current).catch(console.error);
+        registeredLockHotkey.current = "";
+      }
+    };
+  }, [hotkeyLockTarget, showToast]);
 
   // Register AI Transform hotkey (configurable, default Ctrl+`)
   // Flow: Press = grab clipboard + start recording, Release = transcribe instruction + GPT transform + paste
@@ -644,10 +724,8 @@ function App() {
               if (llmResult.success && llmResult.output_text) {
                 console.log(`AI Transform complete: ${llmResult.output_text.length} chars via ${llmResult.provider}/${llmResult.model}`);
 
-                // Copy to clipboard and paste
-                await invoke("copy_to_clipboard", { text: llmResult.output_text });
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                await invoke("paste_text");
+                // Copy to clipboard and paste (honors Cursor Lock)
+                await pasteOutput(llmResult.output_text);
 
                 // Play success sound
                 if (currentState.settings.audioEnabled) {
@@ -725,7 +803,7 @@ function App() {
         registeredAiTransformHotkey.current = "";
       }
     };
-  }, [hotkeyAiTransform, showToast]);
+  }, [hotkeyAiTransform, showToast, pasteOutput]);
 
   // Handle prompt action execution (LLM-based transforms with stored prompts)
   const executePromptAction = useCallback(async (action: PromptAction) => {
@@ -823,10 +901,8 @@ function App() {
       if (result.success && result.output_text) {
         console.log(`Prompt Action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
 
-        // Copy to clipboard and paste
-        await invoke("copy_to_clipboard", { text: result.output_text });
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        await invoke("paste_text");
+        // Copy to clipboard and paste (honors Cursor Lock)
+        await pasteOutput(result.output_text);
 
         // Play success sound
         if (currentSettings.audioEnabled) {
@@ -873,7 +949,7 @@ function App() {
     } finally {
       promptActionBusy.current = false;
     }
-  }, [showToast]);
+  }, [showToast, pasteOutput]);
 
   // Handle hotkey action execution (webhooks, URL, SMART_URL)
   const executeWebhookAction = useCallback(async (action: WebhookAction) => {
@@ -1134,10 +1210,8 @@ function App() {
         if (result.success && result.output_text) {
           console.log(`PROMPT action: complete (${result.output_text.length} chars via ${result.provider}/${result.model})`);
 
-          // Copy to clipboard and paste
-          await invoke("copy_to_clipboard", { text: result.output_text });
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          await invoke("paste_text");
+          // Copy to clipboard and paste (honors Cursor Lock)
+          await pasteOutput(result.output_text);
 
           // Play success sound
           if (currentSettings.audioEnabled) {
@@ -1238,12 +1312,8 @@ function App() {
       if (result.success && result.output_text) {
         console.log(`Webhook: received response (${result.output_text.length} chars)`);
 
-        // Copy result to clipboard and paste
-        await invoke("copy_to_clipboard", { text: result.output_text });
-
-        // Small delay then paste
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        await invoke("paste_text");
+        // Copy result to clipboard and paste (honors Cursor Lock)
+        await pasteOutput(result.output_text);
 
         // Play success sound
         if (currentSettings.audioEnabled) {
@@ -1259,7 +1329,7 @@ function App() {
       console.error("Webhook: HTTP request error -", error);
       showToast(`Webhook error: ${error}`, "error");
     }
-  }, [showToast]);
+  }, [showToast, pasteOutput]);
 
   // Register hotkey actions (webhooks, URL, SMART_URL, and prompt actions)
   useEffect(() => {

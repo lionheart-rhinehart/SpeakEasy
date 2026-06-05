@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "../stores/appStore";
 import RecordingButton from "./RecordingButton";
 import VoiceCommandButton from "./VoiceCommandButton";
@@ -22,8 +23,26 @@ function formatHotkeyDisplay(hotkey: string): string {
 }
 
 export default function MainWindow() {
-  const { recordingState, lastTranscription, setSettingsOpen, setHistoryOpen, apiKey, setApiKey, settings, updateSettings } =
+  const { recordingState, lastTranscription, setSettingsOpen, setHistoryOpen, apiKey, setApiKey, settings, updateSettings, lockedTarget, setLockedTarget } =
     useAppStore();
+
+  const clearLockedTarget = async () => {
+    setLockedTarget(null);
+    try {
+      await invoke("clear_paste_target");
+    } catch (e) {
+      console.error("clear_paste_target failed:", e);
+    }
+  };
+
+  const toggleCursorLock = async () => {
+    const next = !settings.cursorLockEnabled;
+    updateSettings({ cursorLockEnabled: next });
+    if (!next) {
+      // Turning the feature off must also disarm any locked target (no stale fire).
+      await clearLockedTarget();
+    }
+  };
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [tempApiKey, setTempApiKey] = useState("");
 
@@ -206,6 +225,41 @@ export default function MainWindow() {
         )}
 
         <RecordingButton />
+
+        {/* Cursor Lock toggle — pin a destination field, dictate, walk away */}
+        <div className="w-full flex flex-col items-center gap-1">
+          <button
+            onClick={toggleCursorLock}
+            title="When on, press your lock hotkey in a field to pin it; output is delivered there."
+            className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${
+              settings.cursorLockEnabled
+                ? "bg-primary-600 text-white shadow-sm"
+                : "bg-slate-100 text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {settings.cursorLockEnabled ? "🔒 Cursor Lock: On" : "Cursor Lock: Off"}
+          </button>
+          {settings.cursorLockEnabled && (
+            <p className="text-xs text-text-secondary text-center">
+              {lockedTarget ? (
+                <>
+                  Locked → <span className="font-medium">{lockedTarget.title}</span>{" "}
+                  <button onClick={clearLockedTarget} className="text-primary-600 underline">
+                    clear
+                  </button>
+                </>
+              ) : (
+                <>
+                  Press{" "}
+                  <span className="font-medium">
+                    {formatHotkeyDisplay(settings.hotkeyLockTarget || "Alt+Shift+Z")}
+                  </span>{" "}
+                  in your target field
+                </>
+              )}
+            </p>
+          )}
+        </div>
 
         {/* Voice Command Button */}
         {settings.voiceCommandEnabled && (

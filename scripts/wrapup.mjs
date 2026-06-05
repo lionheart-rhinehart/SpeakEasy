@@ -105,6 +105,10 @@ const SECRET_PATTERNS = [
 const IGNORE_DIRS = [
   'node_modules', '.git', 'dist', 'build', 'target', '.next', '__pycache__',
   '.wrapup.json', 'package-lock.json', 'Cargo.lock', '.env.example',
+  // Tooling/backups/worktrees are not shippable source and contain doc examples
+  // of secret patterns (e.g. "-----BEGIN PRIVATE KEY-----" in command docs) that
+  // would otherwise false-positive and block every wrapup.
+  '.claude', '.backups', 'worktrees',
   // Test directories often have fake keys for testing
   'test', 'tests', '__tests__', 'spec', '__mocks__'
 ];
