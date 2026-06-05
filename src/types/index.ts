@@ -70,6 +70,11 @@ export interface UserSettings {
   hotkeyVoiceCommand?: string;
   voiceCommandEnabled?: boolean;
   voiceCommandAutoExecuteThreshold?: number;
+
+  // Cursor Lock settings (optional for backward compatibility)
+  cursorLockEnabled?: boolean;
+  hotkeyLockTarget?: string;
+  lockTargetAutoEnter?: boolean;
 }
 
 // API key status from backend (does not contain the actual key)
@@ -233,4 +238,9 @@ export interface FileUserSettings {
   hotkey_voice_command?: string;
   voice_command_enabled?: boolean;
   voice_command_auto_execute_threshold?: number;
+
+  // Cursor Lock settings (optional for backward compatibility)
+  cursor_lock_enabled?: boolean;
+  hotkey_lock_target?: string;
+  lock_target_auto_enter?: boolean;
 }

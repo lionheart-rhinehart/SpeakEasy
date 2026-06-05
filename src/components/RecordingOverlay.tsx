@@ -36,6 +36,25 @@ export default function RecordingOverlay() {
     };
   }, []);
 
+  // Cursor Lock indicator. Driven ONLY by backend events — this overlay is a
+  // separate webview and must NOT import the app store (that would spin up a
+  // second store instance and re-register global hotkeys).
+  const [lockedTitle, setLockedTitle] = useState<string | null>(null);
+  useEffect(() => {
+    // Recover any armed state that may have been emitted before this overlay existed.
+    invoke<string | null>("get_lock_state").then(setLockedTitle).catch(() => {});
+    const unlistenPromise = listen<{ armed: boolean; title: string | null }>(
+      "cursor-lock-change",
+      (event) => {
+        if (!event.payload) return;
+        setLockedTitle(event.payload.armed ? event.payload.title : null);
+      }
+    );
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
   const [waveformHistory, setWaveformHistory] = useState<number[]>(Array(12).fill(0.2));
   const [overlayState, setOverlayState] = useState<OverlayState>("recording");
   const [processingStartTime, setProcessingStartTime] = useState<number | null>(null);
@@ -102,6 +121,14 @@ export default function RecordingOverlay() {
     return (
       <div className="w-full h-full flex items-center justify-center bg-transparent">
         <div className="bg-amber-500 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3">
+          {lockedTitle && (
+            <span
+              className="text-white text-sm"
+              title={`Locked to: ${lockedTitle}`}
+            >
+              🔒
+            </span>
+          )}
           {/* Spinner */}
           <div className="relative w-5 h-5">
             <svg
@@ -141,6 +168,11 @@ export default function RecordingOverlay() {
   return (
     <div className="w-full h-full flex items-center justify-center bg-transparent">
       <div className="bg-red-500 rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3">
+        {lockedTitle && (
+          <span className="text-white text-sm" title={`Locked to: ${lockedTitle}`}>
+            🔒
+          </span>
+        )}
         {/* Recording dot */}
         <div className="relative">
           <div className="w-3 h-3 bg-white rounded-full" />

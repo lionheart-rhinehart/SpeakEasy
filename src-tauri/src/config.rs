@@ -103,6 +103,14 @@ pub struct UserSettings {
     pub voice_command_enabled: bool,
     #[serde(default = "default_voice_command_threshold")]
     pub voice_command_auto_execute_threshold: f64,
+
+    // Cursor Lock settings
+    #[serde(default)]
+    pub cursor_lock_enabled: bool,
+    #[serde(default = "default_hotkey_lock_target")]
+    pub hotkey_lock_target: String,
+    #[serde(default = "default_true")]
+    pub lock_target_auto_enter: bool,
 }
 
 // Default value functions for UserSettings
@@ -151,6 +159,9 @@ fn default_hotkey_voice_command() -> String {
 fn default_voice_command_threshold() -> f64 {
     0.9
 }
+fn default_hotkey_lock_target() -> String {
+    "Alt+Shift+Z".to_string()
+}
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -178,6 +189,9 @@ impl Default for UserSettings {
             hotkey_voice_command: default_hotkey_voice_command(),
             voice_command_enabled: true,
             voice_command_auto_execute_threshold: default_voice_command_threshold(),
+            cursor_lock_enabled: false,
+            hotkey_lock_target: default_hotkey_lock_target(),
+            lock_target_auto_enter: true,
         }
     }
 }

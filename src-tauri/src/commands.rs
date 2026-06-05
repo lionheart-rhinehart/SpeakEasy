@@ -78,6 +78,133 @@ pub async fn get_selected_text() -> Result<String, String> {
     clipboard::get_selected_text().map_err(|e| e.to_string())
 }
 
+// ─────────────────────────── Cursor Lock (locked paste target) ───────────────────────────
+
+/// Resolve a SpeakEasy window's HWND as an isize (so we never lock onto ourselves).
+#[cfg(target_os = "windows")]
+fn window_hwnd_isize(app: &AppHandle, label: &str) -> Option<isize> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let w = app.get_webview_window(label)?;
+    let h = w.window_handle().ok()?;
+    match h.as_raw() {
+        RawWindowHandle::Win32(win32) => Some(win32.hwnd.get() as isize),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn own_hwnds(app: &AppHandle) -> Vec<isize> {
+    ["main", "recording-overlay", "voice-review"]
+        .iter()
+        .filter_map(|label| window_hwnd_isize(app, label))
+        .collect()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn own_hwnds(_app: &AppHandle) -> Vec<isize> {
+    Vec::new()
+}
+
+/// Notify the (separate) overlay webview that the armed state changed.
+fn emit_lock_change(app: &AppHandle, armed: bool, title: Option<&str>) {
+    use tauri::Emitter;
+    let payload = serde_json::json!({ "armed": armed, "title": title });
+    if let Some(overlay) = app.get_webview_window("recording-overlay") {
+        let _ = overlay.emit("cursor-lock-change", payload.clone());
+    } else {
+        // Overlay may not exist yet; global emit is a harmless best-effort.
+        let _ = app.emit("cursor-lock-change", payload);
+    }
+}
+
+/// Capture the current foreground window as the paste target. Returns its title.
+#[tauri::command]
+pub async fn lock_paste_target(
+    app: AppHandle,
+    target_state: State<'_, crate::target_window::TargetState>,
+) -> Result<String, String> {
+    let ours = own_hwnds(&app);
+    let captured = crate::target_window::capture_foreground(&ours)
+        .ok_or_else(|| "Could not capture a target window (don't lock onto SpeakEasy itself)".to_string())?;
+    let title = captured.title.clone();
+    *target_state.target.lock().map_err(|e| e.to_string())? = Some(captured);
+    emit_lock_change(&app, true, Some(&title));
+    log::info!("[cursor-lock] Locked paste target: {}", title);
+    Ok(title)
+}
+
+/// Clear the armed target without delivering.
+#[tauri::command]
+pub async fn clear_paste_target(
+    app: AppHandle,
+    target_state: State<'_, crate::target_window::TargetState>,
+) -> Result<(), String> {
+    *target_state.target.lock().map_err(|e| e.to_string())? = None;
+    emit_lock_change(&app, false, None);
+    log::info!("[cursor-lock] Cleared paste target");
+    Ok(())
+}
+
+/// Return the currently-armed target's title (for the overlay to recover on mount).
+#[tauri::command]
+pub async fn get_lock_state(
+    target_state: State<'_, crate::target_window::TargetState>,
+) -> Result<Option<String>, String> {
+    Ok(target_state
+        .target
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|t| t.title.clone()))
+}
+
+/// Deliver the clipboard text to the armed target: foreground it, paste, optional Enter.
+/// One-shot: the target is consumed up front. NEVER pastes if the target didn't
+/// actually become the foreground window (that would corrupt whatever the user is in).
+#[tauri::command]
+pub async fn paste_to_target(
+    app: AppHandle,
+    target_state: State<'_, crate::target_window::TargetState>,
+    press_enter: bool,
+) -> Result<(), String> {
+    use std::{thread, time::Duration};
+
+    // Consume the target up front (prevents a double-fire if two outputs race).
+    let target = {
+        let mut guard = target_state.target.lock().map_err(|e| e.to_string())?;
+        guard.take()
+    };
+    let target = target.ok_or_else(|| "No paste target armed".to_string())?;
+    emit_lock_change(&app, false, None);
+
+    // Force the locked window forward. If it didn't work, abort — do NOT paste.
+    if !crate::target_window::focus_window_robust(target.hwnd, target.focus_hwnd) {
+        return Err("Could not bring your locked window to the foreground".to_string());
+    }
+
+    // Let the switch settle, then re-verify the target is still foreground.
+    thread::sleep(Duration::from_millis(120));
+    if !crate::target_window::is_foreground(target.hwnd) {
+        return Err("Locked window lost focus before paste".to_string());
+    }
+    crate::clipboard::simulate_paste().map_err(|e| e.to_string())?;
+
+    if press_enter {
+        thread::sleep(Duration::from_millis(80));
+        // Re-verify again so a stray click can't make us submit in the wrong app.
+        if crate::target_window::is_foreground(target.hwnd) {
+            crate::target_window::simulate_enter();
+        }
+    }
+
+    log::info!(
+        "[cursor-lock] Delivered to '{}' (enter: {})",
+        target.title,
+        press_enter
+    );
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
     audio::get_input_devices().map_err(|e| e.to_string())

@@ -748,6 +748,61 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                 </>
               )}
             </div>
+
+            <div className="border-t border-slate-200 my-4" />
+
+            {/* Cursor Lock */}
+            <div>
+              <h4 className="text-xs font-medium text-text-secondary mb-2">Cursor Lock</h4>
+              <p className="text-xs text-text-secondary mb-3">
+                Pin a destination field, then dictate and walk away — output lands in the
+                locked field when it&apos;s ready. Toggle it on from the main window.
+              </p>
+
+              <div className="mb-3">
+                <label className="block text-xs text-text-secondary mb-1">Lock Target Hotkey</label>
+                <HotkeyInput
+                  value={settings.hotkeyLockTarget || "Alt+Shift+Z"}
+                  onChange={(hotkey) => updateSettings({ hotkeyLockTarget: hotkey })}
+                  excludeActionName="Cursor Lock"
+                  showPresetToggle={false}
+                />
+                <p className="text-xs text-text-secondary mt-1">
+                  Click into your target field, then press this to lock it (default Alt+Shift+Z).
+                </p>
+                {(() => {
+                  const lockHk = settings.hotkeyLockTarget || "Alt+Shift+Z";
+                  const others = [
+                    settings.hotkeyRecord,
+                    settings.hotkeyAiTransform,
+                    settings.hotkeyHistory,
+                    settings.hotkeyVoiceCommand,
+                    ...(settings.webhookActions || []).map((a) => a.hotkey),
+                    ...(settings.promptActions || []).map((a) => a.hotkey),
+                  ].filter(Boolean);
+                  return others.includes(lockHk) ? (
+                    <p className="text-xs text-amber-600 mt-1">
+                      ⚠ This combo is already used by another hotkey — one of them may fail to register.
+                    </p>
+                  ) : null;
+                })()}
+              </div>
+
+              <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.lockTargetAutoEnter ?? true}
+                  onChange={(e) => updateSettings({ lockTargetAutoEnter: e.target.checked })}
+                  className="w-4 h-4 text-purple-500 rounded focus:ring-purple-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-text-primary">Press Enter after delivering</p>
+                  <p className="text-xs text-text-secondary">
+                    Auto-submit in the locked field. Turn off for multi-line editors.
+                  </p>
+                </div>
+              </label>
+            </div>
           </CollapsibleSection>
 
           {/* Hotkey Actions Section */}

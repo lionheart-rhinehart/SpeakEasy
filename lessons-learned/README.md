@@ -1,12 +1,19 @@
 # Lessons Learned Index
 
 This directory contains lessons learned from development sessions.
-Updated: 2025-12-20T19:57:19.528Z
+Updated: 2026-06-05T00:23:10.976Z
 
 ## Entries
 
 | Date | Area | Title |
 |------|------|-------|
+| 2026-06-05 | tauri-build | [test protocol installs wrong version](2026-06-05__tauri-build__test-protocol-installs-wrong-version.md) |
+| 2026-06-04 | cursor-lock | [windows foreground steal architecture](2026-06-04__cursor-lock__windows-foreground-steal-architecture.md) |
+| 2026-03-13 | devops | [auto updates file logging beta distribution](2026-03-13__devops__auto-updates-file-logging-beta-distribution.md) |
+| 2026-03-13 | devops | [auto diagnostic reporting supabase](2026-03-13__devops__auto-diagnostic-reporting-supabase.md) |
+| 2026-02-18 | devops | [phantom dev server and silent recording failures](2026-02-18__devops__phantom-dev-server-and-silent-recording-failures.md) |
+| 2026-02-18 | devops | [bulletproof admin license and process guardrails](2026-02-18__devops__bulletproof-admin-license-and-process-guardrails.md) |
+| 2026-02-18 | bugfix | [fix ai transform silent errors and vite build](2026-02-18__bugfix__fix-ai-transform-silent-errors-and-vite-build.md) |
 | 2025-12-20 | frontend | [settings panel ux improvements](2025-12-20__frontend__settings-panel-ux-improvements.md) |
 | 2025-12-20 | frontend | [settings panel reorganization](2025-12-20__frontend__settings-panel-reorganization.md) |
 | 2025-12-20 | frontend | [defer settings api calls](2025-12-20__frontend__defer-settings-api-calls.md) |
