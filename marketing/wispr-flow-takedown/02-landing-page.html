@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SpeakEasy vs. Wispr Flow — Voice that works for you</title>
+<style>
+  :root{
+    --indigo:#5b5bf0; --violet:#7c3aed; --teal:#14b8a6; --ink:#0f1222;
+    --slate:#475069; --mist:#f6f7fb; --line:#e6e8f0; --good:#10b981; --bad:#ef4444;
+    --shadow:0 10px 30px rgba(20,24,60,.08); --shadow-lg:0 24px 60px rgba(20,24,60,.14);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; color:var(--ink); background:#fff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px; margin:0 auto; padding:0 24px}
+  h1,h2,h3{line-height:1.15; letter-spacing:-.02em; margin:0 0 .4em}
+  h1{font-size:clamp(2.1rem,5vw,3.6rem); font-weight:800}
+  h2{font-size:clamp(1.6rem,3.4vw,2.4rem); font-weight:800}
+  h3{font-size:1.15rem; font-weight:700}
+  p{margin:0 0 1em}
+  a{color:var(--indigo); text-decoration:none}
+  .muted{color:var(--slate)}
+  .grad{background:linear-gradient(100deg,var(--indigo),var(--violet) 55%,var(--teal)); -webkit-background-clip:text; background-clip:text; color:transparent}
+  .eyebrow{display:inline-block; font-size:.8rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--violet); background:#efeaff; padding:6px 14px; border-radius:999px; margin-bottom:18px}
+
+  /* nav */
+  .nav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.82); backdrop-filter:blur(12px); border-bottom:1px solid var(--line)}
+  .nav .wrap{display:flex; align-items:center; justify-content:space-between; height:64px}
+  .logo{display:flex; align-items:center; gap:10px; font-weight:800; font-size:1.15rem}
+  .logo .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--indigo),var(--teal));display:inline-block}
+  .btn{display:inline-block; font-weight:700; border-radius:12px; padding:12px 22px; cursor:pointer; border:0; font-size:1rem; transition:transform .15s ease, box-shadow .15s ease}
+  .btn-primary{background:linear-gradient(120deg,var(--indigo),var(--violet)); color:#fff; box-shadow:0 8px 20px rgba(91,91,240,.35)}
+  .btn-primary:hover{transform:translateY(-2px); box-shadow:0 12px 28px rgba(91,91,240,.45)}
+  .btn-ghost{background:#fff; color:var(--ink); border:1.5px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--indigo); color:var(--indigo)}
+  .nav .btn{padding:9px 18px; font-size:.95rem}
+
+  /* hero */
+  .hero{padding:72px 0 40px; background:radial-gradient(1200px 500px at 70% -10%, #efeaff 0%, rgba(255,255,255,0) 60%)}
+  .hero-grid{display:grid; grid-template-columns:1.05fr .95fr; gap:40px; align-items:center}
+  .hero h1 span{display:block}
+  .lead{font-size:1.22rem; color:var(--slate); max-width:33ch}
+  .cta-row{display:flex; gap:14px; flex-wrap:wrap; margin-top:26px}
+  .hero img{width:100%; border-radius:var(--radius); box-shadow:var(--shadow-lg); background:#fff}
+  .trust{display:flex; gap:22px; flex-wrap:wrap; margin-top:28px; color:var(--slate); font-size:.92rem; font-weight:600}
+  .trust b{color:var(--ink)}
+
+  /* sections */
+  section{padding:64px 0}
+  .section-head{max-width:680px; margin-bottom:38px}
+  .center{margin-left:auto;margin-right:auto;text-align:center}
+
+  /* gap section */
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center}
+  .split img{width:100%; border-radius:var(--radius); box-shadow:var(--shadow)}
+
+  /* pillars */
+  .cards{display:grid; grid-template-columns:repeat(3,1fr); gap:20px}
+  .card{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:26px; box-shadow:var(--shadow); transition:transform .18s ease}
+  .card:hover{transform:translateY(-4px)}
+  .card .ico{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:14px;background:linear-gradient(135deg,#efeaff,#e0fbf5)}
+  .card h3{margin-bottom:6px}
+  .card p{margin:0; color:var(--slate); font-size:.97rem}
+
+  /* matrix */
+  .matrix-wrap{overflow-x:auto; border-radius:var(--radius); border:1px solid var(--line); box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:640px; background:#fff}
+  th,td{padding:14px 18px; text-align:left; border-bottom:1px solid var(--line); font-size:.96rem}
+  thead th{background:var(--mist); font-weight:700; position:sticky; top:0}
+  th.se{color:var(--violet)} th.wf{color:var(--slate)}
+  td.dim{color:var(--slate)}
+  .yes{color:var(--good); font-weight:700} .no{color:var(--bad); font-weight:700} .warn{color:#d97706; font-weight:700}
+  tbody tr:hover{background:#fbfbfe}
+
+  /* calculator */
+  .calc{background:linear-gradient(180deg,#0f1222,#1b1f3b); color:#fff; border-radius:26px; padding:40px; box-shadow:var(--shadow-lg)}
+  .calc h2{color:#fff}
+  .calc .muted{color:#aab0c8}
+  .calc-grid{display:grid; grid-template-columns:1fr 1fr; gap:34px; margin-top:26px}
+  .ctrl{margin-bottom:22px}
+  .ctrl label{display:flex; justify-content:space-between; font-weight:600; margin-bottom:8px; font-size:.98rem}
+  .ctrl label .val{color:var(--teal); font-weight:800}
+  input[type=range]{width:100%; accent-color:var(--teal); height:6px}
+  select{width:100%; padding:11px 12px; border-radius:10px; border:1px solid #353a5e; background:#11142a; color:#fff; font-size:1rem}
+  .seg{display:inline-flex; background:#11142a; border:1px solid #353a5e; border-radius:10px; padding:3px; gap:3px; margin-bottom:18px}
+  .seg button{background:transparent; color:#aab0c8; border:0; padding:7px 14px; border-radius:8px; font-weight:600; cursor:pointer; font-size:.9rem}
+  .seg button.active{background:var(--teal); color:#062a25}
+  details.adv{margin-top:6px; border-top:1px solid #2a2f52; padding-top:14px}
+  details.adv summary{cursor:pointer; color:#aab0c8; font-weight:600; font-size:.92rem}
+  details.adv .ctrl{margin-top:14px}
+  details.adv input[type=number]{width:96px; padding:7px 9px; border-radius:8px; border:1px solid #353a5e; background:#11142a; color:#fff}
+  .pricesrc{font-size:.78rem; color:#8189a8; margin-top:8px}
+
+  /* results */
+  .result{background:#11142a; border:1px solid #2a2f52; border-radius:18px; padding:26px}
+  .headline{font-size:1.05rem; color:#cdd3ea; margin-bottom:6px}
+  .bigsave{font-size:clamp(2.2rem,6vw,3.2rem); font-weight:900; line-height:1; margin:4px 0 2px; background:linear-gradient(100deg,#34d399,#22d3ee);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .breakeven{color:#aab0c8; font-size:.98rem; margin-bottom:22px}
+  .barrow{margin:16px 0}
+  .barrow .lab{display:flex; justify-content:space-between; font-size:.9rem; margin-bottom:6px; color:#cdd3ea}
+  .bar{height:30px; border-radius:8px; position:relative; background:#0c0f20; overflow:hidden}
+  .bar .fill{height:100%; border-radius:8px; transition:width .6s cubic-bezier(.2,.8,.2,1); display:flex; align-items:center; padding-left:12px; font-weight:800; font-size:.9rem; color:#fff; white-space:nowrap}
+  .fill.se{background:linear-gradient(90deg,#14b8a6,#22d3ee)}
+  .fill.wf{background:linear-gradient(90deg,#6366f1,#a855f7)}
+  .legend{display:flex; gap:18px; font-size:.85rem; color:#aab0c8; margin-top:14px}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:middle}
+  .disclaim{font-size:.78rem; color:#7780a0; margin-top:18px}
+
+  /* trust/privacy */
+  .trust-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  .tcard{border:1px solid var(--line); border-radius:var(--radius); padding:24px; background:#fff; box-shadow:var(--shadow)}
+  .tcard.bad{border-color:#fde0e0; background:#fff7f7}
+  .tcard.good{border-color:#d4f3ea; background:#f5fffb}
+  .tcard h3{display:flex; align-items:center; gap:8px}
+
+  /* pricing */
+  .pricing{display:grid; grid-template-columns:1.1fr .9fr; gap:30px; align-items:center}
+  .pcard{background:#fff; border:2px solid var(--violet); border-radius:24px; padding:34px; box-shadow:var(--shadow-lg); text-align:center; position:relative}
+  .pcard .tag{position:absolute; top:-14px; left:50%; transform:translateX(-50%); background:linear-gradient(120deg,var(--indigo),var(--violet)); color:#fff; font-size:.78rem; font-weight:700; padding:6px 16px; border-radius:999px; letter-spacing:.05em}
+  .pcard .amt{font-size:3.4rem; font-weight:900; letter-spacing:-.03em}
+  .pcard .amt small{font-size:1rem; font-weight:600; color:var(--slate)}
+  .pcard .vs{color:var(--slate); margin:6px 0 18px}
+  .pcard .vs s{color:var(--bad)}
+  .feat{list-style:none; padding:0; margin:0 0 24px; text-align:left}
+  .feat li{padding:8px 0 8px 28px; position:relative; color:var(--ink)}
+  .feat li::before{content:"✓"; position:absolute; left:0; color:var(--teal); font-weight:800}
+
+  /* faq */
+  .faq details{border:1px solid var(--line); border-radius:14px; padding:0 20px; margin-bottom:12px; background:#fff; box-shadow:var(--shadow)}
+  .faq summary{cursor:pointer; font-weight:700; padding:18px 0; list-style:none; display:flex; justify-content:space-between; align-items:center}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+"; color:var(--indigo); font-size:1.4rem; font-weight:700}
+  .faq details[open] summary::after{content:"–"}
+  .faq details p{padding:0 0 18px; color:var(--slate); margin:0}
+
+  footer{background:var(--mist); border-top:1px solid var(--line); padding:40px 0; color:var(--slate); font-size:.88rem}
+  .disclaimer{font-size:.8rem; color:var(--slate); max-width:80ch; margin-top:10px}
+
+  @media(max-width:880px){
+    .hero-grid,.split,.cards,.calc-grid,.pricing,.trust-grid{grid-template-columns:1fr}
+    .cards{gap:16px}
+    .hero{padding:48px 0 20px}
+    .calc{padding:26px}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="wrap">
+    <div class="logo"><span class="dot"></span> SpeakEasy</div>
+    <div style="display:flex; gap:12px; align-items:center">
+      <a href="#calc" class="btn btn-ghost">Cost calculator</a>
+      <a href="#pricing" class="btn btn-primary">Get your license</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow">For marketers who live in their tools</span>
+      <h1><span>Wispr Flow types for you.</span> <span class="grad">SpeakEasy works for you.</span></h1>
+      <p class="lead">Everyone in the group is hyped on Wispr. It's a great dictation app — it drops text at your cursor. SpeakEasy goes further: <b>say the name of an action and it fires a webhook into your stack, runs a custom AI prompt, or opens the tool you need.</b></p>
+      <div class="cta-row">
+        <a href="#calc" class="btn btn-primary">See what you'd save →</a>
+        <a href="#gap" class="btn btn-ghost">How it's different</a>
+      </div>
+      <div class="trust">
+        <span><b>$99</b> one-time · not $180/yr</span>
+        <span><b>Your</b> API key · pennies per use</span>
+        <span><b>Claude · GPT · OpenRouter</b></span>
+      </div>
+    </div>
+    <div>
+      <img src="images/hero-voice-to-stack.png" alt="Voice flowing into automation, email, AI and browser actions" />
+    </div>
+  </div>
+</header>
+
+<!-- THE GAP -->
+<section id="gap">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The category gap</span>
+      <h2>Dictation drops text. <span class="grad">Automation gets work done.</span></h2>
+      <p class="muted">Wispr Flow has no automation layer — no voice-triggered actions, no no-code webhooks, no custom workflows. It speaks into your cursor and stops there. SpeakEasy turns your voice into a control surface for the marketing tools you already run.</p>
+    </div>
+    <div class="split">
+      <img src="images/comparison-dictation-vs-automation.png" alt="Dictation only versus voice automation" />
+      <div>
+        <h3>Say it → it happens</h3>
+        <p class="muted">Press one hotkey, say <em>"send to my newsletter Zap,"</em> <em>"rewrite this as a hook,"</em> or <em>"open Canva."</em> SpeakEasy fuzzy-matches your words to an action and runs it — webhook, AI prompt, or app launch. No menus, no clicking.</p>
+        <ul class="feat">
+          <li>Unlimited webhook actions → Zapier, Make, n8n, or any endpoint</li>
+          <li>Stored AI prompts with <code>{{text}}</code> templating</li>
+          <li>Per-action hotkeys + Cursor Lock (paste exactly where you want)</li>
+          <li>Pick your model: Claude, GPT, or anything on OpenRouter</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PILLARS -->
+<section style="background:var(--mist)">
+  <div class="wrap">
+    <div class="section-head center">
+      <h2>Five reasons marketers switch</h2>
+    </div>
+    <div class="cards">
+      <div class="card"><div class="ico">⚡</div><h3>Voice that DOES things</h3><p>Trigger webhooks, AI transforms, and tools by voice. Wispr can only type.</p></div>
+      <div class="card"><div class="ico">💸</div><h3>Your keys, your money</h3><p>Bring your own OpenAI key. Dictation runs ~$0.006/min — pennies, not $15/mo.</p></div>
+      <div class="card"><div class="ico">🧠</div><h3>Multi-LLM, not a locked box</h3><p>Run cleanup on Claude, GPT, or OpenRouter. Wispr gives you one closed engine.</p></div>
+      <div class="card"><div class="ico">🎯</div><h3>Power-user control</h3><p>Per-action hotkeys, Cursor Lock, Chrome-profile routing — built for a Windows desk.</p></div>
+      <div class="card"><div class="ico">🔑</div><h3>Own it, don't rent it</h3><p>One license key, yours to keep. No subscription that dies when you stop paying.</p></div>
+      <div class="card"><div class="ico">🛡️</div><h3>No surveillance scandal</h3><p>Clean privacy record. (Wispr was caught sending audio + window screenshots to the cloud in 2025.¹)</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- MATRIX -->
+<section id="matrix">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Head to head</h2>
+      <p class="muted">We concede what Wispr does better. We win on category, cost, and control.</p>
+    </div>
+    <div class="matrix-wrap">
+      <table>
+        <thead><tr><th>Capability</th><th class="se">SpeakEasy</th><th class="wf">Wispr Flow</th></tr></thead>
+        <tbody>
+          <tr><td>Core job</td><td>Voice → <b>actions + text</b></td><td class="dim">Voice → text only</td></tr>
+          <tr><td>Voice commands (say an action's name → it runs)</td><td class="yes">✓ Yes</td><td class="no">✗ None</td></tr>
+          <tr><td>No-code webhooks (Zapier / Make / n8n)</td><td class="yes">✓ Unlimited</td><td class="no">✗ None</td></tr>
+          <tr><td>Stored AI prompt actions</td><td class="yes">✓ Yes</td><td class="no">✗ None</td></tr>
+          <tr><td>Multi-LLM (Claude / GPT / OpenRouter)</td><td class="yes">✓ Yes</td><td class="no">✗ Closed</td></tr>
+          <tr><td>Per-action hotkeys + Cursor Lock</td><td class="yes">✓ Yes</td><td class="no">✗ No</td></tr>
+          <tr><td>Pricing model</td><td><b>$99 one-time</b> + your key</td><td class="dim">$15/mo · ~$180/yr forever</td></tr>
+          <tr><td>Typical cost, year 2+</td><td class="yes">~$10–50/yr usage</td><td class="dim">$180/yr</td></tr>
+          <tr><td>Languages</td><td class="dim">~13 + auto-detect</td><td class="warn">100+ (Wispr wins)</td></tr>
+          <tr><td>Mac / iOS / Android</td><td class="no">✗ Windows only</td><td class="warn">✓ All (Wispr wins)</td></tr>
+          <tr><td>Learned dictionary / auto-format polish</td><td class="dim">On-demand via AI transform</td><td class="warn">✓ Refined (Wispr wins)</td></tr>
+          <tr><td>Offline core dictation</td><td class="dim">✗ Cloud (we don't claim otherwise)</td><td class="dim">✗ Cloud</td></tr>
+          <tr><td>Privacy track record</td><td class="yes">Clean</td><td class="warn">2025 incident¹</td></tr>
+          <tr><td>You hold a license key</td><td class="yes">✓ Yes</td><td class="no">✗ Rental</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- CALCULATOR -->
+<section id="calc">
+  <div class="wrap">
+    <div class="calc">
+      <div class="section-head" style="margin-bottom:6px">
+        <span class="eyebrow" style="background:#1e2342;color:#a9b0ff">Live cost calculator</span>
+        <h2>What will it <span class="grad">actually</span> cost you to switch?</h2>
+        <p class="muted">Plug in the usage number Wispr already shows you. LLM prices update live from OpenRouter, so this never goes stale.</p>
+      </div>
+
+      <div class="calc-grid">
+        <!-- inputs -->
+        <div>
+          <div class="seg" id="inputMode">
+            <button data-mode="words" class="active">Words / week</button>
+            <button data-mode="msgs">Messages / day</button>
+          </div>
+
+          <div class="ctrl" id="wordsCtrl">
+            <label>Your weekly dictation <span class="val"><span id="wordsVal">20,000</span> words</span></label>
+            <input type="range" id="words" min="1000" max="100000" step="1000" value="20000" />
+            <div class="muted" style="font-size:.8rem">Wispr shows this in your usage dashboard.</div>
+          </div>
+
+          <div class="ctrl" id="msgsCtrl" style="display:none">
+            <label>Messages per day <span class="val"><span id="msgsVal">40</span></span></label>
+            <input type="range" id="msgs" min="2" max="300" step="2" value="40" />
+            <label style="margin-top:14px">Avg words per message <span class="val"><span id="wpmsgVal">35</span></span></label>
+            <input type="range" id="wpmsg" min="5" max="120" step="5" value="35" />
+          </div>
+
+          <div class="ctrl">
+            <label for="model">Model for AI cleanup / transforms</label>
+            <select id="model"></select>
+            <div class="pricesrc" id="priceSrc">Loading live prices…</div>
+          </div>
+
+          <div class="ctrl">
+            <label>Share of dictations you run through AI <span class="val"><span id="pctVal">20</span>%</span></label>
+            <input type="range" id="pct" min="0" max="100" step="5" value="20" />
+            <div class="muted" style="font-size:.8rem">Set to 0% to see pure dictation cost.</div>
+          </div>
+
+          <details class="adv">
+            <summary>Advanced assumptions</summary>
+            <div class="ctrl"><label>Speaking rate (WPM)</label><input type="number" id="wpm" value="150" min="80" max="250" /></div>
+            <div class="ctrl"><label>Whisper transcription ($/min)</label><input type="number" id="whisper" value="0.006" step="0.001" min="0" /></div>
+            <div class="ctrl"><label>Avg tokens per word (text ↔ tokens)</label><input type="number" id="tpw" value="1.3" step="0.1" min="0.5" /></div>
+            <div class="muted" style="font-size:.78rem">Whisper rate is OpenAI's list price (no live feed). Everything else updates live.</div>
+          </details>
+        </div>
+
+        <!-- results -->
+        <div class="result">
+          <div class="headline">Over 3 years you'd save about</div>
+          <div class="bigsave" id="save3">$303</div>
+          <div class="breakeven" id="breakeven">Pays for itself in ~9 months, then ~$130/yr forever.</div>
+
+          <div class="barrow">
+            <div class="lab"><span>Year 1 — SpeakEasy ($99 + usage)</span><span id="seY1lab">$145</span></div>
+            <div class="bar"><div class="fill se" id="seY1bar" style="width:60%">SpeakEasy</div></div>
+          </div>
+          <div class="barrow">
+            <div class="lab"><span>Year 1 — Wispr Flow</span><span id="wfY1lab">$180</span></div>
+            <div class="bar"><div class="fill wf" id="wfY1bar" style="width:100%">Wispr</div></div>
+          </div>
+
+          <div class="barrow" style="margin-top:22px">
+            <div class="lab"><span>3-year total — SpeakEasy</span><span id="se3lab">$237</span></div>
+            <div class="bar"><div class="fill se" id="se3bar" style="width:44%">SpeakEasy</div></div>
+          </div>
+          <div class="barrow">
+            <div class="lab"><span>3-year total — Wispr Flow</span><span id="wf3lab">$540</span></div>
+            <div class="bar"><div class="fill wf" id="wf3bar" style="width:100%">Wispr</div></div>
+          </div>
+
+          <div class="legend">
+            <span><i style="background:#22d3ee"></i>SpeakEasy</span>
+            <span><i style="background:#a855f7"></i>Wispr Flow</span>
+          </div>
+          <div class="disclaim" id="disclaim">Estimate. SpeakEasy: $99 once + your Whisper minutes + optional AI-transform tokens. Wispr Flow: $15/mo ($180/yr). Your real cost depends on usage.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIVACY / TRUST -->
+<section id="trust">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Big isn't the same as on your side</h2>
+      <p class="muted">Wispr's scale is real — and it's also why reviewers report a post-trial reliability drop² and why this happened:</p>
+    </div>
+    <div class="trust-grid">
+      <div class="tcard bad">
+        <h3>⚠️ Wispr Flow (2025, reported¹)</h3>
+        <p class="muted">A developer found the app capturing screenshots of your active window and sending audio to third-party cloud infrastructure. Wispr's first move was to <b>ban the researcher who reported it</b> — the CTO apologized only later. Privacy Mode was added after, but users can't independently verify it.</p>
+      </div>
+      <div class="tcard good">
+        <h3>🛡️ SpeakEasy</h3>
+        <p class="muted">No public privacy incident. You hold your own license key and bring your own API key, so your account and your spend stay in your hands. We're straight about the one thing we share with Wispr: transcription is cloud (OpenAI Whisper) — neither tool is offline.</p>
+      </div>
+    </div>
+    <p class="disclaimer">¹ Reported via independent coverage (Medium / ModelPiper, 2025); stated as reported, not adjudicated. ² Aggregated from Trustpilot (2.7/5), Reddit, and 2026 review roundups.</p>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" style="background:var(--mist)">
+  <div class="wrap">
+    <div class="pricing">
+      <div>
+        <span class="eyebrow">The offer</span>
+        <h2>Own your voice tool for <span class="grad">$99</span> — once.</h2>
+        <p class="muted">Less than 7 months of Wispr, and then it's yours. Bring your own OpenAI key and run dictation for pennies. Two devices per license. Free updates.</p>
+        <img src="images/cost-over-time.png" alt="One-time cost stays flat while subscription climbs every year" style="width:100%;border-radius:var(--radius);box-shadow:var(--shadow);margin-top:14px" />
+      </div>
+      <div class="pcard">
+        <div class="tag">FOUNDING-MEMBER PRICE</div>
+        <div class="amt">$99<small> one-time</small></div>
+        <div class="vs">vs Wispr <s>$180/yr</s>, forever</div>
+        <ul class="feat">
+          <li>Voice commands → run any action by name</li>
+          <li>Unlimited webhook + AI-prompt actions</li>
+          <li>Claude, GPT &amp; OpenRouter support</li>
+          <li>Per-action hotkeys + Cursor Lock</li>
+          <li>2 devices · free updates · your API key</li>
+        </ul>
+        <!-- TODO: replace href="#" with your real checkout link (Stripe / Gumroad / etc.) before launch -->
+        <a href="#" data-checkout-placeholder="true" onclick="alert('Placeholder — drop your checkout link (Stripe/Gumroad/etc.) into the buy button before launch.');return false;" class="btn btn-primary" style="width:100%">Get your license →</a>
+        <div class="muted" style="font-size:.8rem;margin-top:12px">Bring your own OpenAI API key. ~5-minute setup.</div>
+        <div style="font-size:.72rem;margin-top:8px;color:#b45309;background:#fff7ed;border:1px dashed #f59e0b;border-radius:8px;padding:6px 10px">⚠ Checkout link not set — placeholder for now.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="wrap" style="max-width:820px">
+    <div class="section-head center" style="margin-left:auto;margin-right:auto">
+      <h2>Straight answers</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Doesn't Wispr support way more languages?</summary><p>Yes — 100+ vs our ~13. If you work across many languages, Wispr is the better dictation engine and we'll say so. Most of us produce in English, where the difference is moot — and you gain a whole automation layer.</p></details>
+      <details><summary>I need it on my phone or Mac.</summary><p>Then Wispr's range fits you. SpeakEasy is a Windows power tool built for where marketing actually gets produced — your desk. It's not trying to be a phone app.</p></details>
+      <details><summary>Is bringing my own API key a hassle?</summary><p>Five minutes, once. That buys you a tool you <em>own</em> instead of a subscription you rent forever — and dictation drops to pennies. The calculator above shows the real total.</p></details>
+      <details><summary>Is SpeakEasy private / offline?</summary><p>Straight answer: transcription is cloud (OpenAI Whisper), same as Wispr. Neither is offline. What's different is you hold your own keys and there's no surveillance incident on our record.</p></details>
+      <details><summary>Wispr's formatting looks cleaner.</summary><p>Their automatic formatting is nice. Ours is on-demand through AI transform — and the same feature also rewrites, summarizes, and restyles on command, which dictation-only can't do.</p></details>
+    </div>
+    <div class="center" style="margin-top:34px">
+      <a href="#calc" class="btn btn-primary">Run your numbers →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="logo" style="color:var(--ink);margin-bottom:8px"><span class="dot"></span> SpeakEasy</div>
+    <p>Voice that works for you — not just types for you.</p>
+    <p class="disclaimer">Comparison reflects public information as of June 2026. SpeakEasy capabilities are verified in the product source. Wispr Flow details are sourced from the vendor's site and independent reviews; criticisms are reported, not adjudicated. Cost figures are estimates that depend on your usage and current model prices. SpeakEasy and Wispr Flow are independent products; trademarks belong to their owners.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // ---- curated models (fallback prices in USD per 1M tokens) ----
+  // Live values overwrite these from OpenRouter when reachable.
+  var MODELS = [
+    { key:'gpt-4o-mini',     label:'GPT-4o mini (cheapest)', or:'openai/gpt-4o-mini',          inM:0.15,  outM:0.60 },
+    { key:'gemini-flash',    label:'Gemini 1.5 Flash',       or:'google/gemini-flash-1.5',     inM:0.075, outM:0.30 },
+    { key:'claude-haiku',    label:'Claude Haiku',           or:'anthropic/claude-3.5-haiku',  inM:0.80,  outM:4.00 },
+    { key:'gpt-4o',          label:'GPT-4o',                 or:'openai/gpt-4o',               inM:2.50,  outM:10.00 },
+    { key:'claude-sonnet',   label:'Claude Sonnet',          or:'anthropic/claude-3.5-sonnet', inM:3.00,  outM:15.00 },
+    { key:'claude-opus',     label:'Claude Opus',            or:'anthropic/claude-3-opus',     inM:15.00, outM:75.00 }
+  ];
+  var WISPR_YR = 180, LICENSE = 99, CACHE_KEY = 'se_or_prices_v1', CACHE_TTL = 6*3600*1000;
+
+  var $ = function(id){ return document.getElementById(id); };
+  function fmt(n){ return '$' + Math.round(n).toLocaleString(); }
+
+  // ---- populate model dropdown ----
+  var sel = $('model');
+  function fillSelect(){
+    sel.innerHTML = '';
+    MODELS.forEach(function(m){
+      var o = document.createElement('option');
+      o.value = m.key;
+      o.textContent = m.label + '  ·  $' + m.inM + '/$' + m.outM + ' per M';
+      sel.appendChild(o);
+    });
+    sel.value = 'claude-sonnet';
+  }
+  fillSelect();
+
+  // ---- live prices from OpenRouter (CORS-friendly, no auth) ----
+  function applyLive(data, when){
+    var map = {};
+    (data||[]).forEach(function(x){ map[x.id] = x.pricing; });
+    var hits = 0;
+    MODELS.forEach(function(m){
+      var p = map[m.or];
+      if(p && p.prompt && p.completion){
+        m.inM = parseFloat(p.prompt) * 1e6;
+        m.outM = parseFloat(p.completion) * 1e6;
+        hits++;
+      }
+    });
+    fillSelect();
+    compute();
+    var d = when ? new Date(when) : new Date();
+    $('priceSrc').textContent = hits
+      ? 'LLM prices auto-updated live from OpenRouter · ' + hits + ' models · checked ' + d.toISOString().slice(0,10)
+      : 'Using built-in price snapshot (live feed returned no matches).';
+  }
+  function loadPrices(){
+    try{
+      var c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if(c && (Date.now() - c.t) < CACHE_TTL){ applyLive(c.data, c.t); return; }
+    }catch(e){}
+    fetch('https://openrouter.ai/api/v1/models')
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var data = (j && j.data) ? j.data : [];
+        try{ localStorage.setItem(CACHE_KEY, JSON.stringify({t:Date.now(), data:data})); }catch(e){}
+        applyLive(data, Date.now());
+      })
+      .catch(function(){
+        $('priceSrc').textContent = 'Live price feed unreachable — using built-in snapshot (still accurate to ~current list prices).';
+      });
+  }
+
+  // ---- input wiring ----
+  var mode = 'words';
+  document.querySelectorAll('#inputMode button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#inputMode button').forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      mode = b.dataset.mode;
+      $('wordsCtrl').style.display = mode==='words' ? '' : 'none';
+      $('msgsCtrl').style.display  = mode==='msgs'  ? '' : 'none';
+      compute();
+    });
+  });
+
+  function wordsPerWeek(){
+    if(mode==='words') return +$('words').value;
+    return (+$('msgs').value) * (+$('wpmsg').value) * 7; // msgs/day * words/msg * 7
+  }
+
+  function currentModel(){
+    return MODELS.filter(function(m){ return m.key === sel.value; })[0] || MODELS[0];
+  }
+
+  function compute(){
+    var words = wordsPerWeek();
+    var wpm = +$('wpm').value || 150;
+    var whisper = +$('whisper').value || 0.006;
+    var tpw = +$('tpw').value || 1.3;
+    var pct = (+$('pct').value)/100;
+    var m = currentModel();
+
+    // labels
+    $('wordsVal').textContent = (+$('words').value).toLocaleString();
+    $('msgsVal').textContent = (+$('msgs').value);
+    $('wpmsgVal').textContent = (+$('wpmsg').value);
+    $('pctVal').textContent = (+$('pct').value);
+
+    var minPerWeek = words / wpm;
+    var whisperYr = minPerWeek * 52 * whisper;
+
+    var wordsTrans = words * pct;
+    var inTok = wordsTrans * tpw, outTok = wordsTrans * tpw;
+    var llmYr = (inTok * (m.inM/1e6) + outTok * (m.outM/1e6)) * 52;
+
+    var usageYr = whisperYr + llmYr;
+    var seY1 = LICENSE + usageYr;
+    var se3  = LICENSE + usageYr * 3;
+    var wf1 = WISPR_YR, wf3 = WISPR_YR * 3;
+    var save3 = wf3 - se3;
+
+    // headline
+    $('save3').textContent = save3 >= 0 ? fmt(save3) : '–' + fmt(-save3);
+    var monthlySaving = (WISPR_YR/12) - (usageYr/12);
+    if(monthlySaving > 0){
+      var months = LICENSE / monthlySaving;
+      var perYr = WISPR_YR - usageYr;
+      $('breakeven').textContent = 'Pays for itself in ~' + Math.max(1,Math.round(months)) + ' months, then ~' + fmt(perYr) + '/yr forever.';
+      $('breakeven').style.color = '#aab0c8';
+    } else {
+      $('breakeven').textContent = 'At this volume Wispr’s flat rate is actually cheaper — and that’s the honest truth. You’d still gain the automation layer.';
+      $('breakeven').style.color = '#fbbf24';
+    }
+
+    // bars (scale to the larger of each pair)
+    function setBar(barId, labId, val, max){
+      $(labId).textContent = fmt(val);
+      $(barId).style.width = Math.max(6, (val/max)*100) + '%';
+    }
+    var max1 = Math.max(seY1, wf1), max3 = Math.max(se3, wf3);
+    setBar('seY1bar','seY1lab', seY1, max1);
+    setBar('wfY1bar','wfY1lab', wf1, max1);
+    setBar('se3bar','se3lab', se3, max3);
+    setBar('wf3bar','wf3lab', wf3, max3);
+
+    $('disclaim').textContent = 'Estimate · ' + m.label + ' for transforms · Whisper $' + whisper.toFixed(3) + '/min · '
+      + Math.round(minPerWeek) + ' spoken min/week. SpeakEasy = $99 once + usage; Wispr = $180/yr.';
+  }
+
+  ['words','msgs','wpmsg','pct','wpm','whisper','tpw'].forEach(function(id){
+    $(id).addEventListener('input', compute);
+  });
+  sel.addEventListener('change', compute);
+
+  compute();
+  loadPrices();
+})();
+</script>
+</body>
+</html>

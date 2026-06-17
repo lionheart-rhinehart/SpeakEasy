@@ -1,0 +1,55 @@
+STATUS: DRAFT — not sent.
+Link below is set to http://localhost:8080/02-landing-page-embedded.html for LOCAL TESTING ONLY.
+>>> Swap it for your public landing-page URL before sending (localhost only works on your machine). <<<
+
+SUBJECT LINE OPTIONS (pick one):
+  1. I tested the "Wispr Flow" everyone's hyping. Here's the math.
+  2. Before you pay $180/yr for Wispr, read this
+  3. The voice tool that does what Wispr can't (for $99, once)
+  4. Why I didn't switch to Wispr Flow — and what I use instead
+  5. Your Wispr subscription vs. a $99 one-time license (real numbers)
+
+PREHEADER: Wispr types into your cursor. This runs your whole stack — and costs pennies.
+
+----------------------------------------------------------------------
+
+Everyone in the group's hyping Wispr Flow. I ran the math — and didn't switch.
+
+Quick one, because a few of you asked. Wispr Flow is a genuinely good
+DICTATION app — it turns your voice into text at your cursor. I tested it
+hard against the tool I actually run, SpeakEasy, and two things jumped out:
+
+1) WISPR ONLY TYPES. SPEAKEASY DOES THINGS.
+   Press a hotkey, say "send to my newsletter Zap," "rewrite this as a
+   hook," or "open Canva" — SpeakEasy fires the webhook, runs the AI
+   prompt, or opens the tool. Wispr has ZERO automation. It's dictation,
+   full stop.
+
+2) THE COST ISN'T CLOSE.
+   Wispr is $15/mo — $180/yr, forever. SpeakEasy is $99 once, and you
+   bring your own OpenAI key, so dictation runs about $0.006/min. At
+   typical usage that's roughly $46/year in usage instead of $180.
+
+   -> Pays for itself in ~9 months, then saves ~$130/year, every year.
+
+I'll be straight: if you need 100+ languages or it on your PHONE, Wispr
+wins — buy Wispr. But if you're producing at a Windows desk and want your
+voice wired into your tools for pennies, it's not a contest.
+
+Run your numbers and see the full comparison (there's a live calculator —
+drop in your own Wispr usage and it shows your exact savings):
+
+  http://localhost:8080/02-landing-page-embedded.html
+
+----------------------------------------------------------------------
+FOUNDING-MEMBER PRICE FOR THE GROUP
+  $99 one-time  —  vs Wispr $180/yr, forever
+  2 devices · bring your own API key
+----------------------------------------------------------------------
+
+— Cody
+
+Comparison reflects public info as of June 2026; Wispr criticisms are
+reported, not adjudicated. Cost figures are estimates that depend on your
+usage and current model prices. SpeakEasy and Wispr Flow are independent
+products; trademarks belong to their owners.
