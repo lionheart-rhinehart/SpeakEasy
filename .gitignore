@@ -46,3 +46,4 @@ supabase/.temp/
 
 # Windows reserved filename (accidentally created)
 nul
+.active-plan*.json

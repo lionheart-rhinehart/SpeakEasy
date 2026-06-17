@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "../stores/appStore";
+import { useAppStore, MAX_HISTORY_LIMIT_MB } from "../stores/appStore";
 import type { AutoPasteMode, WebhookAction, TransformProvider, ApiKeyStatus } from "../types";
 import HotkeyInput from "./HotkeyInput";
 import CollapsibleSection from "./CollapsibleSection";
@@ -1583,7 +1583,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                 <input
                   type="range"
                   min="1"
-                  max="50"
+                  max={MAX_HISTORY_LIMIT_MB}
                   value={settings.historyLimitMb}
                   onChange={(e) => updateSettings({ historyLimitMb: parseInt(e.target.value) })}
                   className="flex-1"

@@ -2067,6 +2067,23 @@ function App() {
     };
   }, []);
 
+  // Surface toasts dispatched from non-React code (e.g. the persist storage
+  // wrapper when localStorage quota is exceeded). Keeps error-visibility intact.
+  useEffect(() => {
+    const handleToast = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { message?: string; type?: "error" | "success" | "info" }
+        | undefined;
+      if (detail?.message) {
+        showToast(detail.message, detail.type ?? "error");
+      }
+    };
+    window.addEventListener("speakeasy-toast", handleToast);
+    return () => {
+      window.removeEventListener("speakeasy-toast", handleToast);
+    };
+  }, [showToast]);
+
   // Show loading state while checking license
   if (!licenseChecked) {
     return (

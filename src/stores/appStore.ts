@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   User,
@@ -18,6 +18,53 @@ import type {
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
 import { normalizeHotkey } from "../utils/hotkeyValidation";
+
+// ============================================================================
+// localStorage quota safety
+// ============================================================================
+
+// Browser localStorage is capped at ~5MB per origin. The persisted store shares
+// that budget across history + vocabulary + apiKey, so we cap history well below
+// it. Going over the real quota makes EVERY set() throw QuotaExceededError, which
+// (with no error boundary) used to white-screen the whole app.
+export const MAX_HISTORY_LIMIT_MB = 4;
+
+// Custom storage wrapper so a quota-exceeded write degrades gracefully (drops the
+// write + warns the user) instead of throwing and crashing React.
+const safeLocalStorage = {
+  getItem: (name: string) => localStorage.getItem(name),
+  setItem: (name: string, value: string) => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (error) {
+      const isQuota =
+        error instanceof DOMException &&
+        (error.name === "QuotaExceededError" ||
+          error.name === "NS_ERROR_DOM_QUOTA_REACHED");
+      if (isQuota) {
+        console.error("[Storage] localStorage quota exceeded — write dropped:", error);
+        // Surface to the user (store can't import the toast UI directly).
+        // App.tsx listens for this and calls showToast().
+        try {
+          window.dispatchEvent(
+            new CustomEvent("speakeasy-toast", {
+              detail: {
+                message:
+                  "Storage full — clear your transcription history in Settings to keep saving.",
+                type: "error",
+              },
+            })
+          );
+        } catch {
+          // window unavailable (non-browser context) — already logged above
+        }
+        return;
+      }
+      throw error;
+    }
+  },
+  removeItem: (name: string) => localStorage.removeItem(name),
+};
 
 // ============================================================================
 // Settings conversion helpers (camelCase <-> snake_case for Rust interop)
@@ -274,7 +321,7 @@ const defaultSettings: UserSettings = {
   translateToEnglish: false,
   audioEnabled: true,
   floatingIndicator: false,
-  historyLimitMb: 10,
+  historyLimitMb: 4,
   startOnBoot: false,
   startMinimized: true,
   selectedMicrophone: null,
@@ -440,16 +487,23 @@ export const useAppStore = create<AppState>()(
         const { history, settings } = get();
         const newHistory = [transcription, ...history];
 
+        // Never trust a user/file value above the real localStorage budget —
+        // an over-quota limit would let history grow until every set() throws.
+        const effectiveLimitMb = Math.min(
+          settings.historyLimitMb,
+          MAX_HISTORY_LIMIT_MB
+        );
+
         // Calculate approximate size and trim if needed
         const historyJson = JSON.stringify(newHistory);
         const sizeMb = new Blob([historyJson]).size / (1024 * 1024);
 
-        if (sizeMb > settings.historyLimitMb) {
+        if (sizeMb > effectiveLimitMb) {
           // Remove oldest entries until under limit
           while (newHistory.length > 0) {
             const trimmedJson = JSON.stringify(newHistory);
             const trimmedSize = new Blob([trimmedJson]).size / (1024 * 1024);
-            if (trimmedSize <= settings.historyLimitMb) break;
+            if (trimmedSize <= effectiveLimitMb) break;
             newHistory.pop();
           }
         }
@@ -515,6 +569,9 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "speakeasy-storage",
+      // Wrap localStorage so a quota-exceeded write degrades gracefully instead
+      // of throwing on every set() and crashing the app (see safeLocalStorage).
+      storage: createJSONStorage(() => safeLocalStorage),
       // NOTE: Settings are NO LONGER stored in localStorage - they persist to file
       // via config.json which survives app reinstalls. Only transient data lives here.
       partialize: (state) => ({
