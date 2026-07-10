@@ -177,5 +177,26 @@
 
 ---
 
+## D12 — Updater entitlement: channel separation is the runtime gate; `version_entitlement` is the license-encoded record
+
+**Context.** §11 #5 requires that a future paid v2 must NOT auto-push to v1 owners. The Tauri updater plugin blindly fetches the endpoint in `tauri.conf.json` and offers whatever version that manifest advertises. The old endpoint was `releases/latest/download/latest.json`, which GitHub auto-resolves to the *newest* release — so the day v2 ships, every v1 client is offered the paid upgrade for free. Implemented on `feature/license` (Track C, 2026-07-10).
+
+**Options considered.**
+- **A. Client-side version compare** — let the frontend read `version_entitlement` and refuse updates above it. Rejected as the *primary* gate: the gate lives in App.tsx (`check()`), a CORE-owned god-file this track can't edit; and a client-side refusal still downloads/ômanifests the paid build's metadata.
+- **B. Version-pinned release channel** — point the client at a stable, major-version-scoped tag (`releases/download/updater-v1/latest.json`); publish v1.x manifests there and v2.x to `updater-v2`. A v1 client never queries the v2 channel.
+- **C. Mark v2 releases `prerelease`** so `releases/latest` skips them. Fragile (one wrong toggle leaks v2) and blocks human "latest" download UX.
+
+**Decision.** **B is the runtime gate that ships in v1** (P1-updater-repoint): endpoint repointed to `…/releases/download/updater-v1/latest.json`; `release.yml` now also publishes the manifest to a stable `updater-v${MAJOR}` channel release (created `--latest=false` so it never steals the human-facing "Latest" pointer). **`version_entitlement` on the `licenses` row + client `LicenseState` is the license-encoded record** (P1-license) — read on activation/validation, exposed via `license::get_version_entitlement()` — used by checkout/license-issuance and a *future* optional frontend cross-check (option A as belt-and-suspenders once CORE can wire it). Legacy/beta licenses default to `"1"`.
+
+**Why.** The plugin respects the *endpoint*, not the license, so only channel separation actually prevents the auto-push at runtime — and it needs zero god-file edits. `version_entitlement` records *what a buyer is entitled to* (the thing checkout/v2 must know) independent of the transport.
+
+**Rejected & why.** See A/C above. Client-compare-only can't ship without App.tsx; prerelease-flagging is a manual foot-gun.
+
+**⚠️ Migration trap (must honor when cutting v2).** Clients **already installed in the field** (v1.0.9 beta) have the *old* bare-`latest` endpoint compiled in; the repoint only affects **new** builds. So: (1) ship the repointed founding-five v1 build and let existing beta clients auto-update onto it via the old endpoint **before** any v2 is cut; (2) when v2 ships, publish it to `updater-v2` and do **not** mark a v2 release as GitHub "Latest" until telemetry shows v1 field clients have migrated to the versioned channel — otherwise a lingering un-migrated v1.0.9 client on the old endpoint would still see v2. This is exactly why §11 #5 says *repoint now, not later*.
+
+**Status.** Decided & implemented for v1 (code gate = channel; entitlement recorded). Frontend cross-check + v2 channel are follow-ups.
+
+---
+
 ## Decisions still open (tracked in the plan, not yet logged)
 See `docs/MASTER-PLAN.md` §7 (Open decisions) and §12 UNRESOLVED — e.g. final $499 timing/mechanic, checkout vendor, voice-namespace scheme, Mac testing method, Poe `/models` shape, Poe private-org-bot access. Promote each to a D-entry here when decided.

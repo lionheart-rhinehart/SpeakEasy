@@ -10,6 +10,8 @@ Go to your Supabase Dashboard → SQL Editor and run each migration in order:
 
 1. **001_beta_signup_schema.sql** - Adds beta signup tracking to licenses table
 2. **002_feedback_schema.sql** - Creates feedback table and helper functions
+3. **003_diagnostic_logs.sql** - Creates diagnostic log ingestion table
+4. **004_license_entitlement_schema.sql** - Adds `version_entitlement` (major-version updater channel gate), `tier`, and `trial_expires_at` to the licenses table. Additive & idempotent; backfills existing beta licenses to v1. Safe to run against production.
 
 ### 2. Create Storage Bucket
 
@@ -87,8 +89,10 @@ SELECT cron.schedule(
 ```
 supabase/
 ├── migrations/
-│   ├── 001_beta_signup_schema.sql  # Licenses + beta signups
-│   └── 002_feedback_schema.sql     # Feedback table
+│   ├── 001_beta_signup_schema.sql          # Licenses + beta signups
+│   ├── 002_feedback_schema.sql             # Feedback table
+│   ├── 003_diagnostic_logs.sql             # Diagnostic log ingestion
+│   └── 004_license_entitlement_schema.sql  # version_entitlement / tier / trial_expires_at
 ├── functions/
 │   ├── register-beta-tester/       # Beta signup endpoint
 │   │   └── index.ts

@@ -58,6 +58,24 @@ pub struct LicenseState {
     /// Whether this is an admin activation (bypasses license validation)
     #[serde(default)]
     pub is_admin: bool,
+    /// Major-version entitlement encoded on the license (e.g. "1" = v1.x).
+    /// Drives which updater channel this install may follow so a future paid v2
+    /// cannot auto-push to a v1 owner (§11 #5). Legacy state files / legacy
+    /// licenses default to "1" — every current beta license is v1.
+    #[serde(default = "default_version_entitlement")]
+    pub version_entitlement: String,
+    /// License tier (e.g. "beta", "founding", "standard"). Informational for now.
+    #[serde(default)]
+    pub tier: Option<String>,
+    /// Trial expiry (ISO 8601) if this is a trial license; None for paid.
+    #[serde(default)]
+    pub trial_expires_at: Option<String>,
+}
+
+/// Default version entitlement for legacy state/licenses that predate the field.
+/// All existing beta licenses are v1, so absence means "entitled to v1.x".
+fn default_version_entitlement() -> String {
+    "1".to_string()
 }
 
 /// Response from Supabase activation
@@ -196,9 +214,26 @@ pub fn delete_license_key() -> Result<()> {
     }
 }
 
-/// Generate a stable machine ID based on hardware identifiers
-/// This ID should remain the same across app reinstalls
+/// Platform-neutral machine identity — the public entry point (§11 #1).
+///
+/// The signature is deliberately platform-neutral (a plain `String`, no Win-only
+/// types) so a macOS client can validate a license bought on Windows against the
+/// same `activations` schema. The actual hardware read is delegated to the per-OS
+/// provider `resolve_platform_machine_id()`, which is the single seam a new OS
+/// port slots into.
+///
+/// COMPAT (P1-license-compat): the Windows output MUST remain `win-<hash>` (and
+/// the `win-fallback-<hash>` fallback) byte-for-byte — existing beta `activations`
+/// rows are bound to that exact string, so changing the format/prefix/hash would
+/// lock current beta users out on their next validation.
 pub fn get_machine_id() -> String {
+    resolve_platform_machine_id()
+}
+
+/// Per-OS machine-identity provider. Each `#[cfg]` arm returns the FINAL, prefixed
+/// id string; `get_machine_id()` is the platform-neutral wrapper over this.
+/// Keep every arm's output byte-identical to prior releases (see COMPAT above).
+fn resolve_platform_machine_id() -> String {
     // Use the machine_uid crate for cross-platform machine identification
     // Falls back to a hash of system info if the crate fails
 
@@ -460,6 +495,10 @@ pub async fn activate_as_admin(user_name: &str, user_email: &str) -> Result<Lice
         grace_period_until: grace_until_str.clone(),
         app_version,
         is_admin: true,
+        // Admin installs follow the current major-version channel like any owner.
+        version_entitlement: default_version_entitlement(),
+        tier: Some("admin".to_string()),
+        trial_expires_at: None,
     };
     save_license_state(&state)?;
 
@@ -485,9 +524,13 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
     // Build the activation request
     let client = reqwest::Client::new();
 
-    // Query Supabase to check if license exists and is active
+    // Query Supabase to check if license exists and is active.
+    // `select=*` (not an explicit column list) so this stays robust if the
+    // entitlement migration (004) has not been applied yet: PostgREST simply
+    // omits absent columns and the entitlement reads below fall back to v1,
+    // instead of a 400 "column does not exist" that would break ALL activation.
     let check_url = format!(
-        "{}/rest/v1/licenses?license_key=eq.{}&select=id,is_active,max_activations,expires_at",
+        "{}/rest/v1/licenses?license_key=eq.{}&select=*",
         SUPABASE_URL, license_key
     );
 
@@ -522,6 +565,14 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
     let license_id = license["id"].as_str().unwrap_or("");
     let is_active = license["is_active"].as_bool().unwrap_or(false);
     let max_activations = license["max_activations"].as_i64().unwrap_or(2);
+    // Entitlement fields (added in the license-schema-v2 migration). Legacy
+    // licenses that predate the columns return null → default to v1 (§11 #5).
+    let version_entitlement = license["version_entitlement"]
+        .as_str()
+        .map(String::from)
+        .unwrap_or_else(default_version_entitlement);
+    let tier = license["tier"].as_str().map(String::from);
+    let trial_expires_at = license["trial_expires_at"].as_str().map(String::from);
 
     if !is_active {
         return Ok(LicenseInfo {
@@ -664,6 +715,9 @@ pub async fn activate_license(license_key: &str, user_name: &str, user_email: &s
         grace_period_until: grace_until_str.clone(),
         is_admin: preserve_admin,
         app_version,
+        version_entitlement,
+        tier,
+        trial_expires_at,
     };
     save_license_state(&state)?;
 
@@ -762,9 +816,10 @@ pub async fn validate_license() -> Result<LicenseInfo> {
 
     let client = reqwest::Client::new();
 
-    // Check if license is still valid
+    // Check if license is still valid. `select=*` (see activate_license) keeps
+    // this robust whether or not migration 004 has been applied.
     let check_url = format!(
-        "{}/rest/v1/licenses?license_key=eq.{}&select=id,is_active,expires_at",
+        "{}/rest/v1/licenses?license_key=eq.{}&select=*",
         SUPABASE_URL, license_key
     );
 
@@ -857,10 +912,19 @@ pub async fn validate_license() -> Result<LicenseInfo> {
                     .send()
                     .await;
 
+                // Refresh entitlement from the server row so a founder upgraded
+                // to a later major version picks it up on next validation; fall
+                // back to the persisted value if the column is null/absent.
+                let refreshed_entitlement = license["version_entitlement"]
+                    .as_str()
+                    .map(String::from)
+                    .unwrap_or_else(|| state.version_entitlement.clone());
+
                 // Update local state
                 let new_state = LicenseState {
                     last_validated_at: now_str.clone(),
                     grace_period_until: grace_until_str.clone(),
+                    version_entitlement: refreshed_entitlement,
                     ..state.clone()
                 };
                 save_license_state(&new_state)?;
@@ -1013,6 +1077,22 @@ pub fn get_license_info() -> LicenseInfo {
     }
 }
 
+/// Major-version entitlement this install carries (e.g. "1" for v1.x), read from
+/// the persisted license state. This is the license-encoded half of the updater
+/// entitlement (§11 #5); the shipping v1 runtime gate is channel separation in
+/// `tauri.conf.json` (the `updater-v1` endpoint). Defaults to "1" when there is
+/// no state or the field predates the schema — every legacy/beta install is v1.
+///
+/// Not yet wired to a Tauri command (command registration lives in the CORE-owned
+/// `lib.rs`/`commands.rs`); exposed now as the seam a later frontend updater guard
+/// hooks into. `#[allow(dead_code)]` until that wiring lands.
+#[allow(dead_code)]
+pub fn get_version_entitlement() -> String {
+    load_license_state()
+        .map(|s| s.version_entitlement)
+        .unwrap_or_else(default_version_entitlement)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1039,5 +1119,72 @@ mod tests {
         let id2 = get_machine_id();
         assert_eq!(id1, id2); // Should be stable
         assert!(!id1.is_empty());
+    }
+
+    /// P1-license-compat: the per-OS machine-id prefix must stay stable across
+    /// the provider refactor. Existing beta `activations` rows are bound to the
+    /// exact `win-<hash>` string — a changed prefix would lock current users out.
+    #[test]
+    fn test_machine_id_platform_prefix_compat() {
+        let id = get_machine_id();
+        #[cfg(target_os = "windows")]
+        assert!(
+            id.starts_with("win-"),
+            "Windows machine id must keep the `win-` prefix (got {id})"
+        );
+        #[cfg(target_os = "macos")]
+        assert!(id.starts_with("mac-"), "got {id}");
+        #[cfg(target_os = "linux")]
+        assert!(id.starts_with("linux-"), "got {id}");
+    }
+
+    #[test]
+    fn test_version_entitlement_default() {
+        // Absence of the field must mean "entitled to v1.x" — every legacy/beta
+        // license is v1, so the updater channel gate defaults them to v1.
+        assert_eq!(default_version_entitlement(), "1");
+    }
+
+    /// P1-license-compat: a license.json written by a pre-entitlement build (no
+    /// `version_entitlement`/`tier`/`trial_expires_at`, and even no `is_admin`)
+    /// must still load — defaulting entitlement to v1 — so installed beta clients
+    /// don't wipe/relicense on their first launch after the schema bump.
+    #[test]
+    fn test_legacy_license_state_deserializes() {
+        let legacy = r#"{
+            "license_key_preview": "abcd••••-••••",
+            "machine_id": "win-deadbeefdeadbeef",
+            "activated_at": "2026-01-01T00:00:00Z",
+            "last_validated_at": "2026-01-02T00:00:00Z",
+            "grace_period_until": "2026-01-09T00:00:00Z",
+            "app_version": "1.0.9"
+        }"#;
+        let state: LicenseState =
+            serde_json::from_str(legacy).expect("legacy license.json must deserialize");
+        assert_eq!(state.version_entitlement, "1");
+        assert_eq!(state.tier, None);
+        assert_eq!(state.trial_expires_at, None);
+        assert!(!state.is_admin);
+        assert_eq!(state.machine_id, "win-deadbeefdeadbeef");
+    }
+
+    #[test]
+    fn test_license_state_roundtrip_preserves_entitlement() {
+        let state = LicenseState {
+            license_key_preview: "abcd••••-••••".to_string(),
+            machine_id: "win-deadbeefdeadbeef".to_string(),
+            activated_at: "2026-01-01T00:00:00Z".to_string(),
+            last_validated_at: "2026-01-02T00:00:00Z".to_string(),
+            grace_period_until: "2026-01-09T00:00:00Z".to_string(),
+            app_version: "1.0.9".to_string(),
+            is_admin: false,
+            version_entitlement: "1".to_string(),
+            tier: Some("founding".to_string()),
+            trial_expires_at: None,
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let back: LicenseState = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.version_entitlement, "1");
+        assert_eq!(back.tier.as_deref(), Some("founding"));
     }
 }
