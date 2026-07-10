@@ -15,7 +15,8 @@ import VoiceCommandModal from "./components/VoiceCommandModal";
 import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import { normalizeHotkey } from "./utils/hotkeyValidation";
-import type { WebhookAction, PromptAction, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
+import { getAllUnifiedActions, getEnabledUnifiedActions } from "./utils/actions";
+import type { WebhookAction, PromptAction, Action, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // License status types matching Rust backend
 type LicenseStatusTag = "valid" | "needs_validation" | "grace_period" | "invalid" | "not_activated";
@@ -884,8 +885,9 @@ function App() {
         provider: string | null;
         model: string | null;
       }>("transform_with_llm", {
-        provider: currentSettings.transformProvider,
-        model: currentSettings.transformModel,
+        // Per-action provider/model override (P1-provfield); unset → global default
+        provider: action.provider ?? currentSettings.transformProvider,
+        model: action.model ?? currentSettings.transformModel,
         inputText: selectedText,
         instruction: finalInstruction,
         temperature: currentSettings.transformTemperature ?? 0.7,
@@ -1060,12 +1062,14 @@ function App() {
 
     // ========== SMART_URL MODE ==========
     if (action.method === "SMART_URL") {
-      // Copy selected text
+      // Copy selected text with stale-clipboard detection (mirrors the PROMPT path)
       let selectedText: string;
+      let clipboardBefore = "";
+      try { clipboardBefore = await invoke<string>("get_clipboard_text"); } catch { /* empty clipboard is fine */ }
       try {
         console.log("SMART_URL: copying selected text...");
         await invoke("simulate_copy");
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 150));
         selectedText = await invoke<string>("get_clipboard_text");
       } catch (error) {
         console.error("SMART_URL: Failed to copy selected text:", error);
@@ -1073,8 +1077,9 @@ function App() {
         return;
       }
 
-      if (!selectedText || selectedText.trim() === "") {
-        console.log("SMART_URL: No text selected");
+      // Stale clipboard detection: unchanged clipboard means nothing was selected
+      if (!selectedText || selectedText.trim() === "" || selectedText === clipboardBefore) {
+        console.log("SMART_URL: No text selected (stale clipboard detected)");
         showToast("No text selected", "error");
         return;
       }
@@ -1193,8 +1198,9 @@ function App() {
           provider: string | null;
           model: string | null;
         }>("transform_with_llm", {
-          provider: currentSettings.transformProvider,
-          model: currentSettings.transformModel,
+          // Per-action provider/model override (P1-provfield); unset → global default
+          provider: action.provider ?? currentSettings.transformProvider,
+          model: action.model ?? currentSettings.transformModel,
           inputText: selectedText,
           instruction: finalInstruction,
           temperature: currentSettings.transformTemperature ?? 0.7,
@@ -1264,15 +1270,17 @@ function App() {
     }
 
     // ========== WEBHOOK MODE (POST/GET) ==========
-    // Copy selected text using the same approach as AI Transform (which works)
-    // This triggers on Pressed, so the selection is still active
+    // Copy selected text with stale-clipboard detection (mirrors the PROMPT path).
+    // This triggers on Pressed, so the selection is still active.
     let selectedText: string;
+    let clipboardBefore = "";
+    try { clipboardBefore = await invoke<string>("get_clipboard_text"); } catch { /* empty clipboard is fine */ }
     try {
       console.log("Webhook: copying selected text...");
       await invoke("simulate_copy");
 
-      // Small delay to let clipboard update (same as AI Transform)
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Let the clipboard settle (150ms, same as the PROMPT path)
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Read the clipboard
       selectedText = await invoke<string>("get_clipboard_text");
@@ -1282,8 +1290,10 @@ function App() {
       return;
     }
 
-    if (!selectedText || selectedText.trim() === "") {
-      console.log("Webhook: No text selected - nothing to send");
+    // Stale clipboard detection: an unchanged clipboard means nothing was selected —
+    // without this a non-empty leftover clipboard would silently POST stale text.
+    if (!selectedText || selectedText.trim() === "" || selectedText === clipboardBefore) {
+      console.log("Webhook: No text selected (stale clipboard detected) - nothing to send");
       showToast("No text selected", "error");
       return;
     }
@@ -1331,6 +1341,37 @@ function App() {
     }
   }, [showToast, pasteOutput]);
 
+  // Unified action dispatch — the single entry point for executing any Action,
+  // whether triggered by hotkey or voice. Discriminates on `action.kind` (no more
+  // object-shape sniffing). Legacy kinds re-fetch their original typed action by
+  // id (ids are unique across both persisted arrays) and route through the proven
+  // executors; new kinds (e.g. brand_paste) get their own arm here without
+  // touching the existing executor logic.
+  const executeAction = useCallback(async (action: Action) => {
+    switch (action.kind) {
+      // Future: case "brand_paste": return executeBrandPaste(action);
+      case "webhook":
+      case "url":
+      case "smart_url":
+      case "prompt":
+      default: {
+        const s = useAppStore.getState().settings;
+        const webhook = (s.webhookActions ?? []).find((a) => a.id === action.id);
+        if (webhook) {
+          await executeWebhookAction(webhook);
+          return;
+        }
+        const prompt = (s.promptActions ?? []).find((a) => a.id === action.id);
+        if (prompt) {
+          await executePromptAction(prompt);
+          return;
+        }
+        console.warn(`executeAction: no source action found for id ${action.id} (kind=${action.kind})`);
+        showToast(`Action "${action.name}" no longer exists`, "error");
+      }
+    }
+  }, [executeWebhookAction, executePromptAction, showToast]);
+
   // Register hotkey actions (webhooks, URL, SMART_URL, and prompt actions)
   useEffect(() => {
     // Abort controller to prevent race conditions when effect re-runs
@@ -1375,29 +1416,32 @@ function App() {
       seedSystemChord(systemSettings.hotkeyHistory, "History");
       seedSystemChord(systemSettings.hotkeyVoiceCommand, "Voice Command");
 
-      // Register webhook action hotkeys
-      for (const action of webhookActions) {
+      // Register action hotkeys (unified over the normalized Action list).
+      // Per-kind eligibility guards are applied inline; on trigger we re-fetch
+      // fresh action data by id and dispatch through executeAction.
+      const allActions = getAllUnifiedActions(useAppStore.getState().settings);
+      for (const action of allActions) {
         if (abortController.signal.aborted) {
-          console.log("Hotkey registration aborted during webhook registration phase");
+          console.log("Hotkey registration aborted during action registration phase");
           return;
         }
-        // Check if action should be registered:
-        // - Must be enabled and have a hotkey
-        // - For POST/GET/URL: must have webhookUrl
-        // - For SMART_URL: no webhookUrl required
+        // Registration eligibility:
+        // - Must be enabled and have a hotkey ("" = voice-only → skip registration)
+        // - webhook (POST/GET) + url: require a webhookUrl
+        // - smart_url: no url required (uses the copied selection)
+        // - prompt: require a prompt template
         if (!action.enabled || !action.hotkey) continue;
-        if ((action.method === "POST" || action.method === "GET" || action.method === "URL") && !action.webhookUrl) {
-          continue;
-        }
+        if ((action.kind === "webhook" || action.kind === "url") && !action.webhookUrl) continue;
+        if (action.kind === "prompt" && !action.prompt) continue;
 
         // Skip a chord already claimed by an earlier action/system hotkey — the
         // OS only allows one registration per physical chord. Report it clearly
         // instead of letting register() throw a generic failure.
-        const webhookChord = normalizeHotkey(action.hotkey);
-        const webhookConflict = claimedChords.get(webhookChord);
-        if (webhookConflict) {
-          console.warn(`Skipping webhook hotkey ${action.hotkey} for ${action.name}: already used by ${webhookConflict}`);
-          showToast(`${action.name}: shortcut already used by ${webhookConflict}`, "error");
+        const chord = normalizeHotkey(action.hotkey);
+        const conflict = claimedChords.get(chord);
+        if (conflict) {
+          console.warn(`Skipping hotkey ${action.hotkey} for ${action.name}: already used by ${conflict}`);
+          showToast(`${action.name}: shortcut already used by ${conflict}`, "error");
           continue;
         }
 
@@ -1410,73 +1454,22 @@ function App() {
           if (abortController.signal.aborted) return;
 
           await register(action.hotkey, async (event) => {
-            // Trigger on Pressed (like AI Transform) to copy while keys are held
-            // This ensures the selection is still active before the editor processes the chord
+            // Trigger on Pressed (like AI Transform) to copy while keys are held,
+            // so the selection is still active before the editor eats the chord.
             if (event.state === "Pressed") {
-              // Get fresh action data in case it was updated
-              const currentActions = useAppStore.getState().settings.webhookActions ?? [];
-              console.log(`[DEBUG] Hotkey pressed: ${action.hotkey}, fresh actions:`, currentActions.map(a => ({
-                name: a.name,
-                askChromeProfile: a.askChromeProfile
-              })));
-              const currentAction = currentActions.find((a) => a.id === action.id);
-              console.log(`[DEBUG] Found action:`, currentAction?.name, `askChromeProfile:`, currentAction?.askChromeProfile);
-              if (currentAction && currentAction.enabled) {
-                executeWebhookAction(currentAction);
+              // Re-fetch fresh action data by id in case it was edited.
+              const fresh = getAllUnifiedActions(useAppStore.getState().settings).find((a) => a.id === action.id);
+              if (fresh && fresh.enabled) {
+                executeAction(fresh);
               }
             }
           });
 
           registeredWebhookHotkeys.current.push(action.hotkey);
-          claimedChords.set(webhookChord, action.name);
-          console.log(`Registered webhook hotkey: ${action.hotkey} -> ${action.name} (${action.method})`);
+          claimedChords.set(chord, action.name);
+          console.log(`Registered action hotkey: ${action.hotkey} -> ${action.name} (${action.kind})`);
         } catch (error) {
-          console.error(`Failed to register webhook hotkey ${action.hotkey}:`, error);
-          showToast(`Hotkey registration failed: ${action.hotkey} (${action.name})`, "error");
-        }
-      }
-
-      // Register prompt action hotkeys
-      for (const action of promptActions) {
-        if (abortController.signal.aborted) {
-          console.log("Hotkey registration aborted during prompt registration phase");
-          return;
-        }
-        if (!action.enabled || !action.hotkey || !action.prompt) continue;
-
-        // Skip a chord already claimed by an earlier action/system hotkey.
-        const promptChord = normalizeHotkey(action.hotkey);
-        const promptConflict = claimedChords.get(promptChord);
-        if (promptConflict) {
-          console.warn(`Skipping prompt hotkey ${action.hotkey} for ${action.name}: already used by ${promptConflict}`);
-          showToast(`${action.name}: shortcut already used by ${promptConflict}`, "error");
-          continue;
-        }
-
-        try {
-          const isReg = await isRegistered(action.hotkey);
-          if (abortController.signal.aborted) return;
-          if (isReg) {
-            await unregister(action.hotkey);
-          }
-          if (abortController.signal.aborted) return;
-
-          await register(action.hotkey, async (event) => {
-            if (event.state === "Pressed") {
-              // Get fresh action data in case it was updated
-              const currentActions = useAppStore.getState().settings.promptActions ?? [];
-              const currentAction = currentActions.find((a) => a.id === action.id);
-              if (currentAction && currentAction.enabled) {
-                executePromptAction(currentAction);
-              }
-            }
-          });
-
-          registeredWebhookHotkeys.current.push(action.hotkey);
-          claimedChords.set(promptChord, action.name);
-          console.log(`Registered prompt hotkey: ${action.hotkey} -> ${action.name}`);
-        } catch (error) {
-          console.error(`Failed to register prompt hotkey ${action.hotkey}:`, error);
+          console.error(`Failed to register action hotkey ${action.hotkey}:`, error);
           showToast(`Hotkey registration failed: ${action.hotkey} (${action.name})`, "error");
         }
       }
@@ -1493,7 +1486,7 @@ function App() {
       // register() calls and causing spurious failures on unrelated hotkeys.
       abortController.abort();
     };
-  }, [webhookActions, promptActions, executeWebhookAction, executePromptAction, showToast]);
+  }, [webhookActions, promptActions, executeAction, showToast]);
 
   // Handle profile chooser selection (in-window modal)
   const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {
@@ -1581,10 +1574,10 @@ function App() {
     }
   }, [profileChooserOpen, setGlobalBusy, setVoiceCommandListening]);
 
-  // Get all available actions for voice command matching
-  const getAllActions = useCallback((): Array<WebhookAction | PromptAction | MainHotkeyAction> => {
+  // Get all available actions for voice command matching (unified shape)
+  const getAllActions = useCallback((): Array<Action | MainHotkeyAction> => {
     const currentSettings = useAppStore.getState().settings;
-    const actions: Array<WebhookAction | PromptAction | MainHotkeyAction> = [];
+    const actions: Array<Action | MainHotkeyAction> = [];
 
     // Add main hotkeys as actions
     actions.push({
@@ -1600,21 +1593,8 @@ function App() {
       hotkey: currentSettings.hotkeyAiTransform || DEFAULT_AI_TRANSFORM_HOTKEY,
     });
 
-    // Add enabled webhook actions
-    const webhooks = currentSettings.webhookActions ?? [];
-    for (const action of webhooks) {
-      if (action.enabled) {
-        actions.push(action);
-      }
-    }
-
-    // Add enabled prompt actions
-    const prompts = currentSettings.promptActions ?? [];
-    for (const action of prompts) {
-      if (action.enabled) {
-        actions.push(action);
-      }
-    }
+    // Add enabled webhook + prompt actions, normalized to the unified Action shape
+    actions.push(...getEnabledUnifiedActions(currentSettings));
 
     return actions;
   }, []);
@@ -1626,25 +1606,16 @@ function App() {
 
     const action = match.action;
 
-    // Check if it's a main hotkey action
-    if ("type" in action && action.type === "main") {
-      // For main actions, we just show a toast since they require user interaction (press-hold-release)
+    // Main hotkey actions require holding the hotkey (press-hold-release), so we
+    // just tell the user which one to press.
+    if ("type" in action) {
       showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
       return;
     }
 
-    // Check if it's a webhook action
-    if ("method" in action) {
-      await executeWebhookAction(action as WebhookAction);
-      return;
-    }
-
-    // Check if it's a prompt action
-    if ("prompt" in action) {
-      await executePromptAction(action as PromptAction);
-      return;
-    }
-  }, [executeWebhookAction, executePromptAction, showToast]);
+    // Everything else is a unified Action — dispatch by kind.
+    await executeAction(action);
+  }, [executeAction, showToast]);
 
   // Handle voice command cancellation
   const handleVoiceCommandCancel = useCallback(() => {
@@ -1835,12 +1806,10 @@ function App() {
         // Safety reset: clear promptActionBusy if it's been stuck (prevents silent PROMPT failures)
         promptActionBusy.current = false;
 
-        if ("type" in action && action.type === "main") {
+        if ("type" in action) {
           showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
-        } else if ("method" in action) {
-          await executeWebhookAction(action as WebhookAction);
-        } else if ("prompt" in action) {
-          await executePromptAction(action as PromptAction);
+        } else {
+          await executeAction(action);
         }
 
         // Reset state after auto-execute
@@ -1907,7 +1876,7 @@ function App() {
       voiceCommandStartTime.current = 0;
       useAppStore.getState().setRecordingState("idle");
     }
-  }, [getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeWebhookAction, executePromptAction]);
+  }, [getAllActions, showToast, setGlobalBusy, setVoiceCommandListening, executeAction]);
 
   // Reset globalBusy when voice command modal closes
   useEffect(() => {
@@ -1958,12 +1927,10 @@ function App() {
             console.log(`Voice Command: executing selected "${match.action.name}"`);
             const action = match.action;
 
-            if ("type" in action && action.type === "main") {
+            if ("type" in action) {
               showToast(`"${action.name}" requires holding the hotkey. Use ${action.hotkey}`, "info");
-            } else if ("method" in action) {
-              await executeWebhookAction(action as WebhookAction);
-            } else if ("prompt" in action) {
-              await executePromptAction(action as PromptAction);
+            } else {
+              await executeAction(action);
             }
           }
 
@@ -1982,7 +1949,7 @@ function App() {
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [showToast, setGlobalBusy, executeWebhookAction, executePromptAction]);
+  }, [showToast, setGlobalBusy, executeAction]);
 
   // Keep voice command callback refs in sync (avoids stale closures in hotkey handler)
   useEffect(() => { startVoiceCommandRecordingRef.current = startVoiceCommandRecording; }, [startVoiceCommandRecording]);

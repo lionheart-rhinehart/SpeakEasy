@@ -82,6 +82,8 @@ function convertWebhookToSnakeCase(action: WebhookAction): FileWebhookAction {
     ask_chrome_profile: action.askChromeProfile,
     prompt: action.prompt,
     requires_selection: action.requiresSelection ?? true,
+    provider: action.provider,
+    model: action.model,
   };
 }
 
@@ -97,6 +99,8 @@ function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
     askChromeProfile: action.ask_chrome_profile,
     prompt: action.prompt,
     requiresSelection: action.requires_selection ?? true,
+    provider: action.provider as WebhookAction["provider"],
+    model: action.model,
   };
 }
 
@@ -108,6 +112,8 @@ function convertPromptToSnakeCase(action: PromptAction): FilePromptAction {
     prompt: action.prompt,
     enabled: action.enabled,
     requires_selection: action.requiresSelection ?? true,
+    provider: action.provider,
+    model: action.model,
   };
 }
 
@@ -119,6 +125,8 @@ function convertPromptToCamelCase(action: FilePromptAction): PromptAction {
     prompt: action.prompt,
     enabled: action.enabled,
     requiresSelection: action.requires_selection ?? true,
+    provider: action.provider as PromptAction["provider"],
+    model: action.model,
   };
 }
 
