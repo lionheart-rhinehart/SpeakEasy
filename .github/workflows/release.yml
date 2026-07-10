@@ -167,6 +167,27 @@ jobs:
           ENDJSON
           echo "Uploading latest.json..."
           gh release upload "v${VERSION}" latest.json --clobber
+
+          # --- Version-pinned updater channel (§11 #5, P1-updater-repoint) ---
+          # Installed clients poll releases/download/updater-v<MAJOR>/latest.json
+          # (NOT the bare releases/latest), so a future paid v2 published to
+          # updater-v2 can NEVER auto-push to a v1 owner. The manifest's `url`
+          # already points at this version's own release asset, so the channel
+          # release only needs to hold the pointer manifest.
+          MAJOR="${VERSION%%.*}"
+          CHANNEL_TAG="updater-v${MAJOR}"
+          echo "Publishing updater manifest to channel: ${CHANNEL_TAG}"
+          if ! gh release view "${CHANNEL_TAG}" >/dev/null 2>&1; then
+            # Create the stable channel-holder release once. --latest=false so it
+            # never steals GitHub's human-facing "Latest release" pointer from the
+            # real versioned release.
+            gh release create "${CHANNEL_TAG}" \
+              --title "SpeakEasy auto-update channel v${MAJOR}.x" \
+              --notes "Stable updater pointer for v${MAJOR}.x clients. Auto-refreshed by CI — do not delete." \
+              --latest=false
+          fi
+          gh release upload "${CHANNEL_TAG}" latest.json --clobber
+          echo "Updater channel ${CHANNEL_TAG} now points at v${VERSION}."
           echo "Done! All updater artifacts uploaded successfully."
 
   publish-release:
