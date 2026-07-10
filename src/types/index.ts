@@ -123,9 +123,42 @@ export interface MainHotkeyAction {
 
 // Result of matching spoken text against available actions
 export interface VoiceCommandMatch {
-  action: WebhookAction | PromptAction | MainHotkeyAction;
+  action: Action | MainHotkeyAction;
   confidence: number;  // 0-1, where 1 = exact match
   matchType: "exact" | "contains" | "fuzzy";
+}
+
+// ============================================================================
+// Unified Action model (runtime execution/matching layer)
+// ============================================================================
+// The persisted schema still stores two arrays (WebhookAction[] + PromptAction[]);
+// see config.json / config.rs. At runtime they are normalized into this single
+// discriminated `Action` type (via src/utils/actions.ts) so voice matching,
+// hotkey registration, and execution all operate on one shape with an explicit
+// `kind` tag instead of sniffing object shape. New kinds (e.g. brand-paste) and
+// per-action provider/model overrides slot in here without deepening the sprawl.
+// The persisted collapse into a single `actions` array happens in P1-migrate.
+export type ActionKind = "webhook" | "url" | "smart_url" | "prompt" | "brand_paste";
+
+export interface Action {
+  id: string;
+  name: string;
+  hotkey: string;       // "" = voice-only (no global hotkey registered)
+  enabled: boolean;
+  kind: ActionKind;
+
+  // Per-action provider/model override (P1-provfield). Unset → global default.
+  provider?: TransformProvider;
+  model?: string;
+
+  // Kind-specific fields (populated by the mapper per kind; all optional so the
+  // discriminated union stays a single struct that mirrors the persisted shapes).
+  webhookUrl?: string;                                   // webhook (POST/GET) + url
+  method?: "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT"; // preserved from WebhookAction for lossless mapping
+  headers?: Record<string, string>;                      // webhook
+  askChromeProfile?: boolean;                            // url
+  prompt?: string;                                       // prompt
+  requiresSelection?: boolean;                           // prompt
 }
 
 // Webhook/Hotkey Action for Transform feature
@@ -149,6 +182,10 @@ export interface WebhookAction {
   prompt?: string;
   // For PROMPT method: when false, runs prompt standalone without copying selected text
   requiresSelection?: boolean;
+  // Per-action LLM provider/model override (P1-provfield). Unset → global default.
+  // Only meaningful for PROMPT-method actions (LLM transforms).
+  provider?: TransformProvider;
+  model?: string;
 }
 
 // Prompt Action for LLM-based transforms with stored prompts
@@ -160,6 +197,9 @@ export interface PromptAction {
   prompt: string;         // The stored prompt, use {{text}} for selected text placeholder
   enabled: boolean;
   requiresSelection: boolean; // When false, runs prompt standalone without copying selected text
+  // Per-action LLM provider/model override (P1-provfield). Unset → global default.
+  provider?: TransformProvider;
+  model?: string;
 }
 
 // Chrome profile info returned from backend
@@ -202,6 +242,8 @@ export interface FileWebhookAction {
   ask_chrome_profile?: boolean;
   prompt?: string;
   requires_selection?: boolean;
+  provider?: string;
+  model?: string;
 }
 
 export interface FilePromptAction {
@@ -211,6 +253,8 @@ export interface FilePromptAction {
   prompt: string;
   enabled: boolean;
   requires_selection?: boolean;
+  provider?: string;
+  model?: string;
 }
 
 export interface FileUserSettings {

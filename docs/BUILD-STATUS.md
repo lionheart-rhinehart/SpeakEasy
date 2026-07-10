@@ -24,12 +24,12 @@
 | **S0c** Build-status ledger | Step 0 | **done** | this file | 2026-07-08 |
 | **P0-sign** Azure Trusted Signing enrollment | Phase 0 (indep.) | todo | | |
 | **P0-legal** EULA + privacy policy | Phase 0 (indep.) | todo | | |
-| **P0-clip** Fix webhook clipboard-guard bug (App.tsx:1266-1289) | Phase 0 → `feature/core` | todo | | |
+| **P0-clip** Fix webhook clipboard-guard bug (App.tsx:1266-1289) | Phase 0 → `feature/core` | **done (code)** | Ported before-snapshot + 150ms + `=== clipboardBefore` guard into WEBHOOK branch (App.tsx:1266-1291) AND the identical-bug SMART_URL branch (App.tsx:1061-1081); `npm run typecheck` clean. Runtime "no POST fires" is owner manual smoke (§8) on the now-running build. Release build+install+launch ✓ (test-protocol exit 0, SpeakEasy_1.0.9). | 2026-07-10 |
 | **P0-bugs** Re-verify Dec-2025 7-bug list | Phase 0 | todo | | |
 | **P0-logscrub** No doc bodies / keys in logs (audit) | Phase 0 | todo | | |
-| **P1-action** Unified `Action{kind}` + per-kind executor | A / `feature/core` | todo | | |
-| **P1-action-voice** Voice matcher intact post-refactor | A / `feature/core` | todo | dep: P1-action | |
-| **P1-provfield** Per-action `provider`/`model` fields | A / `feature/core` | todo | dep: P1-action | |
+| **P1-action** Unified `Action{kind}` + per-kind executor | A / `feature/core` | **done (code)** | New `Action{kind}` type (types/index.ts) + mappers (src/utils/actions.ts); single `executeAction()` dispatch replaces shape-sniffing at all 3 voice sites; unified reg loop; `getAllActions()`→`Action[]`. Persistence stays 2-array (collapse deferred to P1-migrate per deps). typecheck+lint+`cargo check --all-targets` clean. **Release build+install+launch ✓ (test-protocol exit 0)** — app boots, no white-screen from the hook-graph rewrite. | 2026-07-10 |
+| **P1-action-voice** Voice matcher intact post-refactor | A / `feature/core` | in-progress | `getAllActions()` returns mains + all enabled unified actions (code-verified); app boots ✓. Spoken-command match+execute is owner manual smoke on the running build. | 2026-07-10 |
+| **P1-provfield** Per-action `provider`/`model` fields | A / `feature/core` | **done (schema+routing)** | Optional `provider`/`model` added to `WebhookAction`+`PromptAction` (TS), `File*` interfaces, Rust `config.rs` structs (additive `#[serde(default)]` → round-trip-safe, no two-sided drop), all 4 convert fns, both mappers. Fallback routing wired at both LLM sites (App.tsx executePromptAction + webhook PROMPT branch): `action.provider ?? global`, `action.model ?? global`. typecheck+lint+`npm run build`+`cargo check` clean. **Deferred to Track B:** the authoring UI (per-action provider dropdown belongs with `PROVIDER_INFO` / the provider selector added in P1-poe/P1-genesis; only meaningful once >1 provider). Runtime route-smoke needs that UI. Release build+install+launch ✓ (test-protocol exit 0). | 2026-07-10 |
 | **P1-migrate** `SETTINGS_SCHEMA_VERSION`→3 + forward migration | A / `feature/core` | todo | dep: P1-action, P1-provfield | |
 | **P1-migrate-rust** Rust load preserves old action shape | A / `feature/core` | todo | | |
 | **P1-txfactor** Widen `llm::transform()` for optional 2nd key | B / `feature/core` | todo | | |

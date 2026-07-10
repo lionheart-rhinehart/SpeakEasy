@@ -1,6 +1,6 @@
-import type { WebhookAction, PromptAction, MainHotkeyAction, VoiceCommandMatch } from "../types";
+import type { Action, MainHotkeyAction, VoiceCommandMatch } from "../types";
 
-type ActionType = WebhookAction | PromptAction | MainHotkeyAction;
+type ActionType = Action | MainHotkeyAction;
 
 /**
  * Calculate Levenshtein distance between two strings.
