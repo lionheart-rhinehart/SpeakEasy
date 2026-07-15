@@ -27,7 +27,7 @@ export type AutoPasteMode = "always" | "smart" | "never";
 export type DisplayMode = "direct" | "toast" | "edit";
 
 // LLM Transform providers
-export type TransformProvider = "openrouter" | "openai" | "anthropic";
+export type TransformProvider = "openrouter" | "openai" | "anthropic" | "poe" | "copycoders";
 
 // Settings schema version for migrations
 // v3 (P1-migrate): the PERSISTED action schema collapses the two legacy arrays

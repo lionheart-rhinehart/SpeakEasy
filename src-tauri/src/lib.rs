@@ -330,6 +330,10 @@ pub fn run() {
             commands::get_transform_api_key_status,
             commands::get_all_transform_api_key_statuses,
             commands::clear_transform_api_key,
+            // Genesis/CopyCoders second key (X-Provider-Key)
+            commands::set_copycoders_provider_key,
+            commands::get_copycoders_provider_key_status,
+            commands::clear_copycoders_provider_key,
             // Multi-provider LLM transform
             commands::transform_with_llm,
             commands::fetch_provider_models,

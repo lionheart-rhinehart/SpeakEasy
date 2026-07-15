@@ -5,6 +5,7 @@ use crate::license;
 use crate::state::AppState;
 use crate::transcription;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 
@@ -1155,6 +1156,26 @@ pub async fn clear_transform_api_key(provider: String) -> Result<(), String> {
     secrets::clear_api_key(provider).map_err(|e| e.to_string())
 }
 
+// --- Genesis/CopyCoders second key (X-Provider-Key) ---
+
+/// Store the Genesis/CopyCoders provider (second) key.
+#[tauri::command]
+pub async fn set_copycoders_provider_key(api_key: String) -> Result<(), String> {
+    secrets::set_copycoders_provider_key(&api_key).map_err(|e| e.to_string())
+}
+
+/// Status of the Genesis/CopyCoders provider (second) key (never returns the key).
+#[tauri::command]
+pub async fn get_copycoders_provider_key_status() -> Result<ApiKeyStatus, String> {
+    Ok(secrets::get_copycoders_provider_key_status())
+}
+
+/// Delete the Genesis/CopyCoders provider (second) key.
+#[tauri::command]
+pub async fn clear_copycoders_provider_key() -> Result<(), String> {
+    secrets::clear_copycoders_provider_key().map_err(|e| e.to_string())
+}
+
 // ============================================================================
 // Multi-provider LLM Transform
 // ============================================================================
@@ -1210,7 +1231,72 @@ pub async fn fetch_provider_models(provider: String) -> Result<Vec<ProviderModel
         TransformProvider::OpenRouter => fetch_openrouter_models(&api_key).await,
         TransformProvider::OpenAI => fetch_openai_models(&api_key).await,
         TransformProvider::Anthropic => fetch_anthropic_models(&api_key).await,
+        TransformProvider::Poe => fetch_poe_models(&api_key).await,
+        TransformProvider::CopyCoders => fetch_copycoders_models(&api_key).await,
     }
+}
+
+/// Fetch Genesis/CopyCoders bots. `GET /models` needs only the `gen_` bearer key
+/// (not the provider key). Returns the stable bot slugs used in the `model` field.
+async fn fetch_copycoders_models(api_key: &str) -> Result<Vec<ProviderModel>, String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get("https://gas.copycoders.ai/api/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                "Request timed out. Please check your internet connection.".to_string()
+            } else if e.is_connect() {
+                "Failed to connect to Genesis. Please check your internet connection.".to_string()
+            } else {
+                format!("Failed to fetch models: {}", e)
+            }
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("Genesis API error ({}): {}", status, body));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = json
+        .get("data")
+        .and_then(|d| d.as_array())
+        .ok_or("Invalid response format")?;
+
+    let mut result: Vec<ProviderModel> = models
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id")?.as_str()?.to_string();
+            let name = m
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or(&id)
+                .to_string();
+            Some(ProviderModel {
+                id,
+                name,
+                description: None,
+                context_length: None,
+            })
+        })
+        .collect();
+
+    result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    log::info!("Fetched {} bots from Genesis", result.len());
+    Ok(result)
 }
 
 /// Fetch models from OpenRouter API
@@ -1285,6 +1371,101 @@ async fn fetch_openrouter_models(api_key: &str) -> Result<Vec<ProviderModel>, St
 
     log::info!("Fetched {} models from OpenRouter", result.len());
     Ok(result)
+}
+
+/// Curated fallback list of common Poe bots (handles used in the `model` field).
+/// Poe does not document a `GET /models` endpoint, and official bot names track
+/// the underlying models and drift over time — so this is a best-effort starter
+/// set. The model field is free-text editable in the UI, so a user can type any
+/// bot handle their Poe account can access.
+fn curated_poe_models() -> Vec<ProviderModel> {
+    let bots = [
+        "GPT-4o",
+        "GPT-4o-mini",
+        "Claude-Sonnet-5",
+        "Claude-Opus-4.7",
+        "Gemini-2.5-Pro",
+        "Llama-3.1-405B",
+    ];
+    bots
+        .iter()
+        .map(|b| ProviderModel {
+            id: b.to_string(),
+            name: b.to_string(),
+            description: None,
+            context_length: None,
+        })
+        .collect()
+}
+
+/// Fetch models from Poe. Poe exposes an OpenAI-compatible API but does not
+/// document a `/models` endpoint; we optimistically try it (some OpenAI-compatible
+/// proxies implement it undocumented) and fall back to a curated bot list on any
+/// failure so the picker is never empty.
+async fn fetch_poe_models(api_key: &str) -> Result<Vec<ProviderModel>, String> {
+    let client = match reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("Poe: failed to build HTTP client ({}); using curated list", e);
+            return Ok(curated_poe_models());
+        }
+    };
+
+    let response = client
+        .get("https://api.poe.com/v1/models")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await;
+
+    let parsed = match response {
+        Ok(resp) if resp.status().is_success() => resp.json::<serde_json::Value>().await.ok(),
+        Ok(resp) => {
+            log::info!(
+                "Poe /models returned {} — falling back to curated bot list",
+                resp.status()
+            );
+            None
+        }
+        Err(e) => {
+            log::info!("Poe /models unavailable ({}) — falling back to curated bot list", e);
+            None
+        }
+    };
+
+    let models: Vec<ProviderModel> = parsed
+        .as_ref()
+        .and_then(|json| json.get("data")?.as_array().cloned())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let id = m.get("id")?.as_str()?.to_string();
+                    let name = m
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or(&id)
+                        .to_string();
+                    Some(ProviderModel {
+                        id,
+                        name,
+                        description: None,
+                        context_length: None,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if models.is_empty() {
+        log::info!("Poe: no models from API, using curated list");
+        Ok(curated_poe_models())
+    } else {
+        log::info!("Fetched {} models from Poe", models.len());
+        Ok(models)
+    }
 }
 
 /// Fetch models from OpenAI API
@@ -1440,6 +1621,31 @@ async fn fetch_anthropic_models(_api_key: &str) -> Result<Vec<ProviderModel>, St
     Ok(models)
 }
 
+/// True while a Genesis/CopyCoders transform is running. Genesis allows only one
+/// concurrent stream per key; a second call returns `429 connection_limit_error`.
+/// We serialize by rejecting concurrent calls with a "still working" message.
+static GENESIS_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// RAII guard: marks a Genesis request in-flight on acquire, clears it on drop
+/// (covering early returns and errors). `try_acquire` returns None if one is
+/// already running.
+struct GenesisInFlight;
+
+impl GenesisInFlight {
+    fn try_acquire() -> Option<Self> {
+        match GENESIS_IN_FLIGHT.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => Some(GenesisInFlight),
+            Err(_) => None,
+        }
+    }
+}
+
+impl Drop for GenesisInFlight {
+    fn drop(&mut self) {
+        GENESIS_IN_FLIGHT.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Transform text using the specified LLM provider
 ///
 /// The API key is retrieved from secure OS credential storage based on the provider.
@@ -1524,6 +1730,68 @@ pub async fn transform_with_llm(
         }
     };
 
+    // Genesis/CopyCoders is two-key: fetch the provider key (X-Provider-Key) from
+    // secure storage. Missing → clear error (rather than a raw server 400).
+    let api_key_2: Option<String> = if provider_enum == TransformProvider::CopyCoders {
+        match secrets::get_copycoders_provider_key() {
+            Ok(Some(key)) => Some(key),
+            Ok(None) => {
+                return Ok(LlmTransformResponse {
+                    success: false,
+                    output_text: None,
+                    error: Some(
+                        "Genesis provider key not set. Add your provider key in Settings."
+                            .to_string(),
+                    ),
+                    error_type: Some("NoApiKey".to_string()),
+                    provider: Some(provider),
+                    model: Some(model),
+                    usage: None,
+                });
+            }
+            Err(e) => {
+                log::error!("Failed to retrieve Genesis provider key: {}", e);
+                return Ok(LlmTransformResponse {
+                    success: false,
+                    output_text: None,
+                    error: Some(format!("Failed to access secure storage: {}", e)),
+                    error_type: Some("StorageError".to_string()),
+                    provider: Some(provider),
+                    model: Some(model),
+                    usage: None,
+                });
+            }
+        }
+    } else {
+        None
+    };
+
+    // Serialize Genesis calls: a concurrent call would 429. Reject the second
+    // call with a "still working" message instead of firing it. The guard clears
+    // on drop, covering the whole transform below.
+    let _genesis_guard = if provider_enum == TransformProvider::CopyCoders {
+        match GenesisInFlight::try_acquire() {
+            Some(guard) => Some(guard),
+            None => {
+                log::info!("Genesis busy — rejecting concurrent call with still-working notice");
+                return Ok(LlmTransformResponse {
+                    success: false,
+                    output_text: None,
+                    error: Some(
+                        "Genesis is still working on your previous request. Please wait for it to finish."
+                            .to_string(),
+                    ),
+                    error_type: Some("Busy".to_string()),
+                    provider: Some(provider),
+                    model: Some(model),
+                    usage: None,
+                });
+            }
+        }
+    } else {
+        None
+    };
+
     // Build the request
     let request = llm::TransformRequest {
         provider: provider_enum,
@@ -1534,9 +1802,9 @@ pub async fn transform_with_llm(
         max_tokens: max_tokens.unwrap_or(4096),
     };
 
-    // Execute the transform. Second key is None for all single-key providers
-    // (threaded through for future two-key providers — P1-txfactor).
-    match llm::transform(request, &api_key, None).await {
+    // Execute the transform. Second key is Some only for two-key providers
+    // (Genesis/CopyCoders); None for single-key providers.
+    match llm::transform(request, &api_key, api_key_2.as_deref()).await {
         Ok(result) => {
             log::info!(
                 "LLM Transform complete: provider={}, model={}, output_len={}",
