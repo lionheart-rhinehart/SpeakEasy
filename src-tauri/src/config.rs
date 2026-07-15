@@ -6,7 +6,10 @@ use std::path::PathBuf;
 
 // Current schema version for migrations
 const USAGE_SCHEMA_VERSION: u32 = 2;
-const SETTINGS_SCHEMA_VERSION: u32 = 2;
+// v3 (P1-migrate): persisted actions collapse into one unified `actions[]` array.
+// The frontend (migrateSettings + convert fns) owns the actual migration; this
+// const is the default stamped on Rust-created configs.
+const SETTINGS_SCHEMA_VERSION: u32 = 3;
 
 // ==================== User Settings (persisted to file) ====================
 
@@ -48,6 +51,43 @@ pub struct PromptAction {
     pub provider: Option<String>, // Per-action LLM provider override (P1-provfield); None → global default
     #[serde(default)]
     pub model: Option<String>, // Per-action LLM model override (P1-provfield); None → global default
+}
+
+/// Unified persisted action (v3). Mirrors the frontend `FileAction` interface.
+/// A single `actions[]` array replaces the legacy webhook_actions[] +
+/// prompt_actions[] split. Every field past the identity set is `#[serde(default)]`
+/// so a partial or forward-compatible entry never fails the whole config parse
+/// (a failed parse would wipe ALL settings via `unwrap_or_default`). Presence of
+/// `method` marks a webhook-origin action; its absence marks a PromptAction — the
+/// frontend routes on that when expanding back to the two in-memory arrays.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct Action {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub hotkey: String,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub kind: String, // "webhook" | "url" | "smart_url" | "prompt" | "brand_paste"
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    #[serde(default)]
+    pub method: Option<String>, // present => webhook-origin
+    #[serde(default)]
+    pub headers: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub ask_chrome_profile: Option<bool>,
+    #[serde(default)]
+    pub prompt: Option<String>,
+    #[serde(default)]
+    pub requires_selection: Option<bool>,
 }
 
 /// User settings that survive app reinstalls
@@ -96,12 +136,20 @@ pub struct UserSettings {
     #[serde(default = "default_transform_max_tokens")]
     pub transform_max_tokens: u32,
 
-    // Webhook actions
+    // v3 unified persisted actions. `#[serde(default)]` so old v2 configs (which
+    // carry only the two legacy arrays below) still deserialize with an empty vec.
     #[serde(default)]
+    pub actions: Vec<Action>,
+
+    // Legacy v2 arrays — kept as read-only migration inputs so an old config's 40+
+    // actions are NOT default-dropped on the Rust load before the frontend migrates
+    // them (P1-migrate-rust / the two-sided serde trap). `skip_serializing_if` omits
+    // them once empty so a migrated config collapses to just `actions[]` on disk.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub webhook_actions: Vec<WebhookAction>,
 
     // Prompt actions (LLM-based transforms with stored prompts)
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prompt_actions: Vec<PromptAction>,
 
     // Voice command settings
@@ -192,6 +240,7 @@ impl Default for UserSettings {
             transform_model: default_transform_model(),
             transform_temperature: default_transform_temperature(),
             transform_max_tokens: default_transform_max_tokens(),
+            actions: Vec::new(),
             webhook_actions: Vec::new(),
             prompt_actions: Vec::new(),
             hotkey_voice_command: default_hotkey_voice_command(),
@@ -852,6 +901,96 @@ mod tests {
         // Verify defaults were applied for new fields
         assert_eq!(stats.schema_version, 1); // default_schema_version returns 1
         assert_eq!(stats.transcription.count, 0); // New field defaults to 0
+    }
+
+    // ===== v3 action-schema migration (P1-migrate-rust) =====
+
+    #[test]
+    fn test_legacy_v2_config_preserves_all_actions() {
+        // An old v2 config carries the two legacy arrays and NO `actions[]`. The
+        // Rust load MUST return every action un-dropped (the two-sided serde trap:
+        // a wrong shape would default-drop them before the frontend can migrate).
+        let legacy_json = r#"{
+            "settings_version": 2,
+            "webhook_actions": [
+                {"id":"a","name":"Gmail","hotkey":"","webhook_url":"https://mail.google.com","method":"URL","enabled":true},
+                {"id":"b","name":"Post","hotkey":"","webhook_url":"https://x/hook","method":"POST","enabled":true},
+                {"id":"c","name":"Fix Grammar","hotkey":"","webhook_url":"","method":"PROMPT","enabled":true,"prompt":"fix {{text}}"}
+            ],
+            "prompt_actions": [
+                {"id":"d","name":"Summarize","hotkey":"","prompt":"summarize {{text}}","enabled":true}
+            ]
+        }"#;
+
+        let settings: UserSettings =
+            serde_json::from_str(legacy_json).expect("legacy v2 config should deserialize");
+
+        assert_eq!(
+            settings.webhook_actions.len(),
+            3,
+            "all 3 webhook actions must survive the Rust load"
+        );
+        assert_eq!(
+            settings.prompt_actions.len(),
+            1,
+            "the prompt action must survive the Rust load"
+        );
+        assert_eq!(
+            settings.actions.len(),
+            0,
+            "old config has no unified actions[] yet"
+        );
+    }
+
+    #[test]
+    fn test_v3_config_reads_unified_actions() {
+        // A v3 config carries the unified `actions[]` and no legacy arrays.
+        let v3_json = r#"{
+            "settings_version": 3,
+            "actions": [
+                {"id":"a","name":"Gmail","hotkey":"","enabled":true,"kind":"url","webhook_url":"https://mail.google.com","method":"URL"},
+                {"id":"c","name":"Fix Grammar","hotkey":"","enabled":true,"kind":"prompt","prompt":"fix {{text}}"}
+            ]
+        }"#;
+
+        let settings: UserSettings =
+            serde_json::from_str(v3_json).expect("v3 config should deserialize");
+
+        assert_eq!(settings.actions.len(), 2, "both unified actions load");
+        assert!(
+            settings.webhook_actions.is_empty() && settings.prompt_actions.is_empty(),
+            "v3 config has no legacy arrays"
+        );
+        // `method` presence marks webhook-origin (drives the frontend expand routing).
+        assert_eq!(settings.actions[0].method.as_deref(), Some("URL"));
+        assert_eq!(settings.actions[1].method, None);
+    }
+
+    #[test]
+    fn test_v3_save_omits_empty_legacy_arrays() {
+        // After migration the legacy arrays are empty; serialize must omit them so
+        // the on-disk config collapses to just `actions[]`.
+        let mut settings = UserSettings::default();
+        settings.actions = vec![Action {
+            id: "a".into(),
+            name: "Gmail".into(),
+            kind: "url".into(),
+            enabled: true,
+            method: Some("URL".into()),
+            webhook_url: Some("https://mail.google.com".into()),
+            ..Default::default()
+        }];
+
+        let json = serde_json::to_string(&settings).expect("should serialize");
+        assert!(json.contains("\"actions\""), "actions[] must be written");
+        assert!(
+            !json.contains("webhook_actions"),
+            "empty legacy webhook_actions must be omitted"
+        );
+        assert!(
+            !json.contains("prompt_actions"),
+            "empty legacy prompt_actions must be omitted"
+        );
     }
 
     #[test]

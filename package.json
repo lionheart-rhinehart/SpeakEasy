@@ -12,6 +12,7 @@
     "tauri:build": "tauri build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "wrapup": "node scripts/wrapup.mjs",
     "test-protocol": "node scripts/test-protocol.mjs",
     "lessons:search": "node scripts/lessons-search.mjs"
@@ -41,6 +42,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.7.2",
-    "vite": "^6.0.1"
+    "vite": "^6.0.1",
+    "vitest": "^2.1.9"
   }
 }

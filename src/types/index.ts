@@ -30,7 +30,13 @@ export type DisplayMode = "direct" | "toast" | "edit";
 export type TransformProvider = "openrouter" | "openai" | "anthropic";
 
 // Settings schema version for migrations
-export const SETTINGS_SCHEMA_VERSION = 2;
+// v3 (P1-migrate): the PERSISTED action schema collapses the two legacy arrays
+// (webhook_actions[] + prompt_actions[]) into one unified `actions[]` array on
+// disk. The in-memory UserSettings still keeps the two arrays (P1-action's split);
+// the collapse/expand happens at the persistence boundary (see appStore convert
+// fns + src/utils/actions.ts). Old v2 configs (no `actions[]`) are read via the
+// legacy arrays and rewritten as `actions[]` on the next save — zero data loss.
+export const SETTINGS_SCHEMA_VERSION = 3;
 
 export interface UserSettings {
   // Schema version for future migrations
@@ -231,6 +237,31 @@ export interface TranscriptionResponse {
 // These interfaces match the Rust UserSettings/WebhookAction structs in config.rs
 // ============================================================================
 
+// Unified persisted action (snake_case; mirrors the Rust `Action` struct in
+// config.rs). This is the v3 on-disk shape — a single `actions[]` array replaces
+// the legacy webhook_actions[] + prompt_actions[] split. A `method` field means
+// the entry originated as a WebhookAction; its ABSENCE means it originated as a
+// PromptAction — that's how the expand step (fileActionsToArrays) routes each
+// entry back to the correct in-memory array losslessly.
+export interface FileAction {
+  id: string;
+  name: string;
+  hotkey: string;
+  enabled: boolean;
+  kind: ActionKind;
+  // Per-action LLM provider/model override (P1-provfield). Unset → global default.
+  provider?: string;
+  model?: string;
+  // Webhook-origin fields (present ⇒ came from WebhookAction).
+  webhook_url?: string;
+  method?: string; // "POST" | "GET" | "URL" | "SMART_URL" | "PROMPT"
+  headers?: Record<string, string>;
+  ask_chrome_profile?: boolean;
+  // Prompt fields (webhook PROMPT-method actions and PromptActions both set these).
+  prompt?: string;
+  requires_selection?: boolean;
+}
+
 export interface FileWebhookAction {
   id: string;
   name: string;
@@ -276,7 +307,12 @@ export interface FileUserSettings {
   transform_model: string;
   transform_temperature: number;
   transform_max_tokens: number;
-  webhook_actions: FileWebhookAction[];
+  // v3 unified persisted actions. Optional so old v2 configs (which have only the
+  // two legacy arrays below) still deserialize; written on every save going forward.
+  actions?: FileAction[];
+  // Legacy v2 arrays — read-only migration inputs for old configs. Still optional
+  // on write so a downgraded read doesn't hard-fail, but v3 saves emit `actions[]`.
+  webhook_actions?: FileWebhookAction[];
   prompt_actions?: FilePromptAction[];  // Optional for backward compatibility
   // Voice command settings (optional for backward compatibility)
   hotkey_voice_command?: string;

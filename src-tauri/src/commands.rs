@@ -1534,8 +1534,9 @@ pub async fn transform_with_llm(
         max_tokens: max_tokens.unwrap_or(4096),
     };
 
-    // Execute the transform
-    match llm::transform(request, &api_key).await {
+    // Execute the transform. Second key is None for all single-key providers
+    // (threaded through for future two-key providers — P1-txfactor).
+    match llm::transform(request, &api_key, None).await {
         Ok(result) => {
             log::info!(
                 "LLM Transform complete: provider={}, model={}, output_len={}",

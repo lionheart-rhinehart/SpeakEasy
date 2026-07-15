@@ -182,15 +182,22 @@ impl std::fmt::Display for TransformError {
 
 impl std::error::Error for TransformError {}
 
-/// Execute a transform request using the appropriate provider
+/// Execute a transform request using the appropriate provider.
+///
+/// `api_key` is the primary credential. `api_key_2` is an optional SECOND
+/// credential threaded through for two-key providers (Genesis/CopyCoders sends a
+/// `gen_` bearer token AND an `X-Provider-Key`). Every existing single-key
+/// provider ignores it (`None`); it exists so two-key arms can slot in without a
+/// second signature churn (P1-txfactor — pure refactor, no behavior change).
 pub async fn transform(
     request: TransformRequest,
     api_key: &str,
+    api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     match request.provider {
-        TransformProvider::OpenRouter => transform_openrouter(request, api_key).await,
-        TransformProvider::OpenAI => transform_openai(request, api_key).await,
-        TransformProvider::Anthropic => transform_anthropic(request, api_key).await,
+        TransformProvider::OpenRouter => transform_openrouter(request, api_key, api_key_2).await,
+        TransformProvider::OpenAI => transform_openai(request, api_key, api_key_2).await,
+        TransformProvider::Anthropic => transform_anthropic(request, api_key, api_key_2).await,
     }
 }
 
@@ -198,6 +205,7 @@ pub async fn transform(
 async fn transform_openrouter(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "OpenRouter";
     let client = reqwest::Client::builder()
@@ -262,6 +270,7 @@ async fn transform_openrouter(
 async fn transform_openai(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "OpenAI";
     let client = reqwest::Client::builder()
@@ -465,6 +474,7 @@ fn parse_openai_error(status: u16, body: &str, provider: &str, model: &str) -> T
 async fn transform_anthropic(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "Anthropic";
     let client = reqwest::Client::builder()
