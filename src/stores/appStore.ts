@@ -8,17 +8,13 @@ import type {
   RecordingState,
   VocabularyEntry,
   FileUserSettings,
-  FileWebhookAction,
-  FilePromptAction,
-  WebhookAction,
-  PromptAction,
   AutoPasteMode,
   DisplayMode,
   TransformProvider,
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
 import { normalizeHotkey } from "../utils/hotkeyValidation";
-import { arraysToFileActions, fileActionsToArrays } from "../utils/actions";
+import { arraysToFileActions, resolveActionsFromFile } from "../utils/actions";
 
 // ============================================================================
 // localStorage quota safety
@@ -70,36 +66,6 @@ const safeLocalStorage = {
 // ============================================================================
 // Settings conversion helpers (camelCase <-> snake_case for Rust interop)
 // ============================================================================
-
-function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
-  return {
-    id: action.id,
-    name: action.name,
-    hotkey: action.hotkey,
-    webhookUrl: action.webhook_url,
-    method: action.method as WebhookAction["method"],
-    headers: action.headers,
-    enabled: action.enabled,
-    askChromeProfile: action.ask_chrome_profile,
-    prompt: action.prompt,
-    requiresSelection: action.requires_selection ?? true,
-    provider: action.provider as WebhookAction["provider"],
-    model: action.model,
-  };
-}
-
-function convertPromptToCamelCase(action: FilePromptAction): PromptAction {
-  return {
-    id: action.id,
-    name: action.name,
-    hotkey: action.hotkey,
-    prompt: action.prompt,
-    enabled: action.enabled,
-    requiresSelection: action.requires_selection ?? true,
-    provider: action.provider as PromptAction["provider"],
-    model: action.model,
-  };
-}
 
 function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
   return {
@@ -159,21 +125,16 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     transformModel: fileSettings.transform_model,
     transformTemperature: fileSettings.transform_temperature,
     transformMaxTokens: fileSettings.transform_max_tokens,
-    // v3: expand the unified `actions[]` back into the two in-memory arrays. Old v2
-    // configs have no `actions[]` — fall back to the legacy arrays (which the next
-    // save rewrites as `actions[]`). `actions` PRESENCE (not length) is the switch:
-    // a genuinely-empty v3 config is `actions: []`, an old config is `actions:
-    // undefined`.
-    ...(fileSettings.actions !== undefined
-      ? fileActionsToArrays(fileSettings.actions)
-      : {
-          webhookActions: (fileSettings.webhook_actions ?? []).map(
-            convertWebhookToCamelCase
-          ),
-          promptActions: (fileSettings.prompt_actions ?? []).map(
-            convertPromptToCamelCase
-          ),
-        }),
+    // v3: expand the unified `actions[]` into the two in-memory arrays, or fall
+    // back to the legacy arrays for old v2 configs. Decision is by CONTENT, not
+    // presence — the Rust struct always serializes `actions` (even as `[]`), so an
+    // old config arrives as `actions: []` + populated `webhook_actions`; a presence
+    // check would drop every legacy action. See resolveActionsFromFile.
+    ...resolveActionsFromFile(
+      fileSettings.actions,
+      fileSettings.webhook_actions,
+      fileSettings.prompt_actions
+    ),
     // Voice command settings
     hotkeyVoiceCommand: fileSettings.hotkey_voice_command ?? "Control+Shift+Space",
     voiceCommandEnabled: fileSettings.voice_command_enabled ?? true,
