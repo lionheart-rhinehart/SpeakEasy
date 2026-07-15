@@ -18,6 +18,8 @@ const PROVIDER_INFO: Record<TransformProvider, { name: string; description: stri
   openrouter: { name: "OpenRouter", description: "Access many models with one API key" },
   openai: { name: "OpenAI (Direct)", description: "Direct connection to OpenAI" },
   anthropic: { name: "Anthropic (Direct)", description: "Direct connection to Claude" },
+  poe: { name: "Poe", description: "Use your Poe subscription's bots by handle" },
+  copycoders: { name: "Genesis", description: "CopyCoders bots (two keys: gen_ + provider key)" },
 };
 
 // Helper to convert keyboard event to Tauri hotkey format
@@ -145,6 +147,10 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
   const [transformKeyStatuses, setTransformKeyStatuses] = useState<ApiKeyStatus[]>([]);
   const [tempTransformApiKey, setTempTransformApiKey] = useState("");
   const [isSettingTransformKey, setIsSettingTransformKey] = useState(false);
+  // Genesis/CopyCoders second key (X-Provider-Key) — the only multi-key provider.
+  const [copycodersProviderKeyStatus, setCopycodersProviderKeyStatus] = useState<ApiKeyStatus | null>(null);
+  const [tempCopycodersProviderKey, setTempCopycodersProviderKey] = useState("");
+  const [isSettingCopycodersKey, setIsSettingCopycodersKey] = useState(false);
   const [customModel, setCustomModel] = useState("");
   const [showAdvancedTransform, setShowAdvancedTransform] = useState(false);
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
@@ -334,6 +340,115 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
       console.error("Failed to clear transform API key:", error);
     }
   };
+
+  // --- Genesis/CopyCoders second key (X-Provider-Key) ---
+  const loadCopycodersProviderKeyStatus = useCallback(async () => {
+    try {
+      const status = await invoke<ApiKeyStatus>("get_copycoders_provider_key_status");
+      setCopycodersProviderKeyStatus(status);
+    } catch (error) {
+      console.error("Failed to load Genesis provider key status:", error);
+    }
+  }, []);
+
+  const handleSetCopycodersProviderKey = async () => {
+    if (!tempCopycodersProviderKey.trim()) return;
+    setIsSettingCopycodersKey(true);
+    try {
+      await invoke("set_copycoders_provider_key", { apiKey: tempCopycodersProviderKey.trim() });
+      setTempCopycodersProviderKey("");
+      await loadCopycodersProviderKeyStatus();
+    } catch (error) {
+      console.error("Failed to set Genesis provider key:", error);
+      alert(`Failed to save provider key: ${error}`);
+    } finally {
+      setIsSettingCopycodersKey(false);
+    }
+  };
+
+  const handleClearCopycodersProviderKey = async () => {
+    if (!confirm("Remove Genesis provider key?")) return;
+    try {
+      await invoke("clear_copycoders_provider_key");
+      await loadCopycodersProviderKeyStatus();
+    } catch (error) {
+      console.error("Failed to clear Genesis provider key:", error);
+    }
+  };
+
+  // Per-action provider/model override UI (P1-provfield). Only meaningful for
+  // PROMPT-method actions (LLM transforms). Empty provider = use the global
+  // default. Shared by the add + inline-edit forms (both drive `editingWebhook`).
+  const renderActionProviderOverride = () => (
+    <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+      <div>
+        <label className="block text-xs text-text-secondary mb-1">
+          Provider for this action (optional)
+        </label>
+        <select
+          value={editingWebhook?.provider ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            setEditingWebhook((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    provider: v === "" ? undefined : (v as TransformProvider),
+                    // Clearing the provider override also clears the model override.
+                    model: v === "" ? undefined : prev.model,
+                  }
+                : prev
+            );
+          }}
+          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">
+            Use global default ({PROVIDER_INFO[settings.transformProvider].name})
+          </option>
+          {(Object.keys(PROVIDER_INFO) as TransformProvider[]).map((p) => (
+            <option key={p} value={p}>
+              {PROVIDER_INFO[p].name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {editingWebhook?.provider && (
+        <div>
+          <label className="block text-xs text-text-secondary mb-1">
+            Model / bot for this action
+          </label>
+          <input
+            type="text"
+            value={editingWebhook.model ?? ""}
+            onChange={(e) =>
+              setEditingWebhook((prev) =>
+                prev ? { ...prev, model: e.target.value || undefined } : prev
+              )
+            }
+            placeholder={
+              editingWebhook.provider === "copycoders"
+                ? "Genesis bot slug"
+                : editingWebhook.provider === "poe"
+                ? "Poe bot handle"
+                : "Model id (blank = global model)"
+            }
+            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+          />
+          <p className="text-xs text-text-secondary mt-1">
+            Leave blank to use the global model with this provider.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // Load the Genesis second-key status when the AI Transform section opens or the
+  // provider switches to Genesis (so the second-key input reflects saved state).
+  useEffect(() => {
+    if (aiTransformExpanded && settings.transformProvider === "copycoders") {
+      loadCopycodersProviderKeyStatus();
+    }
+  }, [aiTransformExpanded, settings.transformProvider, loadCopycodersProviderKeyStatus]);
 
   const loadAutostartState = async () => {
     try {
@@ -931,6 +1046,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                           <p className="text-xs text-text-secondary">When unchecked, runs prompt standalone without copying selected text</p>
                         </div>
                       </label>
+                      {renderActionProviderOverride()}
                     </>
                   )}
                   {/* Chrome profile chooser option - only for URL method */}
@@ -1082,6 +1198,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                                   <p className="text-xs text-text-secondary">When unchecked, runs prompt standalone without copying selected text</p>
                                 </div>
                               </label>
+                              {renderActionProviderOverride()}
                             </>
                           )}
                           {/* Chrome profile chooser option - only for URL method */}
@@ -1280,7 +1397,7 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                         type="password"
                         value={tempTransformApiKey}
                         onChange={(e) => setTempTransformApiKey(e.target.value)}
-                        placeholder={settings.transformProvider === "anthropic" ? "sk-ant-..." : "sk-..."}
+                        placeholder={settings.transformProvider === "anthropic" ? "sk-ant-..." : settings.transformProvider === "poe" ? "Your Poe API key" : settings.transformProvider === "copycoders" ? "gen_..." : "sk-..."}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                       <button
@@ -1303,6 +1420,12 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                   {settings.transformProvider === "anthropic" && (
                     <>Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">console.anthropic.com</a></>
                   )}
+                  {settings.transformProvider === "poe" && (
+                    <>Get your key at <a href="https://poe.com/api_key" target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline">poe.com/api_key</a>. Set the model to a Poe bot handle (e.g. "Claude-Sonnet-5").</>
+                  )}
+                  {settings.transformProvider === "copycoders" && (
+                    <>Your Genesis <code>gen_</code> key. You also need a provider key below. The model is a Genesis bot slug.</>
+                  )}
                 </p>
                 {settings.transformProvider !== "openai" && (
                   <p className="text-xs text-slate-400 mt-1 italic">
@@ -1310,6 +1433,50 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
                   </p>
                 )}
               </div>
+
+              {/* Genesis second key (X-Provider-Key) — only multi-key provider */}
+              {settings.transformProvider === "copycoders" && (
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">
+                    Genesis Provider Key
+                    <span className="text-text-secondary font-normal"> (sent as X-Provider-Key)</span>
+                  </label>
+                  {copycodersProviderKeyStatus?.is_set ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm font-mono text-green-700">
+                        {copycodersProviderKeyStatus.preview || "••••••••"}
+                      </div>
+                      <button
+                        onClick={handleClearCopycodersProviderKey}
+                        className="px-3 py-2 text-red-500 hover:text-red-700 text-sm"
+                        title="Remove Provider Key"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="password"
+                        value={tempCopycodersProviderKey}
+                        onChange={(e) => setTempCopycodersProviderKey(e.target.value)}
+                        placeholder="Your provider key"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                      <button
+                        onClick={handleSetCopycodersProviderKey}
+                        disabled={!tempCopycodersProviderKey.trim() || isSettingCopycodersKey}
+                        className="px-3 py-1.5 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSettingCopycodersKey ? "Saving..." : "Save Provider Key"}
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-400 mt-1 italic">
+                    Genesis needs both keys: the gen_ token above and this provider key.
+                  </p>
+                </div>
+              )}
 
               {/* Model Selection */}
               <div>

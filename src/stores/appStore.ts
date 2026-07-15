@@ -18,6 +18,7 @@ import type {
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
 import { normalizeHotkey } from "../utils/hotkeyValidation";
+import { arraysToFileActions, fileActionsToArrays } from "../utils/actions";
 
 // ============================================================================
 // localStorage quota safety
@@ -70,23 +71,6 @@ const safeLocalStorage = {
 // Settings conversion helpers (camelCase <-> snake_case for Rust interop)
 // ============================================================================
 
-function convertWebhookToSnakeCase(action: WebhookAction): FileWebhookAction {
-  return {
-    id: action.id,
-    name: action.name,
-    hotkey: action.hotkey,
-    webhook_url: action.webhookUrl,
-    method: action.method,
-    headers: action.headers,
-    enabled: action.enabled,
-    ask_chrome_profile: action.askChromeProfile,
-    prompt: action.prompt,
-    requires_selection: action.requiresSelection ?? true,
-    provider: action.provider,
-    model: action.model,
-  };
-}
-
 function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
   return {
     id: action.id,
@@ -100,19 +84,6 @@ function convertWebhookToCamelCase(action: FileWebhookAction): WebhookAction {
     prompt: action.prompt,
     requiresSelection: action.requires_selection ?? true,
     provider: action.provider as WebhookAction["provider"],
-    model: action.model,
-  };
-}
-
-function convertPromptToSnakeCase(action: PromptAction): FilePromptAction {
-  return {
-    id: action.id,
-    name: action.name,
-    hotkey: action.hotkey,
-    prompt: action.prompt,
-    enabled: action.enabled,
-    requires_selection: action.requiresSelection ?? true,
-    provider: action.provider,
     model: action.model,
   };
 }
@@ -150,8 +121,13 @@ function convertSettingsToSnakeCase(settings: UserSettings): FileUserSettings {
     transform_model: settings.transformModel,
     transform_temperature: settings.transformTemperature ?? 0.7,
     transform_max_tokens: settings.transformMaxTokens ?? 4096,
-    webhook_actions: settings.webhookActions.map(convertWebhookToSnakeCase),
-    prompt_actions: settings.promptActions.map(convertPromptToSnakeCase),
+    // v3: collapse the two in-memory arrays into one persisted `actions[]`. Legacy
+    // webhook_actions/prompt_actions are intentionally NOT written — an old config
+    // is migrated to `actions[]` on its first save (see convertSettingsToCamelCase).
+    actions: arraysToFileActions(
+      settings.webhookActions ?? [],
+      settings.promptActions ?? []
+    ),
     // Voice command settings
     hotkey_voice_command: settings.hotkeyVoiceCommand ?? "Control+Shift+Space",
     voice_command_enabled: settings.voiceCommandEnabled ?? true,
@@ -183,8 +159,21 @@ function convertSettingsToCamelCase(fileSettings: FileUserSettings): UserSetting
     transformModel: fileSettings.transform_model,
     transformTemperature: fileSettings.transform_temperature,
     transformMaxTokens: fileSettings.transform_max_tokens,
-    webhookActions: fileSettings.webhook_actions.map(convertWebhookToCamelCase),
-    promptActions: (fileSettings.prompt_actions ?? []).map(convertPromptToCamelCase),
+    // v3: expand the unified `actions[]` back into the two in-memory arrays. Old v2
+    // configs have no `actions[]` — fall back to the legacy arrays (which the next
+    // save rewrites as `actions[]`). `actions` PRESENCE (not length) is the switch:
+    // a genuinely-empty v3 config is `actions: []`, an old config is `actions:
+    // undefined`.
+    ...(fileSettings.actions !== undefined
+      ? fileActionsToArrays(fileSettings.actions)
+      : {
+          webhookActions: (fileSettings.webhook_actions ?? []).map(
+            convertWebhookToCamelCase
+          ),
+          promptActions: (fileSettings.prompt_actions ?? []).map(
+            convertPromptToCamelCase
+          ),
+        }),
     // Voice command settings
     hotkeyVoiceCommand: fileSettings.hotkey_voice_command ?? "Control+Shift+Space",
     voiceCommandEnabled: fileSettings.voice_command_enabled ?? true,
@@ -377,7 +366,22 @@ function migrateSettings(settings: Partial<UserSettings>): UserSettings {
     
     console.log("Migrated settings from v1 to v2 (added transform settings)");
   }
-  
+
+  // Migration: v2 -> v3 (P1-migrate) — persisted actions collapse from the two
+  // legacy arrays into one unified `actions[]` on disk. By the time settings reach
+  // here they've already been expanded into the two in-memory arrays by
+  // convertSettingsToCamelCase (reading either the new `actions[]` or the legacy
+  // arrays), so the collapse is transparent to the runtime. This branch only marks
+  // the bump and guards the arrays; the next save writes the v3 `actions[]` shape.
+  if (version < 3) {
+    migrated.webhookActions = migrated.webhookActions ?? [];
+    migrated.promptActions = migrated.promptActions ?? [];
+    console.log(
+      `Migrated settings from v${version} to v3 (unified persisted actions[]; ` +
+        `${migrated.webhookActions.length} webhook + ${migrated.promptActions.length} prompt actions preserved)`
+    );
+  }
+
   // Normalize all hotkeys to canonical modifier order so that physically
   // identical shortcuts stored in different modifier orders (e.g.
   // "Shift+Control+1" vs "Control+Shift+1") collapse to the same string.

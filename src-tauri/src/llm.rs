@@ -14,6 +14,12 @@ use std::time::Duration;
 /// Default timeout for LLM API requests (30 seconds)
 const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
+/// Timeout for Genesis/CopyCoders streaming requests. Genesis copywriting jobs
+/// (full ad sets, VSLs) can run several minutes; its docs warn that non-streaming
+/// long generations hit proxy read-timeouts, so we stream (heartbeats keep the
+/// connection alive) under a generous total budget instead of the 60s default.
+const GENESIS_TIMEOUT_SECS: u64 = 300;
+
 /// Default max tokens for responses
 const DEFAULT_MAX_TOKENS: u32 = 4096;
 
@@ -182,15 +188,24 @@ impl std::fmt::Display for TransformError {
 
 impl std::error::Error for TransformError {}
 
-/// Execute a transform request using the appropriate provider
+/// Execute a transform request using the appropriate provider.
+///
+/// `api_key` is the primary credential. `api_key_2` is an optional SECOND
+/// credential threaded through for two-key providers (Genesis/CopyCoders sends a
+/// `gen_` bearer token AND an `X-Provider-Key`). Every existing single-key
+/// provider ignores it (`None`); it exists so two-key arms can slot in without a
+/// second signature churn (P1-txfactor — pure refactor, no behavior change).
 pub async fn transform(
     request: TransformRequest,
     api_key: &str,
+    api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     match request.provider {
-        TransformProvider::OpenRouter => transform_openrouter(request, api_key).await,
-        TransformProvider::OpenAI => transform_openai(request, api_key).await,
-        TransformProvider::Anthropic => transform_anthropic(request, api_key).await,
+        TransformProvider::OpenRouter => transform_openrouter(request, api_key, api_key_2).await,
+        TransformProvider::OpenAI => transform_openai(request, api_key, api_key_2).await,
+        TransformProvider::Anthropic => transform_anthropic(request, api_key, api_key_2).await,
+        TransformProvider::Poe => transform_poe(request, api_key, api_key_2).await,
+        TransformProvider::CopyCoders => transform_copycoders(request, api_key, api_key_2).await,
     }
 }
 
@@ -198,6 +213,7 @@ pub async fn transform(
 async fn transform_openrouter(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "OpenRouter";
     let client = reqwest::Client::builder()
@@ -258,10 +274,220 @@ async fn transform_openrouter(
     parse_openai_response(response, provider, &request.model).await
 }
 
+/// Poe provider (OpenAI-compatible API at api.poe.com/v1).
+/// Single-key (Bearer). `model` is the Poe bot name/handle (e.g. "GPT-4o",
+/// "Claude-Sonnet-5"). Reuses the OpenAI-compatible response parser.
+async fn transform_poe(
+    request: TransformRequest,
+    api_key: &str,
+    _api_key_2: Option<&str>,
+) -> Result<TransformResult, TransformError> {
+    let provider = "Poe";
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| TransformError::NetworkError {
+            provider: provider.to_string(),
+            message: e.to_string(),
+        })?;
+
+    let user_content = if request.input_text.is_empty() {
+        request.instruction.clone()
+    } else {
+        format!(
+            "Text to transform:\n\n{}\n\nInstruction: {}",
+            request.input_text, request.instruction
+        )
+    };
+
+    let body = serde_json::json!({
+        "model": request.model,
+        "messages": [
+            { "role": "system", "content": TRANSFORM_SYSTEM_PROMPT },
+            { "role": "user", "content": user_content }
+        ],
+        "temperature": request.temperature,
+        "max_tokens": request.max_tokens
+    });
+
+    let response = client
+        .post("https://api.poe.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                TransformError::Timeout {
+                    provider: provider.to_string(),
+                    timeout_secs: DEFAULT_TIMEOUT_SECS,
+                }
+            } else if e.is_connect() {
+                TransformError::NetworkError {
+                    provider: provider.to_string(),
+                    message: "Failed to connect".to_string(),
+                }
+            } else {
+                TransformError::NetworkError {
+                    provider: provider.to_string(),
+                    message: e.to_string(),
+                }
+            }
+        })?;
+
+    parse_openai_response(response, provider, &request.model).await
+}
+
+/// Genesis / CopyCoders provider (OpenAI-compatible, two-key, streaming).
+///
+/// `api_key` = the `gen_` bearer token; `api_key_2` = the provider key sent as
+/// `X-Provider-Key` (required). Requests `stream:true` so Genesis emits SSE
+/// heartbeats that prevent proxy read-timeouts on long jobs; we buffer the whole
+/// SSE body under a 300s total budget (SpeakEasy pastes only the final text, so
+/// incremental delivery isn't needed) and reassemble the `delta.content` chunks.
+async fn transform_copycoders(
+    request: TransformRequest,
+    api_key: &str,
+    api_key_2: Option<&str>,
+) -> Result<TransformResult, TransformError> {
+    let provider = "Genesis";
+
+    let provider_key = api_key_2.ok_or_else(|| TransformError::NoApiKey {
+        provider: format!("{} provider key", provider),
+    })?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(GENESIS_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| TransformError::NetworkError {
+            provider: provider.to_string(),
+            message: e.to_string(),
+        })?;
+
+    let user_content = if request.input_text.is_empty() {
+        request.instruction.clone()
+    } else {
+        format!(
+            "Text to transform:\n\n{}\n\nInstruction: {}",
+            request.input_text, request.instruction
+        )
+    };
+
+    let body = serde_json::json!({
+        "model": request.model,
+        "messages": [
+            { "role": "system", "content": TRANSFORM_SYSTEM_PROMPT },
+            { "role": "user", "content": user_content }
+        ],
+        "temperature": request.temperature,
+        "max_tokens": request.max_tokens,
+        "stream": true
+    });
+
+    let response = client
+        .post("https://gas.copycoders.ai/api/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("X-Provider-Key", provider_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_timeout() {
+                TransformError::Timeout {
+                    provider: provider.to_string(),
+                    timeout_secs: GENESIS_TIMEOUT_SECS,
+                }
+            } else if e.is_connect() {
+                TransformError::NetworkError {
+                    provider: provider.to_string(),
+                    message: "Failed to connect".to_string(),
+                }
+            } else {
+                TransformError::NetworkError {
+                    provider: provider.to_string(),
+                    message: e.to_string(),
+                }
+            }
+        })?;
+
+    let status = response.status();
+    // Buffer the full body. On the happy path this is the SSE stream; heartbeats
+    // keep bytes flowing so the timeout is a total budget, not per-read.
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| TransformError::NetworkError {
+            provider: provider.to_string(),
+            message: format!("Failed to read response: {}", e),
+        })?;
+
+    log::debug!(
+        "{} response status: {}, body length: {}",
+        provider,
+        status,
+        body_text.len()
+    );
+
+    if !status.is_success() {
+        return Err(parse_openai_error(
+            status.as_u16(),
+            &body_text,
+            provider,
+            &request.model,
+        ));
+    }
+
+    let output_text = parse_sse_content(&body_text);
+    if output_text.is_empty() {
+        return Err(TransformError::Unknown {
+            provider: provider.to_string(),
+            message: "No content in streamed response".to_string(),
+        });
+    }
+
+    Ok(TransformResult {
+        output_text,
+        model: request.model.clone(),
+        provider: provider.to_string(),
+        usage: None,
+    })
+}
+
+/// Reassemble the assistant text from an OpenAI-style SSE stream body.
+/// Each event line is `data: {json}`; we concatenate `choices[0].delta.content`
+/// (streaming) and also accept `choices[0].message.content` (non-streaming
+/// fallback). `[DONE]` sentinels, heartbeat comments (`:`), and blank lines are
+/// ignored. Malformed chunks are skipped rather than failing the whole parse.
+fn parse_sse_content(body: &str) -> String {
+    let mut out = String::new();
+    for line in body.lines() {
+        let line = line.trim_start();
+        let payload = match line.strip_prefix("data:") {
+            Some(p) => p.trim(),
+            None => continue, // heartbeat comment, blank line, or non-SSE body
+        };
+        if payload.is_empty() || payload == "[DONE]" {
+            continue;
+        }
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload) {
+            let choice = &json["choices"][0];
+            if let Some(delta) = choice["delta"]["content"].as_str() {
+                out.push_str(delta);
+            } else if let Some(content) = choice["message"]["content"].as_str() {
+                out.push_str(content);
+            }
+        }
+    }
+    out
+}
+
 /// OpenAI provider (direct API)
 async fn transform_openai(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "OpenAI";
     let client = reqwest::Client::builder()
@@ -465,6 +691,7 @@ fn parse_openai_error(status: u16, body: &str, provider: &str, model: &str) -> T
 async fn transform_anthropic(
     request: TransformRequest,
     api_key: &str,
+    _api_key_2: Option<&str>,
 ) -> Result<TransformResult, TransformError> {
     let provider = "Anthropic";
     let client = reqwest::Client::builder()
@@ -665,5 +892,35 @@ mod tests {
     fn test_default_values() {
         assert_eq!(default_temperature(), 0.7);
         assert_eq!(default_max_tokens(), 4096);
+    }
+
+    #[test]
+    fn test_parse_sse_content_accumulates_deltas() {
+        // A representative Genesis/OpenAI SSE stream: heartbeat comment, delta
+        // chunks, a role-only opener, then [DONE].
+        let body = "\
+: heartbeat\n\
+data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\
+\n\
+data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\
+data: {\"choices\":[{\"delta\":{\"content\":\", world\"}}]}\n\
+data: {\"choices\":[{\"delta\":{\"content\":\"!\"}}]}\n\
+data: [DONE]\n";
+        assert_eq!(parse_sse_content(body), "Hello, world!");
+    }
+
+    #[test]
+    fn test_parse_sse_content_non_streaming_fallback() {
+        // If the server returns a single non-streamed chunk with message.content.
+        let body = "data: {\"choices\":[{\"message\":{\"content\":\"Full text\"}}]}\n";
+        assert_eq!(parse_sse_content(body), "Full text");
+    }
+
+    #[test]
+    fn test_parse_sse_content_skips_malformed() {
+        let body = "\
+data: not-json\n\
+data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n";
+        assert_eq!(parse_sse_content(body), "ok");
     }
 }

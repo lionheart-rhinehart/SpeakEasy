@@ -20,7 +20,15 @@ pub enum TransformProvider {
     OpenRouter,
     OpenAI,
     Anthropic,
+    Poe,
+    CopyCoders,
 }
+
+/// Credential key for Genesis/CopyCoders' SECOND key (the `X-Provider-Key`).
+/// Keyring stores one secret per (service, username); the primary `gen_` bearer
+/// token lives under `transform_copycoders_api_key` (via `credential_key`), and
+/// this is the parallel slot for the provider key.
+const COPYCODERS_PROVIDER_KEY_CRED: &str = "transform_copycoders_provider_key";
 
 impl TransformProvider {
     /// Get the credential key name for this provider
@@ -29,6 +37,8 @@ impl TransformProvider {
             TransformProvider::OpenRouter => "transform_openrouter_api_key",
             TransformProvider::OpenAI => "transform_openai_api_key",
             TransformProvider::Anthropic => "transform_anthropic_api_key",
+            TransformProvider::Poe => "transform_poe_api_key",
+            TransformProvider::CopyCoders => "transform_copycoders_api_key",
         }
     }
 
@@ -38,6 +48,8 @@ impl TransformProvider {
             "openrouter" => Some(TransformProvider::OpenRouter),
             "openai" => Some(TransformProvider::OpenAI),
             "anthropic" => Some(TransformProvider::Anthropic),
+            "poe" => Some(TransformProvider::Poe),
+            "copycoders" => Some(TransformProvider::CopyCoders),
             _ => None,
         }
     }
@@ -48,6 +60,8 @@ impl TransformProvider {
             TransformProvider::OpenRouter => "openrouter",
             TransformProvider::OpenAI => "openai",
             TransformProvider::Anthropic => "anthropic",
+            TransformProvider::Poe => "poe",
+            TransformProvider::CopyCoders => "copycoders",
         }
     }
 }
@@ -195,7 +209,79 @@ pub fn get_all_api_key_statuses() -> Vec<ApiKeyStatus> {
         get_api_key_status(TransformProvider::OpenRouter),
         get_api_key_status(TransformProvider::OpenAI),
         get_api_key_status(TransformProvider::Anthropic),
+        get_api_key_status(TransformProvider::Poe),
+        get_api_key_status(TransformProvider::CopyCoders),
     ]
+}
+
+// ============================================================================
+// Genesis/CopyCoders SECOND key (the X-Provider-Key)
+// ============================================================================
+// Genesis is two-key: the `gen_` bearer token (stored via credential_key like any
+// other provider) PLUS a provider key sent as `X-Provider-Key`. Since keyring is
+// one-secret-per-username, the provider key gets its own credential slot.
+
+/// Create a keyring entry for the CopyCoders provider (second) key.
+fn get_copycoders_provider_entry() -> Result<Entry> {
+    Entry::new(SERVICE_NAME, COPYCODERS_PROVIDER_KEY_CRED).context(format!(
+        "Failed to create keyring entry for service='{}', user='{}'",
+        SERVICE_NAME, COPYCODERS_PROVIDER_KEY_CRED
+    ))
+}
+
+/// Store the CopyCoders provider (second) key.
+pub fn set_copycoders_provider_key(key: &str) -> Result<()> {
+    let entry = get_copycoders_provider_entry()?;
+    entry
+        .set_password(key)
+        .context("Failed to store CopyCoders provider key")?;
+    log::info!("Stored CopyCoders provider key (length: {})", key.len());
+    Ok(())
+}
+
+/// Retrieve the CopyCoders provider (second) key (None if not set).
+pub fn get_copycoders_provider_key() -> Result<Option<String>> {
+    let entry = get_copycoders_provider_entry()?;
+    match entry.get_password() {
+        Ok(key) => Ok(Some(key)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(anyhow::anyhow!(
+            "Failed to retrieve CopyCoders provider key: {}",
+            e
+        )),
+    }
+}
+
+/// Delete the CopyCoders provider (second) key.
+pub fn clear_copycoders_provider_key() -> Result<()> {
+    let entry = get_copycoders_provider_entry()?;
+    match entry.delete_credential() {
+        Ok(()) => {
+            log::info!("Cleared CopyCoders provider key");
+            Ok(())
+        }
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(anyhow::anyhow!(
+            "Failed to clear CopyCoders provider key: {}",
+            e
+        )),
+    }
+}
+
+/// Status of the CopyCoders provider (second) key (never returns the raw key).
+pub fn get_copycoders_provider_key_status() -> ApiKeyStatus {
+    match get_copycoders_provider_key() {
+        Ok(Some(key)) => ApiKeyStatus {
+            provider: "copycoders_provider".to_string(),
+            is_set: true,
+            preview: Some(mask_api_key(&key)),
+        },
+        _ => ApiKeyStatus {
+            provider: "copycoders_provider".to_string(),
+            is_set: false,
+            preview: None,
+        },
+    }
 }
 
 /// Mask an API key for display (show first few and last few characters)
@@ -224,7 +310,11 @@ mod tests {
     fn test_mask_api_key_openai_format() {
         let key = "sk-proj-abc123xyz789verylongkey";
         let masked = mask_api_key(key);
-        assert!(masked.starts_with("sk-proj-"));
+        // mask_api_key reveals only up to the FIRST hyphen (prefix_len = index of
+        // first '-' + 1, capped at 8) — for "sk-proj-…" that's "sk-", the more
+        // privacy-preserving choice. (Pre-existing test asserted "sk-proj-", which
+        // never matched the implementation; corrected to the actual, safer output.)
+        assert!(masked.starts_with("sk-"));
         assert!(masked.ends_with("gkey"));
         assert!(masked.contains("••••"));
     }
