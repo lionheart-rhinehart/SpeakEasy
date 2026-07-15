@@ -1,8 +1,19 @@
 # CORE-thread Handoff — 2026-07-10
 
-> For the **next `feature/core` chat.** Read `docs/BUILD-STATUS.md` → `docs/MASTER-PLAN.md`
-> (§5, §11, §12) → `docs/DECISION-LOG.md` first (the standing ritual). This doc is the
-> delta + gotchas on top of those, so you don't re-derive what this session already nailed down.
+> ## ⛔ THE PLAN IS ALREADY BUILT. DO NOT RE-PLAN.
+> `docs/MASTER-PLAN.md`, `docs/DECISION-LOG.md` (D1–D12), and the `docs/BUILD-STATUS.md`
+> §12 checklist are the **finished contract** — committed, decided, and mid-execution. Your
+> job is pure **execution**, not planning:
+> - **Do NOT** recreate the plan, re-run any "plan mode," re-derive decisions, or re-open
+>   anything already in the Decision Log. If a decision looks wrong, read its D-entry first;
+>   only then raise it — don't silently change it (MASTER-PLAN §13, rule 4).
+> - **DO** read the files below, find the next unblocked `todo` item in the ledger
+>   (`P1-migrate`), mark it `in-progress`, build it, mark it `done` with evidence, repeat.
+> - Read order (standing ritual): `docs/BUILD-STATUS.md` → `docs/MASTER-PLAN.md` (§5, §11,
+>   §12) → `docs/DECISION-LOG.md` → **this doc** (the delta + gotchas since the plan was written).
+>
+> This handoff is a *supplement* to the plan, not a substitute — it exists so you don't
+> re-derive what the last session already nailed down.
 
 ## 1. Where things stand (on `master`, verified)
 
