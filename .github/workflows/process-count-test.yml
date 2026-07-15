@@ -1,4 +1,4 @@
-﻿name: Single Instance Process Test
+name: Single Instance Process Test
 
 on:
   push:
@@ -35,4 +35,4 @@ jobs:
         $count2 = (Get-Process -Name "speakeasy" -ErrorAction SilentlyContinue | Measure-Object).Count
         Stop-Process -Name "speakeasy" -Force -ErrorAction SilentlyContinue
         if ($count2 -ne 1) { exit 1 }
-        Write-Host "âœ… Single instance test passed!"
+        Write-Host "Single instance test passed!"
