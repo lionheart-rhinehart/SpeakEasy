@@ -10,8 +10,9 @@ import { join } from "node:path";
 import {
   arraysToFileActions,
   fileActionsToArrays,
+  resolveActionsFromFile,
 } from "./actions";
-import type { WebhookAction, PromptAction } from "../types";
+import type { WebhookAction, PromptAction, FileWebhookAction } from "../types";
 
 // A fixture covering every WebhookAction method (URL / SMART_URL / POST / GET /
 // PROMPT) plus PromptActions, including per-action provider/model overrides.
@@ -63,6 +64,39 @@ describe("persisted action collapse/expand (P1-migrate)", () => {
     expect(p2.provider).toBe("anthropic");
     expect(p2.model).toBe("claude-sonnet-5");
     expect(p2.requiresSelection).toBe(false);
+  });
+
+  // Regression for the 2026-07-14 data-loss bug: Rust always serializes `actions`,
+  // so an OLD v2 config arrives over the Tauri boundary as `actions: []` (present
+  // but empty) ALONGSIDE the populated legacy arrays. resolveActionsFromFile must
+  // read the legacy actions, NOT treat the empty `actions[]` as an empty v3 config.
+  it("reads legacy arrays when Rust sends an empty actions[] (v2 config)", () => {
+    const legacy: FileWebhookAction[] = Array.from({ length: 46 }, (_, i) => ({
+      id: `w${i}`,
+      name: `Action ${i}`,
+      hotkey: "",
+      webhook_url: "https://example.com",
+      method: "URL",
+      enabled: true,
+    }));
+    const resolved = resolveActionsFromFile([], legacy, undefined);
+    expect(resolved.webhookActions).toHaveLength(46);
+    expect(resolved.promptActions).toHaveLength(0);
+    expect(resolved.webhookActions.map((w) => w.id)).toEqual(legacy.map((w) => w.id));
+  });
+
+  it("prefers the unified actions[] when it is non-empty (v3 config)", () => {
+    const unified = arraysToFileActions(webhooks, prompts);
+    // Even if stale legacy arrays are also present, non-empty actions[] wins.
+    const resolved = resolveActionsFromFile(unified, [], undefined);
+    expect(resolved.webhookActions).toHaveLength(webhooks.length);
+    expect(resolved.promptActions).toHaveLength(prompts.length);
+  });
+
+  it("is empty only when both actions[] and legacy arrays are empty", () => {
+    const resolved = resolveActionsFromFile([], [], []);
+    expect(resolved.webhookActions).toHaveLength(0);
+    expect(resolved.promptActions).toHaveLength(0);
   });
 
   it("is idempotent: a second round-trip is a fixed point", () => {

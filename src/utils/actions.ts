@@ -16,6 +16,8 @@ import type {
   PromptAction,
   UserSettings,
   FileAction,
+  FileWebhookAction,
+  FilePromptAction,
 } from "../types";
 
 /** Map a WebhookAction's `method` to a unified `kind`. */
@@ -202,4 +204,61 @@ export function fileActionsToArrays(actions: FileAction[]): {
     }
   }
   return { webhookActions, promptActions };
+}
+
+/** Legacy v2 file→memory mappers (used only when reading a pre-v3 config). */
+export function fileWebhookToCamel(action: FileWebhookAction): WebhookAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    webhookUrl: action.webhook_url,
+    method: action.method as WebhookAction["method"],
+    headers: action.headers,
+    enabled: action.enabled,
+    askChromeProfile: action.ask_chrome_profile,
+    prompt: action.prompt,
+    requiresSelection: action.requires_selection ?? true,
+    provider: action.provider as WebhookAction["provider"],
+    model: action.model,
+  };
+}
+
+export function filePromptToCamel(action: FilePromptAction): PromptAction {
+  return {
+    id: action.id,
+    name: action.name,
+    hotkey: action.hotkey,
+    prompt: action.prompt,
+    enabled: action.enabled,
+    requiresSelection: action.requires_selection ?? true,
+    provider: action.provider as PromptAction["provider"],
+    model: action.model,
+  };
+}
+
+/**
+ * Decide which persisted source to read the in-memory action arrays from.
+ *
+ * CRITICAL (the 2026-07-14 data-loss fix): the Rust `UserSettings` struct always
+ * serializes `actions` (no `skip_serializing_if`), so an OLD v2 config crosses the
+ * Tauri boundary as `actions: []` (present-but-empty) alongside the real
+ * `webhook_actions`. A presence check (`actions !== undefined`) therefore WRONGLY
+ * treats the old config as an empty v3 config and drops every legacy action. The
+ * decision MUST be by CONTENT: use the unified `actions[]` only when it is
+ * non-empty; otherwise fall back to the legacy arrays. (A migrated v3 config drops
+ * its legacy arrays on save, so the fallback can't resurrect deleted actions.)
+ */
+export function resolveActionsFromFile(
+  actions: FileAction[] | undefined,
+  legacyWebhooks: FileWebhookAction[] | undefined,
+  legacyPrompts: FilePromptAction[] | undefined
+): { webhookActions: WebhookAction[]; promptActions: PromptAction[] } {
+  if (actions && actions.length > 0) {
+    return fileActionsToArrays(actions);
+  }
+  return {
+    webhookActions: (legacyWebhooks ?? []).map(fileWebhookToCamel),
+    promptActions: (legacyPrompts ?? []).map(filePromptToCamel),
+  };
 }
