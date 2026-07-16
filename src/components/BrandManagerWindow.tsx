@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { brandActionName } from "../utils/brandActions";
 import type { BrandDocMeta } from "../types";
 
 // ============================================================================
@@ -190,8 +191,10 @@ export default function BrandManagerWindow() {
         <div>
           <h1>Brand Library</h1>
           <p className="bm-sub">
-            Store brand docs once, then paste them anywhere by voice (&ldquo;paste {`{name}`}&rdquo;),
-            hotkey, or click. No API key needed to paste.
+            Store brand docs once, then paste them anywhere by voice, hotkey, or click. Set a
+            <strong> Brand</strong> so the spoken phrase includes it (e.g. &ldquo;paste Acme
+            Testimonials&rdquo;) — that keeps same-named docs across brands from colliding. No API
+            key needed to paste.
           </p>
         </div>
       </header>
@@ -261,7 +264,7 @@ export default function BrandManagerWindow() {
                   <span className="bm-doc-sub">{(doc.bytes / 1024).toFixed(1)} KB stored</span>
                   <span className="bm-doc-how">
                     <strong>How to use:</strong> put your cursor in any text box, then say
-                    {" "}<span className="bm-kbd">&ldquo;paste {doc.name}&rdquo;</span>
+                    {" "}<span className="bm-kbd">&ldquo;{brandActionName(doc)}&rdquo;</span>
                     {doc.hotkey
                       ? <> or press <span className="bm-kbd">{doc.hotkey}</span></>
                       : <> — or set a hotkey via <em>Edit</em> for a one-key paste</>}.

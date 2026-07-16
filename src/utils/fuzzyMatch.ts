@@ -37,8 +37,9 @@ function levenshteinDistance(a: string, b: string): number {
  * Normalize text for voice command matching.
  * Strips punctuation, converts hyphens to spaces, collapses whitespace.
  * This handles Whisper's tendency to add periods, commas, hyphens, etc.
+ * Exported so brand-scope gating (brandActions) uses identical normalization.
  */
-function normalize(text: string): string {
+export function normalizeVoiceText(text: string): string {
   return text
     .toLowerCase()
     .trim()
@@ -72,7 +73,7 @@ export function matchVoiceCommand(
   spokenText: string,
   actions: ActionType[]
 ): VoiceCommandMatch[] {
-  const spoken = normalize(spokenText);
+  const spoken = normalizeVoiceText(spokenText);
 
   if (!spoken) {
     return [];
@@ -82,7 +83,7 @@ export function matchVoiceCommand(
   const spokenWords = spoken.split(/\s+/).filter(w => w.length > 0);
 
   for (const action of actions) {
-    const name = normalize(getActionName(action));
+    const name = normalizeVoiceText(getActionName(action));
     const nameWords = name.split(/\s+/).filter(w => w.length > 0);
 
     // Tier 1: Exact match (case-insensitive)

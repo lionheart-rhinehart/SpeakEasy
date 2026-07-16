@@ -16,7 +16,7 @@ import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import { normalizeHotkey } from "./utils/hotkeyValidation";
 import { getAllUnifiedActions, getEnabledUnifiedActions } from "./utils/actions";
-import { brandDocsToActions, isBrandActionId } from "./utils/brandActions";
+import { brandDocsToActions, isBrandActionId, spokenSatisfiesBrand } from "./utils/brandActions";
 import type { WebhookAction, PromptAction, Action, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // License status types matching Rust backend
@@ -1828,7 +1828,17 @@ function App() {
 
       // Match against available actions
       const allActions = getAllActions();
-      const matches = matchVoiceCommand(transcribedText, allActions);
+      // Brand-scope gate (Track D): a brand doc with a brand label is only eligible
+      // if the spoken text actually contains that brand — so "testimonials" alone
+      // never fires "Athletic Acceleration Testimonials"; you must say the brand.
+      const brandById = new Map(useAppStore.getState().brands.map((b) => [b.id, b]));
+      const matches = matchVoiceCommand(transcribedText, allActions).filter((m) => {
+        const a = m.action;
+        if (!("type" in a) && a.kind === "brand_paste" && a.brandDocId) {
+          return spokenSatisfiesBrand(transcribedText, brandById.get(a.brandDocId)?.brand);
+        }
+        return true;
+      });
       const threshold = useAppStore.getState().settings.voiceCommandAutoExecuteThreshold ?? 0.4;
 
       console.log(`Voice Command: found ${matches.length} matches (threshold: ${threshold})`);
