@@ -165,6 +165,25 @@ export interface Action {
   askChromeProfile?: boolean;                            // url
   prompt?: string;                                       // prompt
   requiresSelection?: boolean;                           // prompt
+  brandDocId?: string;                                   // brand_paste (id of the doc to lazy-load + paste)
+}
+
+// ============================================================================
+// Brand Asset Library (Track D)
+// ============================================================================
+// Brand docs are persisted backend-side (brands.json + one .txt per doc under
+// <config_dir>/SpeakEasy/brands/), NOT in config.json and NOT in the localStorage
+// zustand store (§5b). This metadata mirror is hydrated into a TRANSIENT (non-
+// persisted) store slice; bodies stay backend-side and are lazy-loaded at paste
+// time via `load_brand_doc`. Mirrors the Rust `BrandDocMeta` struct in brands.rs.
+export interface BrandDocMeta {
+  id: string;
+  name: string;
+  brand: string;   // optional grouping label ("" = ungrouped)
+  hotkey: string;  // optional global hotkey ("" = voice/click only)
+  bytes: number;   // body size (for display; body itself is never in metadata)
+  created_at: string;
+  updated_at: string;
 }
 
 // Webhook/Hotkey Action for Transform feature

@@ -1634,6 +1634,38 @@ export default function SettingsPanel({ onLicenseDeactivated }: SettingsPanelPro
             </div>
           </CollapsibleSection>
 
+          {/* Brand Library Section (Track D) — opens the dedicated manager window */}
+          <CollapsibleSection
+            title="Brand Library"
+            icon={
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+            }
+          >
+            <div className="space-y-2">
+              <p className="text-sm text-text-secondary">
+                Store brand documents (research, testimonials, voice guides) once, then paste them
+                into any app by voice (&ldquo;paste {"{name}"}&rdquo;), hotkey, or click. No API key
+                needed to paste.
+              </p>
+              <button
+                onClick={() =>
+                  invoke("show_brand_manager").catch((e) =>
+                    window.dispatchEvent(
+                      new CustomEvent("speakeasy-toast", {
+                        detail: { message: `Could not open Brand Library: ${e}`, type: "error" },
+                      })
+                    )
+                  )
+                }
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium"
+              >
+                Open Brand Library
+              </button>
+            </div>
+          </CollapsibleSection>
+
           {/* Audio & Input Section */}
           <CollapsibleSection
             title="Audio & Input"

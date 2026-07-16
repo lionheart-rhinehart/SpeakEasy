@@ -16,6 +16,7 @@ import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import { normalizeHotkey } from "./utils/hotkeyValidation";
 import { getAllUnifiedActions, getEnabledUnifiedActions } from "./utils/actions";
+import { brandDocsToActions, isBrandActionId } from "./utils/brandActions";
 import type { WebhookAction, PromptAction, Action, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // License status types matching Rust backend
@@ -89,6 +90,9 @@ function App() {
   const initialize = useAppStore((state) => state.initialize);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const settings = useAppStore((state) => state.settings);
+  // Brand Asset Library (Track D): transient, hydrated from backend brands.json.
+  const brands = useAppStore((state) => state.brands);
+  const hydrateBrands = useAppStore((state) => state.hydrateBrands);
 
   // License state
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatusTag | null>(null);
@@ -288,6 +292,17 @@ function App() {
       unlisten.then((fn) => fn());
     };
   }, [setSettingsOpen]);
+
+  // Re-hydrate the Brand Library when the manager window saves/deletes a doc, so
+  // voice matching + hotkey registration pick up the change (Track D).
+  useEffect(() => {
+    const unlisten = listen("brands-changed", () => {
+      void hydrateBrands();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [hydrateBrands]);
 
   // Register global record hotkey (re-registers when hotkey setting changes)
   useEffect(() => {
@@ -1341,6 +1356,27 @@ function App() {
     }
   }, [showToast, pasteOutput]);
 
+  // Brand paste (Track D / P1-paste0): lazy-load the doc body from the backend
+  // (never held in the action or logged) and paste it via the existing pasteOutput
+  // path (clipboard + Cursor Lock / foreground paste). Zero API keys required.
+  const executeBrandPaste = useCallback(async (action: Action) => {
+    if (!action.brandDocId) {
+      showToast(`"${action.name}" is missing its document reference`, "error");
+      return;
+    }
+    try {
+      const text = await invoke<string>("load_brand_doc", { id: action.brandDocId });
+      if (!text) {
+        showToast(`"${action.name}" is empty`, "error");
+        return;
+      }
+      await pasteOutput(text);
+    } catch (error) {
+      // Error Visibility rule: surface the failure, never fail silently.
+      showToast(`Could not paste "${action.name}": ${error}`, "error");
+    }
+  }, [pasteOutput, showToast]);
+
   // Unified action dispatch — the single entry point for executing any Action,
   // whether triggered by hotkey or voice. Discriminates on `action.kind` (no more
   // object-shape sniffing). Legacy kinds re-fetch their original typed action by
@@ -1349,7 +1385,8 @@ function App() {
   // touching the existing executor logic.
   const executeAction = useCallback(async (action: Action) => {
     switch (action.kind) {
-      // Future: case "brand_paste": return executeBrandPaste(action);
+      case "brand_paste":
+        return executeBrandPaste(action);
       case "webhook":
       case "url":
       case "smart_url":
@@ -1370,7 +1407,7 @@ function App() {
         showToast(`Action "${action.name}" no longer exists`, "error");
       }
     }
-  }, [executeWebhookAction, executePromptAction, showToast]);
+  }, [executeWebhookAction, executePromptAction, executeBrandPaste, showToast]);
 
   // Register hotkey actions (webhooks, URL, SMART_URL, and prompt actions)
   useEffect(() => {
@@ -1419,7 +1456,12 @@ function App() {
       // Register action hotkeys (unified over the normalized Action list).
       // Per-kind eligibility guards are applied inline; on trigger we re-fetch
       // fresh action data by id and dispatch through executeAction.
-      const allActions = getAllUnifiedActions(useAppStore.getState().settings);
+      const allActions = [
+        ...getAllUnifiedActions(useAppStore.getState().settings),
+        // Brand-paste actions (Track D) — a per-doc optional hotkey registers here,
+        // giving the zero-key onboarding wedge (press hotkey in any app → paste doc).
+        ...brandDocsToActions(useAppStore.getState().brands),
+      ];
       for (const action of allActions) {
         if (abortController.signal.aborted) {
           console.log("Hotkey registration aborted during action registration phase");
@@ -1433,6 +1475,7 @@ function App() {
         if (!action.enabled || !action.hotkey) continue;
         if ((action.kind === "webhook" || action.kind === "url") && !action.webhookUrl) continue;
         if (action.kind === "prompt" && !action.prompt) continue;
+        if (action.kind === "brand_paste" && !action.brandDocId) continue;
 
         // Skip a chord already claimed by an earlier action/system hotkey — the
         // OS only allows one registration per physical chord. Report it clearly
@@ -1457,8 +1500,11 @@ function App() {
             // Trigger on Pressed (like AI Transform) to copy while keys are held,
             // so the selection is still active before the editor eats the chord.
             if (event.state === "Pressed") {
-              // Re-fetch fresh action data by id in case it was edited.
-              const fresh = getAllUnifiedActions(useAppStore.getState().settings).find((a) => a.id === action.id);
+              // Re-fetch fresh action data by id in case it was edited. Brand-paste
+              // ids live in the transient brands slice, not settings — route by id.
+              const fresh = isBrandActionId(action.id)
+                ? brandDocsToActions(useAppStore.getState().brands).find((a) => a.id === action.id)
+                : getAllUnifiedActions(useAppStore.getState().settings).find((a) => a.id === action.id);
               if (fresh && fresh.enabled) {
                 executeAction(fresh);
               }
@@ -1486,7 +1532,7 @@ function App() {
       // register() calls and causing spurious failures on unrelated hotkeys.
       abortController.abort();
     };
-  }, [webhookActions, promptActions, executeAction, showToast]);
+  }, [webhookActions, promptActions, brands, executeAction, showToast]);
 
   // Handle profile chooser selection (in-window modal)
   const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {
@@ -1595,6 +1641,10 @@ function App() {
 
     // Add enabled webhook + prompt actions, normalized to the unified Action shape
     actions.push(...getEnabledUnifiedActions(currentSettings));
+
+    // Add brand-paste actions (Track D), synthesized from the transient brands
+    // slice — these are NOT persisted in settings; they're addressed as "paste {doc}".
+    actions.push(...brandDocsToActions(useAppStore.getState().brands));
 
     return actions;
   }, []);

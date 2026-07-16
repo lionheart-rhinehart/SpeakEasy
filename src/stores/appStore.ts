@@ -11,6 +11,7 @@ import type {
   AutoPasteMode,
   DisplayMode,
   TransformProvider,
+  BrandDocMeta,
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
 import { normalizeHotkey } from "../utils/hotkeyValidation";
@@ -242,6 +243,10 @@ interface AppState {
   // Cursor Lock (transient — armed target window; not persisted)
   lockedTarget: { title: string } | null;
 
+  // Brand Asset Library (transient — hydrated from backend brands.json at startup
+  // + on change; NOT persisted here. Bodies stay backend-side, loaded at paste time.)
+  brands: BrandDocMeta[];
+
   // Actions
   initialize: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -262,6 +267,9 @@ interface AppState {
   setShowVoiceCommandModal: (show: boolean) => void;
   setVoiceCommandTranscript: (transcript: string | null) => void;
   setLockedTarget: (target: { title: string } | null) => void;
+  // Brand Asset Library actions
+  setBrands: (brands: BrandDocMeta[]) => void;
+  hydrateBrands: () => Promise<void>;
 }
 
 const defaultSettings: UserSettings = {
@@ -394,6 +402,7 @@ export const useAppStore = create<AppState>()(
 
       // Cursor Lock (transient)
       lockedTarget: null,
+      brands: [],
 
       // Actions
       initialize: async () => {
@@ -422,6 +431,10 @@ export const useAppStore = create<AppState>()(
         if (currentApiKey) {
           invoke("set_api_key", { apiKey: currentApiKey }).catch(console.error);
         }
+
+        // Hydrate the Brand Asset Library from backend (brands.json) so brand-paste
+        // actions are available to voice + hotkeys from startup (Track D).
+        await get().hydrateBrands();
 
         console.log("SpeakEasy initialized");
       },
@@ -534,6 +547,20 @@ export const useAppStore = create<AppState>()(
 
       setVoiceCommandTranscript: (voiceCommandTranscript) => {
         set({ voiceCommandTranscript });
+      },
+
+      setBrands: (brands) => {
+        set({ brands });
+      },
+
+      hydrateBrands: async () => {
+        try {
+          const brands = await invoke<BrandDocMeta[]>("list_brands");
+          set({ brands });
+        } catch (error) {
+          // Non-fatal: brand paste actions just won't appear until next hydrate.
+          console.error("[Brands] Failed to hydrate brand list:", error);
+        }
       },
 
       setLockedTarget: (lockedTarget) => {

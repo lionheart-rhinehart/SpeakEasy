@@ -2235,6 +2235,89 @@ pub fn save_user_settings(settings: config::UserSettings) -> Result<(), String> 
 }
 
 // ============================================================================
+// BRAND ASSET LIBRARY (Track D / P1-store)
+// Brand docs stored as plain-text files under config_dir/SpeakEasy/brands/,
+// independent of config.json (§5b). GUARDRAIL: never log a document body.
+// ============================================================================
+
+/// List all brand doc metadata (no bodies).
+#[tauri::command]
+pub fn list_brands() -> Vec<crate::brands::BrandDocMeta> {
+    crate::brands::list_brands()
+}
+
+/// Create or update a brand doc. `id` is caller-generated (crypto.randomUUID),
+/// sanitized backend-side before touching the filesystem.
+#[tauri::command]
+pub fn save_brand_doc(
+    id: String,
+    name: String,
+    brand: Option<String>,
+    hotkey: Option<String>,
+    text: String,
+) -> Result<crate::brands::BrandDocMeta, String> {
+    crate::brands::save_brand_doc(
+        &id,
+        &name,
+        &brand.unwrap_or_default(),
+        &hotkey.unwrap_or_default(),
+        &text,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Read a brand doc body (lazy-loaded at paste time — the only body-returning path).
+#[tauri::command]
+pub fn load_brand_doc(id: String) -> Result<String, String> {
+    crate::brands::load_brand_doc(&id).map_err(|e| e.to_string())
+}
+
+/// Delete a brand doc (body file + index entry).
+#[tauri::command]
+pub fn delete_brand_doc(id: String) -> Result<(), String> {
+    crate::brands::delete_brand_doc(&id).map_err(|e| e.to_string())
+}
+
+/// Show (or create) the dedicated, resizable Brand Library manager window.
+/// Modeled on `show_voice_review`, but DECORATED + RESIZABLE and NOT a
+/// transparent/always-on-top overlay (§5e — a document manager, not an overlay).
+#[tauri::command]
+pub async fn show_brand_manager(app: AppHandle) -> Result<(), String> {
+    let mut win = app.get_webview_window("brand-manager");
+    if win.is_none() {
+        let create_res = tauri::WebviewWindowBuilder::new(
+            &app,
+            "brand-manager",
+            tauri::WebviewUrl::App("brand-manager.html".into()),
+        )
+        .title("Brand Library")
+        .inner_size(900.0, 700.0)
+        .min_inner_size(600.0, 480.0)
+        .resizable(true)
+        .decorations(true)
+        .center()
+        .visible(false)
+        .build();
+        match create_res {
+            Ok(_) => {
+                log::info!("[show_brand_manager] Brand manager window created.");
+                win = app.get_webview_window("brand-manager");
+            }
+            Err(e) => {
+                log::error!("[show_brand_manager] Failed to create window: {}", e);
+                return Err(format!("Could not create brand manager window: {}", e));
+            }
+        }
+    }
+    if let Some(w) = win {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+        log::info!("[show_brand_manager] Brand manager window shown");
+    }
+    Ok(())
+}
+
+// ============================================================================
 // LICENSE MANAGEMENT (Beta Testing)
 // ============================================================================
 

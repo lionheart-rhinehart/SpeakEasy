@@ -12,7 +12,8 @@ export default defineConfig(async () => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  // Multi-page build for main window, overlay, voice review, and profile chooser
+  // Multi-page build for main window, overlay, voice review, profile chooser,
+  // and the Brand Library manager (Track D — dedicated resizable window).
   build: {
     rollupOptions: {
       input: {
@@ -20,6 +21,7 @@ export default defineConfig(async () => ({
         overlay: path.resolve(__dirname, "overlay.html"),
         voiceReview: path.resolve(__dirname, "voice-review.html"),
         profileChooser: path.resolve(__dirname, "profile-chooser.html"),
+        brandManager: path.resolve(__dirname, "brand-manager.html"),
       },
     },
   },
