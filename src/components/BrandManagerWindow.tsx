@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { BrandDocMeta } from "../types";
 
@@ -103,10 +102,10 @@ export default function BrandManagerWindow() {
         hotkey: hotkey.trim(),
         text,
       });
+      // The backend save command emits "brands-changed" so the main window
+      // re-hydrates its voice/hotkey list — no JS emit (blocked by event ACL).
       await refresh();
-      // Tell the main window to re-hydrate its brand-paste action list.
-      await emit("brands-changed");
-      flash(`Saved "${name.trim()}"`, "success");
+      flash(`Saved "${name.trim()}" — stored on your machine`, "success");
       resetEditor();
     } catch (e) {
       flash(`Save failed: ${e}`, "error");
@@ -134,7 +133,6 @@ export default function BrandManagerWindow() {
     try {
       await invoke("delete_brand_doc", { id: doc.id });
       await refresh();
-      await emit("brands-changed");
       if (editingId === doc.id) resetEditor();
       flash(`Deleted "${doc.name}"`, "success");
     } catch (e) {
@@ -260,9 +258,13 @@ export default function BrandManagerWindow() {
               <div key={doc.id} className="bm-doc">
                 <div className="bm-doc-meta">
                   <span className="bm-doc-name">{doc.name}</span>
-                  <span className="bm-doc-sub">
-                    paste {doc.name}
-                    {doc.hotkey ? ` · ${doc.hotkey}` : ""} · {(doc.bytes / 1024).toFixed(1)} KB
+                  <span className="bm-doc-sub">{(doc.bytes / 1024).toFixed(1)} KB stored</span>
+                  <span className="bm-doc-how">
+                    <strong>How to use:</strong> put your cursor in any text box, then say
+                    {" "}<span className="bm-kbd">&ldquo;paste {doc.name}&rdquo;</span>
+                    {doc.hotkey
+                      ? <> or press <span className="bm-kbd">{doc.hotkey}</span></>
+                      : <> — or set a hotkey via <em>Edit</em> for a one-key paste</>}.
                   </span>
                 </div>
                 <div className="bm-doc-actions">
@@ -283,9 +285,10 @@ export default function BrandManagerWindow() {
 }
 
 const BM_STYLES = `
-.bm-root { max-width: 860px; margin: 0 auto; padding: 20px 24px 48px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1a2e; }
-.bm-header h1 { font-size: 22px; margin: 0 0 4px; }
-.bm-sub { margin: 0; color: #555; font-size: 13px; max-width: 640px; }
+html, body { margin: 0; background: #f4f5fb; }
+.bm-root { max-width: 860px; margin: 0 auto; padding: 20px 24px 48px; min-height: 100vh; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1a1a2e; }
+.bm-header h1 { font-size: 22px; margin: 0 0 4px; color: #111827; }
+.bm-sub { margin: 0; color: #4b5563; font-size: 13px; max-width: 640px; }
 .bm-status { margin: 14px 0; padding: 9px 12px; border-radius: 8px; font-size: 13px; }
 .bm-status-info { background: #eef2ff; color: #3730a3; }
 .bm-status-success { background: #ecfdf5; color: #065f46; }
@@ -296,7 +299,7 @@ const BM_STYLES = `
 .bm-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; font-size: 12px; color: #444; }
 .bm-field input { padding: 7px 9px; border: 1px solid #d0d0e0; border-radius: 7px; font-size: 13px; color: #1a1a2e; }
 .bm-ingest { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; flex-wrap: wrap; }
-.bm-hint { color: #777; font-size: 12px; }
+.bm-hint { color: #4b5563; font-size: 12px; }
 .bm-body { width: 100%; min-height: 180px; resize: vertical; padding: 10px; border: 1px solid #d0d0e0; border-radius: 8px; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 12.5px; line-height: 1.5; color: #1a1a2e; }
 .bm-editor-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .bm-spacer { flex: 1; }
@@ -307,21 +310,29 @@ const BM_STYLES = `
 .bm-btn-primary:hover { background: #4338ca; }
 .bm-btn-danger { color: #b91c1c; border-color: #f0c0c0; }
 .bm-btn-danger:hover { background: #fef2f2; }
-.bm-empty { color: #888; font-size: 13px; }
+.bm-empty { color: #4b5563; font-size: 13px; }
 .bm-group { margin-bottom: 14px; }
-.bm-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin: 0 0 6px; }
-.bm-doc { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid #ececf5; border-radius: 8px; margin-bottom: 6px; }
-.bm-doc-meta { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bm-group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; font-weight: 700; margin: 0 0 6px; }
+.bm-doc { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid #d7d9e6; border-radius: 8px; margin-bottom: 6px; background: #fff; }
+.bm-doc-meta { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
 .bm-doc-name { font-size: 14px; font-weight: 600; }
-.bm-doc-sub { font-size: 12px; color: #888; }
+.bm-doc-sub { font-size: 11px; color: #6b7280; }
+.bm-doc-how { font-size: 12px; color: #374151; line-height: 1.5; margin-top: 2px; }
+.bm-doc-how strong { color: #1f2937; }
+.bm-kbd { display: inline-block; padding: 1px 6px; background: #eef0f7; border: 1px solid #d0d3e2; border-radius: 5px; font-size: 11px; font-family: ui-monospace, "Cascadia Code", monospace; color: #1f2937; white-space: nowrap; }
 .bm-doc-actions { display: flex; gap: 6px; flex-shrink: 0; }
 @media (prefers-color-scheme: dark) {
+  html, body { background: #14142a; }
   .bm-root { color: #e8e8f0; }
-  .bm-sub, .bm-field, .bm-hint, .bm-doc-sub, .bm-group h3 { color: #a0a0b8; }
+  .bm-header h1 { color: #f3f4f8; }
+  .bm-sub, .bm-field, .bm-hint, .bm-doc-sub, .bm-group h3, .bm-empty { color: #b4b6cc; }
+  .bm-doc-how { color: #c7c9de; }
+  .bm-doc-how strong { color: #eceeff; }
+  .bm-kbd { background: #2a2a44; border-color: #3d3d5c; color: #e8e8f0; }
   .bm-field input, .bm-body { background: #1a1a2e; border-color: #33334d; color: #e8e8f0; }
   .bm-btn { background: #26263d; border-color: #33334d; color: #e8e8f0; }
   .bm-btn:hover { background: #2f2f4a; }
-  .bm-doc { border-color: #2a2a40; }
+  .bm-doc { border-color: #2a2a40; background: #1c1c30; }
   .bm-status-info { background: #1e1b4b; color: #c7d2fe; }
   .bm-status-success { background: #064e3b; color: #a7f3d0; }
   .bm-status-error { background: #4c1d1d; color: #fca5a5; }

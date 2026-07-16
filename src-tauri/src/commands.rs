@@ -2247,23 +2247,29 @@ pub fn list_brands() -> Vec<crate::brands::BrandDocMeta> {
 }
 
 /// Create or update a brand doc. `id` is caller-generated (crypto.randomUUID),
-/// sanitized backend-side before touching the filesystem.
+/// sanitized backend-side before touching the filesystem. Emits `brands-changed`
+/// from the backend (not JS — which the event ACL blocks) so the main window
+/// re-hydrates its voice/hotkey action list.
 #[tauri::command]
 pub fn save_brand_doc(
+    app: AppHandle,
     id: String,
     name: String,
     brand: Option<String>,
     hotkey: Option<String>,
     text: String,
 ) -> Result<crate::brands::BrandDocMeta, String> {
-    crate::brands::save_brand_doc(
+    use tauri::Emitter;
+    let meta = crate::brands::save_brand_doc(
         &id,
         &name,
         &brand.unwrap_or_default(),
         &hotkey.unwrap_or_default(),
         &text,
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    let _ = app.emit("brands-changed", ());
+    Ok(meta)
 }
 
 /// Read a brand doc body (lazy-loaded at paste time — the only body-returning path).
@@ -2272,10 +2278,13 @@ pub fn load_brand_doc(id: String) -> Result<String, String> {
     crate::brands::load_brand_doc(&id).map_err(|e| e.to_string())
 }
 
-/// Delete a brand doc (body file + index entry).
+/// Delete a brand doc (body file + index entry). Emits `brands-changed` (backend).
 #[tauri::command]
-pub fn delete_brand_doc(id: String) -> Result<(), String> {
-    crate::brands::delete_brand_doc(&id).map_err(|e| e.to_string())
+pub fn delete_brand_doc(app: AppHandle, id: String) -> Result<(), String> {
+    use tauri::Emitter;
+    crate::brands::delete_brand_doc(&id).map_err(|e| e.to_string())?;
+    let _ = app.emit("brands-changed", ());
+    Ok(())
 }
 
 /// Show (or create) the dedicated, resizable Brand Library manager window.
