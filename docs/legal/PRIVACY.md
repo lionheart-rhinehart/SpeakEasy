@@ -29,16 +29,30 @@ transcription service (the Whisper API)** to convert it into text. This means:
 
 If you do not want audio sent to OpenAI, do not use the dictation/transcription features.
 
-## 3. Diagnostics (Supabase)
+## 3. Diagnostics and license activation (Supabase)
 
-To help diagnose problems, the Software may upload a limited set of **diagnostic logs** to a hosted
-**Supabase** backend operated for SpeakEasy:
+SpeakEasy uses a hosted **Supabase** backend operated for SpeakEasy for two purposes: uploading
+limited diagnostics, and validating your license.
+
+**3a. Diagnostics.** To help diagnose problems, the Software may upload:
 
 - **What is uploaded:** application **`WARN` and `ERROR` log lines** and, if the application crashes,
   a **`crash.log`** file.
 - **What is *not* included:** these diagnostics are designed **not** to contain your document
   contents or your API-key values. We do not intentionally log the body text of your brand-library
   documents, the text you dictate, or your provider keys.
+
+**3b. License activation and device data.** When you **activate or validate your license**, the
+Software sends your **license key** and your device's **hashed machine identifier** to the SpeakEasy
+licensing backend on Supabase. The backend stores:
+
+- your **license record** — edition/tier, device allowance, version entitlement, and any trial
+  expiry; and
+- an **activation record** for each device slot you use.
+
+This is what enforces your device limit (see the EULA, "License grant") and, where applicable, your
+trial period. The machine identifier is a **one-way hash** — your raw hardware serial numbers are
+**not** sent. This licensing data is separate from the diagnostics in 3a.
 
 ## 4. Brand-library documents (stored locally in plaintext)
 
