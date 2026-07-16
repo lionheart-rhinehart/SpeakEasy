@@ -1,4 +1,5 @@
 mod audio;
+mod brands;
 mod clipboard;
 mod commands;
 mod config;
@@ -344,6 +345,12 @@ pub fn run() {
             // User settings persistence (file-based, survives reinstalls)
             commands::load_user_settings,
             commands::save_user_settings,
+            // Brand Asset Library (Track D): brand docs stored as files, separate from config.json
+            commands::list_brands,
+            commands::save_brand_doc,
+            commands::load_brand_doc,
+            commands::delete_brand_doc,
+            commands::show_brand_manager,
             // Voice review window commands
             commands::show_voice_review,
             commands::hide_voice_review,
