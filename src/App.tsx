@@ -16,7 +16,7 @@ import LicenseActivation from "./components/LicenseActivation";
 import { matchVoiceCommand } from "./utils/fuzzyMatch";
 import { normalizeHotkey } from "./utils/hotkeyValidation";
 import { getAllUnifiedActions, getEnabledUnifiedActions } from "./utils/actions";
-import { brandDocsToActions, isBrandActionId, spokenSatisfiesBrand } from "./utils/brandActions";
+import { brandDocsToActions, isBrandActionId, spokenSatisfiesBrandAndName } from "./utils/brandActions";
 import type { WebhookAction, PromptAction, Action, ChromeProfile, VoiceCommandMatch, MainHotkeyAction } from "./types";
 
 // License status types matching Rust backend
@@ -90,8 +90,8 @@ function App() {
   const initialize = useAppStore((state) => state.initialize);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const settings = useAppStore((state) => state.settings);
-  // Brand Asset Library (Track D): transient, hydrated from backend brands.json.
-  const brands = useAppStore((state) => state.brands);
+  // Brand Asset Library (Track D): transient docs, hydrated from backend brands.json.
+  const brandDocs = useAppStore((state) => state.brandDocs);
   const hydrateBrands = useAppStore((state) => state.hydrateBrands);
 
   // License state
@@ -1460,7 +1460,7 @@ function App() {
         ...getAllUnifiedActions(useAppStore.getState().settings),
         // Brand-paste actions (Track D) — a per-doc optional hotkey registers here,
         // giving the zero-key onboarding wedge (press hotkey in any app → paste doc).
-        ...brandDocsToActions(useAppStore.getState().brands),
+        ...brandDocsToActions(useAppStore.getState().brandDocs),
       ];
       for (const action of allActions) {
         if (abortController.signal.aborted) {
@@ -1503,7 +1503,7 @@ function App() {
               // Re-fetch fresh action data by id in case it was edited. Brand-paste
               // ids live in the transient brands slice, not settings — route by id.
               const fresh = isBrandActionId(action.id)
-                ? brandDocsToActions(useAppStore.getState().brands).find((a) => a.id === action.id)
+                ? brandDocsToActions(useAppStore.getState().brandDocs).find((a) => a.id === action.id)
                 : getAllUnifiedActions(useAppStore.getState().settings).find((a) => a.id === action.id);
               if (fresh && fresh.enabled) {
                 executeAction(fresh);
@@ -1532,7 +1532,7 @@ function App() {
       // register() calls and causing spurious failures on unrelated hotkeys.
       abortController.abort();
     };
-  }, [webhookActions, promptActions, brands, executeAction, showToast]);
+  }, [webhookActions, promptActions, brandDocs, executeAction, showToast]);
 
   // Handle profile chooser selection (in-window modal)
   const handleProfileSelect = useCallback(async (profile: ChromeProfile) => {
@@ -1644,7 +1644,7 @@ function App() {
 
     // Add brand-paste actions (Track D), synthesized from the transient brands
     // slice — these are NOT persisted in settings; they're addressed as "paste {doc}".
-    actions.push(...brandDocsToActions(useAppStore.getState().brands));
+    actions.push(...brandDocsToActions(useAppStore.getState().brandDocs));
 
     return actions;
   }, []);
@@ -1828,14 +1828,16 @@ function App() {
 
       // Match against available actions
       const allActions = getAllActions();
-      // Brand-scope gate (Track D): a brand doc with a brand label is only eligible
-      // if the spoken text actually contains that brand — so "testimonials" alone
-      // never fires "Athletic Acceleration Testimonials"; you must say the brand.
-      const brandById = new Map(useAppStore.getState().brands.map((b) => [b.id, b]));
+      // Brand+name gate (Track D): a brand doc is eligible only if the spoken text
+      // contains every word of BOTH its brand AND its name — the owner's required
+      // "brand + document name" formula. So "testimonials" alone (missing brand) and
+      // "athletes acceleration" alone (missing doc name) both fail to fire.
+      const docById = new Map(useAppStore.getState().brandDocs.map((d) => [d.id, d]));
       const matches = matchVoiceCommand(transcribedText, allActions).filter((m) => {
         const a = m.action;
         if (!("type" in a) && a.kind === "brand_paste" && a.brandDocId) {
-          return spokenSatisfiesBrand(transcribedText, brandById.get(a.brandDocId)?.brand);
+          const doc = docById.get(a.brandDocId);
+          return spokenSatisfiesBrandAndName(transcribedText, doc?.brand, doc?.name);
         }
         return true;
       });

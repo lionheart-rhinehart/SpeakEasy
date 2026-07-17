@@ -2240,10 +2240,37 @@ pub fn save_user_settings(settings: config::UserSettings) -> Result<(), String> 
 // independent of config.json (§5b). GUARDRAIL: never log a document body.
 // ============================================================================
 
-/// List all brand doc metadata (no bodies).
+/// List the full brand library: brand containers + doc metadata (no bodies).
 #[tauri::command]
-pub fn list_brands() -> Vec<crate::brands::BrandDocMeta> {
+pub fn list_brands() -> crate::brands::BrandLibrary {
     crate::brands::list_brands()
+}
+
+/// Create an empty brand container (folder). No-op if it already exists.
+#[tauri::command]
+pub fn create_brand(app: AppHandle, name: String) -> Result<(), String> {
+    use tauri::Emitter;
+    crate::brands::create_brand(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("brands-changed", ());
+    Ok(())
+}
+
+/// Rename a brand, cascading the new name to all of its docs.
+#[tauri::command]
+pub fn rename_brand(app: AppHandle, old_name: String, new_name: String) -> Result<(), String> {
+    use tauri::Emitter;
+    crate::brands::rename_brand(&old_name, &new_name).map_err(|e| e.to_string())?;
+    let _ = app.emit("brands-changed", ());
+    Ok(())
+}
+
+/// Delete a brand AND every document inside it (bodies + index entries).
+#[tauri::command]
+pub fn delete_brand(app: AppHandle, name: String) -> Result<(), String> {
+    use tauri::Emitter;
+    crate::brands::delete_brand(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("brands-changed", ());
+    Ok(())
 }
 
 /// Create or update a brand doc. `id` is caller-generated (crypto.randomUUID),

@@ -12,6 +12,7 @@ import type {
   DisplayMode,
   TransformProvider,
   BrandDocMeta,
+  BrandLibrary,
 } from "../types";
 import { SETTINGS_SCHEMA_VERSION } from "../types";
 import { normalizeHotkey } from "../utils/hotkeyValidation";
@@ -243,9 +244,11 @@ interface AppState {
   // Cursor Lock (transient — armed target window; not persisted)
   lockedTarget: { title: string } | null;
 
-  // Brand Asset Library (transient — hydrated from backend brands.json at startup
-  // + on change; NOT persisted here. Bodies stay backend-side, loaded at paste time.)
-  brands: BrandDocMeta[];
+  // Brand Asset Library docs (transient — hydrated from backend brands.json at
+  // startup + on change; NOT persisted here. Bodies stay backend-side, loaded at
+  // paste time). Holds the DOCS (for voice/hotkey synthesis); brand containers are
+  // fetched directly by the manager window.
+  brandDocs: BrandDocMeta[];
 
   // Actions
   initialize: () => Promise<void>;
@@ -268,7 +271,7 @@ interface AppState {
   setVoiceCommandTranscript: (transcript: string | null) => void;
   setLockedTarget: (target: { title: string } | null) => void;
   // Brand Asset Library actions
-  setBrands: (brands: BrandDocMeta[]) => void;
+  setBrandDocs: (brandDocs: BrandDocMeta[]) => void;
   hydrateBrands: () => Promise<void>;
 }
 
@@ -402,7 +405,7 @@ export const useAppStore = create<AppState>()(
 
       // Cursor Lock (transient)
       lockedTarget: null,
-      brands: [],
+      brandDocs: [],
 
       // Actions
       initialize: async () => {
@@ -549,14 +552,14 @@ export const useAppStore = create<AppState>()(
         set({ voiceCommandTranscript });
       },
 
-      setBrands: (brands) => {
-        set({ brands });
+      setBrandDocs: (brandDocs) => {
+        set({ brandDocs });
       },
 
       hydrateBrands: async () => {
         try {
-          const brands = await invoke<BrandDocMeta[]>("list_brands");
-          set({ brands });
+          const library = await invoke<BrandLibrary>("list_brands");
+          set({ brandDocs: library.docs ?? [] });
         } catch (error) {
           // Non-fatal: brand paste actions just won't appear until next hydrate.
           console.error("[Brands] Failed to hydrate brand list:", error);
