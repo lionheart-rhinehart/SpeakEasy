@@ -5,7 +5,7 @@ import {
   brandActionName,
   docToAction,
   brandDocsToActions,
-  spokenSatisfiesBrand,
+  spokenSatisfiesBrandAndName,
 } from "./brandActions";
 import type { BrandDocMeta } from "../types";
 
@@ -33,20 +33,23 @@ describe("brandActions synthesis", () => {
     expect(brandActionName({ name: "Testimonials" })).toBe("paste Testimonials");
   });
 
-  it("requires the brand to be spoken before a branded doc is eligible", () => {
-    // Bare doc name does NOT satisfy a branded doc.
-    expect(spokenSatisfiesBrand("testimonials", "Athletic Acceleration")).toBe(false);
-    expect(spokenSatisfiesBrand("paste testimonials", "Athletic Acceleration")).toBe(false);
-    // Saying the brand (any order, extra words ok) satisfies it.
-    expect(spokenSatisfiesBrand("paste athletic acceleration testimonials", "Athletic Acceleration")).toBe(true);
-    expect(spokenSatisfiesBrand("athletic acceleration", "Athletic Acceleration")).toBe(true);
-    // Partial brand (only one of the two brand words) does NOT satisfy.
-    expect(spokenSatisfiesBrand("acceleration testimonials", "Athletic Acceleration")).toBe(false);
-    // A doc with no brand is never gated.
-    expect(spokenSatisfiesBrand("testimonials", "")).toBe(true);
-    expect(spokenSatisfiesBrand("testimonials", undefined)).toBe(true);
-    // Punctuation/casing from Whisper is normalized away.
-    expect(spokenSatisfiesBrand("Athletic-Acceleration.", "athletic acceleration")).toBe(true);
+  it("requires BOTH brand and document name to be spoken (the formula)", () => {
+    const BRAND = "Athletic Acceleration";
+    const NAME = "Testimonials";
+    // Full brand + name → eligible.
+    expect(spokenSatisfiesBrandAndName("paste athletic acceleration testimonials", BRAND, NAME)).toBe(true);
+    // Bare doc name (missing brand) → NOT eligible (the bug the owner caught).
+    expect(spokenSatisfiesBrandAndName("testimonials", BRAND, NAME)).toBe(false);
+    expect(spokenSatisfiesBrandAndName("paste testimonials", BRAND, NAME)).toBe(false);
+    // Brand only (missing doc name) → NOT eligible.
+    expect(spokenSatisfiesBrandAndName("athletic acceleration", BRAND, NAME)).toBe(false);
+    // A dropped/mangled word → NOT eligible (tolerant fails safe to the review window).
+    expect(spokenSatisfiesBrandAndName("acceleration testimonials", BRAND, NAME)).toBe(false);
+    // Order-independent + punctuation/case normalized.
+    expect(spokenSatisfiesBrandAndName("Testimonials — Athletic-Acceleration!", BRAND, NAME)).toBe(true);
+    // A doc with no brand is gated on its name only.
+    expect(spokenSatisfiesBrandAndName("testimonials", "", NAME)).toBe(true);
+    expect(spokenSatisfiesBrandAndName("something else", "", NAME)).toBe(false);
   });
 
   it("keeps same-named docs in different brands distinct", () => {

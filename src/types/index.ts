@@ -179,11 +179,25 @@ export interface Action {
 export interface BrandDocMeta {
   id: string;
   name: string;
-  brand: string;   // optional grouping label ("" = ungrouped)
+  brand: string;   // the brand (folder) this doc belongs to — its NAME string
   hotkey: string;  // optional global hotkey ("" = voice/click only)
   bytes: number;   // body size (for display; body itself is never in metadata)
   created_at: string;
   updated_at: string;
+}
+
+// A brand = a named container ("folder") for docs. Persists even with zero docs
+// (create the brand first, then fill it). Mirrors the Rust `BrandMeta`.
+export interface BrandMeta {
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// The full library payload returned by the `list_brands` command.
+export interface BrandLibrary {
+  brands: BrandMeta[];
+  docs: BrandDocMeta[];
 }
 
 // Webhook/Hotkey Action for Transform feature

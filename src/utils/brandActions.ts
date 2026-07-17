@@ -59,16 +59,29 @@ export function brandDocsToActions(docs: BrandDocMeta[]): Action[] {
   return docs.map(docToAction);
 }
 
+/** True if every word of `phrase` appears (as a substring) in the normalized
+ *  spoken text. Tolerant + order-independent so Whisper noise degrades to the
+ *  review window, never a wrong paste. Empty phrase → vacuously true. */
+function spokenContainsAllWords(spoken: string, phrase: string): boolean {
+  const p = normalizeVoiceText(phrase);
+  if (!p) return true;
+  return p.split(" ").every((word) => word.length > 0 && spoken.includes(word));
+}
+
 /**
- * Brand-scope gate for voice matching. A brand doc that has a brand label may only
- * fire when the spoken text contains EVERY word of that brand — so saying just
- * "testimonials" never triggers "Athletic Acceleration Testimonials"; you must say
- * the brand. Docs with no brand are ungated (returns true). This is what makes the
- * spoken brand name *required*, not merely part of the display phrase.
+ * Brand + name gate for voice matching (the owner's required "formula"). A brand
+ * doc is eligible ONLY if the spoken text contains every word of BOTH its brand AND
+ * its name. So "testimonials" alone never fires "Athletic Acceleration Testimonials"
+ * (missing the brand), and "athletic acceleration" alone never fires it either
+ * (missing the doc name) — you must say brand + name. Tolerant per-word so a single
+ * Whisper mishear falls to the review window rather than mis-pasting. A doc with no
+ * brand (legacy/edge) is gated on its name only.
  */
-export function spokenSatisfiesBrand(spokenText: string, brand: string | undefined): boolean {
-  const b = normalizeVoiceText(brand ?? "");
-  if (!b) return true; // no brand set → not gated
+export function spokenSatisfiesBrandAndName(
+  spokenText: string,
+  brand: string | undefined,
+  name: string | undefined
+): boolean {
   const spoken = normalizeVoiceText(spokenText);
-  return b.split(" ").every((word) => word.length > 0 && spoken.includes(word));
+  return spokenContainsAllWords(spoken, brand ?? "") && spokenContainsAllWords(spoken, name ?? "");
 }

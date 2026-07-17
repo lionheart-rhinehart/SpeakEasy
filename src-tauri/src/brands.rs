@@ -44,12 +44,32 @@ pub struct BrandDocMeta {
     pub updated_at: String,
 }
 
-/// The `brands.json` index. Bodies are NOT stored here — one `<id>.txt` per doc.
+/// A brand = a named container ("folder") for documents. Modeled by NAME (unique);
+/// a brand persists even with zero docs (owner creates the brand first, then fills
+/// it). Docs reference their brand by the same name string (denormalized so the
+/// voice path needs no join).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BrandMeta {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// The `brands.json` index: the brand containers + doc metadata. Bodies are NOT
+/// stored here — one `<id>.txt` per doc.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BrandsIndex {
     #[serde(default)]
+    pub brands: Vec<BrandMeta>,
+    #[serde(default)]
     pub docs: Vec<BrandDocMeta>,
 }
+
+/// The full library payload returned to the frontend (brands + docs).
+pub type BrandLibrary = BrandsIndex;
 
 /// `<config_dir>/SpeakEasy/brands/` — created if missing (clone of config.rs).
 fn get_brands_dir() -> Result<PathBuf> {
@@ -66,14 +86,46 @@ fn index_path_in(dir: &Path) -> PathBuf {
 
 fn load_index_in(dir: &Path) -> BrandsIndex {
     let path = index_path_in(dir);
-    if path.exists() {
+    let mut index: BrandsIndex = if path.exists() {
         match fs::read_to_string(&path) {
             Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
             Err(_) => BrandsIndex::default(),
         }
     } else {
         BrandsIndex::default()
+    };
+    // Persist a one-time migration (docs-only → docs + brands) so derived brand
+    // containers are durable — otherwise an empty derived brand could vanish before
+    // the first write. After the first save this is a no-op (nothing to backfill).
+    if backfill_brands(&mut index) {
+        let _ = save_index_in(dir, &index);
     }
+    index
+}
+
+/// Migration: an old `brands.json` (round 1) had only `docs`, each carrying a free-text
+/// `brand` name and no `brands` list. Ensure every distinct non-empty `doc.brand` has a
+/// `BrandMeta`, so the owner's existing docs appear as brand containers on first load.
+/// Idempotent — a no-op once the brands list is in sync.
+fn backfill_brands(index: &mut BrandsIndex) -> bool {
+    let mut changed = false;
+    for doc in &index.docs {
+        let name = doc.brand.trim();
+        if !name.is_empty() && !brand_exists(&index.brands, name) {
+            index.brands.push(BrandMeta {
+                name: name.to_string(),
+                created_at: now_iso(),
+                updated_at: now_iso(),
+            });
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// Case-insensitive brand-name lookup (brand names are unique folder names).
+fn brand_exists(brands: &[BrandMeta], name: &str) -> bool {
+    brands.iter().any(|b| b.name.eq_ignore_ascii_case(name.trim()))
 }
 
 fn save_index_in(dir: &Path, index: &BrandsIndex) -> Result<()> {
@@ -109,8 +161,78 @@ fn now_iso() -> String {
 // wrappers that bind to the real <config_dir>/SpeakEasy/brands/.
 // ---------------------------------------------------------------------------
 
-fn list_brands_in(dir: &Path) -> Vec<BrandDocMeta> {
-    load_index_in(dir).docs
+fn list_brands_in(dir: &Path) -> BrandsIndex {
+    load_index_in(dir)
+}
+
+fn create_brand_in(dir: &Path, name: &str) -> Result<()> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(anyhow!("Brand name is required"));
+    }
+    let mut index = load_index_in(dir);
+    if !brand_exists(&index.brands, name) {
+        let now = now_iso();
+        index.brands.push(BrandMeta {
+            name: name.to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        });
+        save_index_in(dir, &index)?;
+    }
+    Ok(())
+}
+
+fn rename_brand_in(dir: &Path, old_name: &str, new_name: &str) -> Result<()> {
+    let old_name = old_name.trim();
+    let new_name = new_name.trim();
+    if new_name.is_empty() {
+        return Err(anyhow!("New brand name is required"));
+    }
+    let mut index = load_index_in(dir);
+    // Reject a rename that would collide with a different existing brand.
+    if !old_name.eq_ignore_ascii_case(new_name) && brand_exists(&index.brands, new_name) {
+        return Err(anyhow!("A brand named '{}' already exists", new_name));
+    }
+    let now = now_iso();
+    for b in index.brands.iter_mut() {
+        if b.name.eq_ignore_ascii_case(old_name) {
+            b.name = new_name.to_string();
+            b.updated_at = now.clone();
+        }
+    }
+    // Cascade: every doc in the old brand now points at the new name.
+    for d in index.docs.iter_mut() {
+        if d.brand.eq_ignore_ascii_case(old_name) {
+            d.brand = new_name.to_string();
+            d.updated_at = now.clone();
+        }
+    }
+    save_index_in(dir, &index)?;
+    Ok(())
+}
+
+fn delete_brand_in(dir: &Path, name: &str) -> Result<()> {
+    let name = name.trim();
+    let mut index = load_index_in(dir);
+    // Delete every doc body in this brand, then drop the docs + the brand entry.
+    let doomed: Vec<String> = index
+        .docs
+        .iter()
+        .filter(|d| d.brand.eq_ignore_ascii_case(name))
+        .map(|d| d.id.clone())
+        .collect();
+    for id in &doomed {
+        if let Ok(path) = doc_path_in(dir, id) {
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+        }
+    }
+    index.docs.retain(|d| !d.brand.eq_ignore_ascii_case(name));
+    index.brands.retain(|b| !b.name.eq_ignore_ascii_case(name));
+    save_index_in(dir, &index)?;
+    Ok(())
 }
 
 fn save_brand_doc_in(
@@ -128,6 +250,15 @@ fn save_brand_doc_in(
     let bytes = text.len() as u64;
     let now = now_iso();
     let mut index = load_index_in(dir);
+    // Ensure the brand container exists (create-if-missing) so a doc's brand is
+    // always a real folder in the list.
+    if !brand.trim().is_empty() && !brand_exists(&index.brands, brand) {
+        index.brands.push(BrandMeta {
+            name: brand.trim().to_string(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        });
+    }
     if let Some(existing) = index.docs.iter_mut().find(|d| d.id == safe) {
         existing.name = name.to_string();
         existing.brand = brand.to_string();
@@ -171,12 +302,36 @@ fn delete_brand_doc_in(dir: &Path, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Return all doc metadata (no bodies).
-pub fn list_brands() -> Vec<BrandDocMeta> {
+/// Return the full library: brand containers + doc metadata (no bodies).
+pub fn list_brands() -> BrandLibrary {
     match get_brands_dir() {
         Ok(dir) => list_brands_in(&dir),
-        Err(_) => Vec::new(),
+        Err(_) => BrandsIndex::default(),
     }
+}
+
+/// Create an (initially empty) brand container. No-op if it already exists.
+pub fn create_brand(name: &str) -> Result<()> {
+    let dir = get_brands_dir()?;
+    create_brand_in(&dir, name)?;
+    log::info!("Created brand '{}'", name.trim());
+    Ok(())
+}
+
+/// Rename a brand and cascade the new name onto all of its docs.
+pub fn rename_brand(old_name: &str, new_name: &str) -> Result<()> {
+    let dir = get_brands_dir()?;
+    rename_brand_in(&dir, old_name, new_name)?;
+    log::info!("Renamed brand '{}' -> '{}'", old_name.trim(), new_name.trim());
+    Ok(())
+}
+
+/// Delete a brand AND every document inside it (bodies + index entries).
+pub fn delete_brand(name: &str) -> Result<()> {
+    let dir = get_brands_dir()?;
+    delete_brand_in(&dir, name)?;
+    log::info!("Deleted brand '{}' (and its docs)", name.trim());
+    Ok(())
 }
 
 /// Create or update a brand doc: write `<id>.txt`, upsert the index entry.
@@ -255,10 +410,11 @@ mod tests {
         assert!(dir.join(format!("{}.txt", id)).exists());
         assert!(index_path_in(&dir).exists());
 
-        // List (metadata only, no body)
-        let listed = list_brands_in(&dir);
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].name, "Testimonials");
+        // List (metadata only, no body). Saving a doc also registers its brand.
+        let lib = list_brands_in(&dir);
+        assert_eq!(lib.docs.len(), 1);
+        assert_eq!(lib.docs[0].name, "Testimonials");
+        assert!(brand_exists(&lib.brands, "Acme"), "doc's brand auto-registered");
 
         // Load returns the exact body
         assert_eq!(load_brand_doc_in(&dir, id).unwrap(), body);
@@ -266,16 +422,81 @@ mod tests {
         // Update in place (same id) doesn't duplicate the entry
         let body2 = "Rewritten.";
         save_brand_doc_in(&dir, id, "Testimonials v2", "Acme", "", body2).unwrap();
-        let listed = list_brands_in(&dir);
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].name, "Testimonials v2");
+        let lib = list_brands_in(&dir);
+        assert_eq!(lib.docs.len(), 1);
+        assert_eq!(lib.docs[0].name, "Testimonials v2");
         assert_eq!(load_brand_doc_in(&dir, id).unwrap(), body2);
 
         // Delete removes both the body file and the index entry
         delete_brand_doc_in(&dir, id).unwrap();
         assert!(!dir.join(format!("{}.txt", id)).exists());
-        assert!(list_brands_in(&dir).is_empty());
+        assert!(list_brands_in(&dir).docs.is_empty());
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn create_empty_brand_persists() {
+        let dir = temp_brands_dir("create-empty");
+        create_brand_in(&dir, "Athletes Acceleration").unwrap();
+        let lib = list_brands_in(&dir);
+        assert_eq!(lib.brands.len(), 1);
+        assert_eq!(lib.brands[0].name, "Athletes Acceleration");
+        assert!(lib.docs.is_empty(), "brand exists with zero docs");
+        // Idempotent + case-insensitive: no duplicate.
+        create_brand_in(&dir, "athletes acceleration").unwrap();
+        assert_eq!(list_brands_in(&dir).brands.len(), 1);
+        assert!(create_brand_in(&dir, "   ").is_err(), "blank name rejected");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn backfill_creates_brands_from_legacy_docs_only_index() {
+        // Simulate a round-1 brands.json: docs only, no `brands` array — exactly the
+        // owner's on-disk shape (brand "Athletes Acceleration", name "Testimonials").
+        let dir = temp_brands_dir("backfill");
+        let legacy = r#"{"docs":[{"id":"d1","name":"Testimonials","brand":"Athletes Acceleration","hotkey":"","bytes":10,"created_at":"t","updated_at":"t"}]}"#;
+        fs::write(index_path_in(&dir), legacy).unwrap();
+
+        let lib = list_brands_in(&dir);
+        assert_eq!(lib.docs.len(), 1, "existing doc preserved (not lost)");
+        assert!(
+            brand_exists(&lib.brands, "Athletes Acceleration"),
+            "legacy doc's brand backfilled as a container"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_brand_cascades_to_docs() {
+        let dir = temp_brands_dir("rename");
+        save_brand_doc_in(&dir, "d1", "Testimonials", "Acme", "", "x").unwrap();
+        rename_brand_in(&dir, "Acme", "Acme Corp").unwrap();
+        let lib = list_brands_in(&dir);
+        assert!(brand_exists(&lib.brands, "Acme Corp"));
+        assert!(!brand_exists(&lib.brands, "Acme"));
+        assert_eq!(lib.docs[0].brand, "Acme Corp", "doc followed the rename");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_brand_cascades_and_removes_bodies() {
+        let dir = temp_brands_dir("delete-cascade");
+        save_brand_doc_in(&dir, "d1", "Testimonials", "Acme", "", "body1").unwrap();
+        save_brand_doc_in(&dir, "d2", "Case Studies", "Acme", "", "body2").unwrap();
+        save_brand_doc_in(&dir, "d3", "Testimonials", "Other", "", "body3").unwrap();
+
+        delete_brand_in(&dir, "Acme").unwrap();
+
+        let lib = list_brands_in(&dir);
+        assert!(!brand_exists(&lib.brands, "Acme"), "brand removed");
+        assert!(brand_exists(&lib.brands, "Other"), "other brand untouched");
+        assert_eq!(lib.docs.len(), 1, "only Other's doc survives");
+        assert_eq!(lib.docs[0].id, "d3");
+        // Acme's doc bodies are gone; Other's remains.
+        assert!(!dir.join("d1.txt").exists());
+        assert!(!dir.join("d2.txt").exists());
+        assert!(dir.join("d3.txt").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -347,6 +347,9 @@ pub fn run() {
             commands::save_user_settings,
             // Brand Asset Library (Track D): brand docs stored as files, separate from config.json
             commands::list_brands,
+            commands::create_brand,
+            commands::rename_brand,
+            commands::delete_brand,
             commands::save_brand_doc,
             commands::load_brand_doc,
             commands::delete_brand_doc,
